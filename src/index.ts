@@ -657,6 +657,19 @@ export default function (pi: ExtensionAPI) {
   // session's entry. The first activation (the root session) wins; child
   // activations leave it alone.
   const MANAGER_KEY = Symbol.for("pi-subagents:manager");
+  /**
+   * Per-session view of the same entry, keyed by session id.
+   *
+   * The single slot above is claimed by the FIRST activation in the process and released only when
+   * that one shuts down, which is exactly right for the case it was written for — a child session
+   * re-activating this extension must not point cross-package consumers at a short-lived child
+   * manager. But a host that keeps MANY sessions in one process (a web UI, a daemon) then resolves
+   * `undefined` for its own agent ids in every session but the first: `getRecord(id)` walks the
+   * owner's manager. Publishing each activation under its own session id is additive — the legacy
+   * slot keeps its exact semantics — and lets such a host resolve the ids it spawned, including
+   * `record.sessionFile` and the live `record.session`. Documented in docs/rpc.md.
+   */
+  const MANAGERS_KEY = Symbol.for("pi-subagents:managers");
   // Process-external callers may supply arbitrary options. Nested ownership and
   // config-root metadata are internal capabilities issued only by scoped tools.
   /**
@@ -788,6 +801,12 @@ export default function (pi: ExtensionAPI) {
   // bound session_start, so a filtered-out activation never advertises (#142).
   pi.on("session_start", async (_event, ctx) => {
     currentCtx = ctx;
+    // Publish this activation's entry under its own session id too (see MANAGERS_KEY).
+    const existingManagers = (globalThis as any)[MANAGERS_KEY] as Map<string, unknown> | undefined;
+    const sessionManagers = existingManagers ?? new Map<string, unknown>();
+    (globalThis as any)[MANAGERS_KEY] = sessionManagers;
+    const ownSessionId = ctx.sessionManager?.getSessionId?.();
+    if (ownSessionId) sessionManagers.set(ownSessionId, registryEntry);
     if (ctx.hasUI) {
       widget.setUICtx(ctx.ui);
       fleet.setUICtx(ctx.ui as any);
@@ -1105,6 +1124,13 @@ export default function (pi: ExtensionAPI) {
     // session's shutdown must not delete the root session's registry entry.
     if (ownsManagerRegistry && (globalThis as any)[MANAGER_KEY] === registryEntry) {
       delete (globalThis as any)[MANAGER_KEY];
+    }
+    // Drop only this activation's per-session entries; every other session keeps its own.
+    const sessionManagers = (globalThis as any)[MANAGERS_KEY] as Map<string, unknown> | undefined;
+    if (sessionManagers) {
+      for (const [sessionId, entry] of sessionManagers) {
+        if (entry === registryEntry) sessionManagers.delete(sessionId);
+      }
     }
     scheduler.stop();
     // Before abortAll, and not folded into it: a workflow owns a worker thread
