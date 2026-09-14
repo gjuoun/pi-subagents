@@ -144,6 +144,15 @@ The slot is claimed by the first activation only; subagent sessions re-activate 
 
 Prefer the bus. The registry has no reply envelope, no version, and no availability event — `globalThis[Symbol.for("pi-subagents:manager")] === undefined` is the only probe you get, and it is also `undefined` in a session that filtered pi-subagents out. Reach for it for the two things the bus has no verb for — *is anything still running*, and *give me a settled record back* — or for a headless host that wants to block on `waitForAll()` before exiting.
 
+### Per-session view, for hosts with more than one session in the process
+
+`globalThis[Symbol.for("pi-subagents:managers")]` is a `Map<sessionId, entry>` where each value has the same four members as the entry above. An activation publishes itself under its own session id on `session_start` and removes that entry on `session_shutdown`; the single slot's semantics are unchanged.
+
+It exists because the single slot is a property of the **process**, not of a session: it is claimed by the first activation, so in a host that keeps many sessions in one process — a web UI, a daemon — `getRecord(runId)` returns `undefined` for every session but the first, and with it go `record.sessionFile` (the child's own session file) and `record.session` (the live `AgentSession`). Nothing else exposes that mapping: `spawn` replies `{ id }` only, the lifecycle payloads carry `{id, type, description}` and stats, and `subagents:record` carries no session identity.
+
+So: a caller that owns several sessions should key off its own session id,
+`managers.get(mySessionId)?.getRecord(runId)`, rather than the single slot. When the id is not there, treat it as "this session spawned nothing".
+
 ## Protocol versions
 
 `subagents:rpc:ping` replies `{ version: PROTOCOL_VERSION }`, currently `2` (`src/cross-extension-rpc.ts:33`). The constant was introduced already equal to `2` in 0.5.0; "v1" is a retroactive name for the pre-envelope contract, where spawn replied with a bare `{ id }` or `{ error }`, stop replied `{ success: boolean }` with no message, and each handler caught its own errors.
