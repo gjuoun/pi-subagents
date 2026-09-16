@@ -34,7 +34,7 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 const { AgentWidget } = await import("../../src/ui/agent-widget.js");
-const { ConversationViewer } = await import("../../src/ui/conversation-viewer.js");
+const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
 const { makeFleet, makeSession, mountViewer, mountWidget } = await import("../helpers/perf-fixtures.js");
 
 describe("a rendered frame touches no filesystem", () => {

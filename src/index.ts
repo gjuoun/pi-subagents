@@ -26,7 +26,6 @@ import { type RpcHandle, registerRpcHandlers } from "./agent/rpc.js";
 import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./agent/session/output-file.js";
 import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
 import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
-import { renderAgentName } from "./agent-color.js";
 import { buildNewAgentFile, disableInContent, enableInContent, isEmptyStub, locateAgentFile, personalAgentsDir, projectAgentsDir, serializeAgentFile } from "./config/registry/agent-file-toggle.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, getConfig, getFallbackSubagent, isDefaultsDisabled, NO_FALLBACK, registerAgents, resolveSpawnType, resolveType, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
 import { loadCustomAgents } from "./config/registry/custom-agents.js";
@@ -40,6 +39,7 @@ import { describeModel, type ModelRegistry, resolveModel } from "./model/model-r
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model/model-scope.js";
 import { SubagentScheduler } from "./schedule/schedule.js";
 import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
+import { renderAgentName } from "./ui/agent-color.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import {
   type AgentActivity,
@@ -62,8 +62,8 @@ import {
 import { FleetList, type FleetUICtx, type FleetWorkflow } from "./ui/fleet-list.js";
 import { showSchedulesMenu } from "./ui/schedule-menu.js";
 import { selectItem } from "./ui/select-item.js";
-import { renderWorkflowCard, renderWorkflowEntryCard } from "./ui/workflow-card.js";
-import { openWorkflowFromFleet, showWorkflowsMenu, type WorkflowMenuDeps } from "./ui/workflow-menu.js";
+import { renderWorkflowCard, renderWorkflowEntryCard } from "./ui/workflow/workflow-card.js";
+import { openWorkflowFromFleet, showWorkflowsMenu, type WorkflowMenuDeps } from "./ui/workflow/workflow-menu.js";
 import { decideWorkflowCollision, FOREIGN_WORKFLOW_TOOL_NAMES } from "./workflow/collisions.js";
 import { WORKFLOW_ENTRY_TYPE, type WorkflowEntryData, workflowEntryData } from "./workflow/run/entry.js";
 import { createWorkflowHost } from "./workflow/run/host.js";
@@ -3098,7 +3098,7 @@ Terse command-style prompts produce shallow, generic work.
       return;
     }
 
-    const { ConversationViewer, VIEWER_OVERLAY } = await import("./ui/conversation-viewer.js");
+    const { ConversationViewer, VIEWER_OVERLAY } = await import("./ui/viewer/conversation-viewer.js");
     const session = record.session;
     const activity = agentActivity.get(record.id);
 

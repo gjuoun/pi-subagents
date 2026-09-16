@@ -3,8 +3,8 @@ import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
 import type { AgentConfig, AgentRecord } from "../src/lib/types.js";
 import { type AgentActivity, AgentWidget } from "../src/ui/agent-widget.js";
-import { ConversationViewer } from "../src/ui/conversation-viewer.js";
 import { FleetList, type FleetUICtx } from "../src/ui/fleet-list.js";
+import { ConversationViewer } from "../src/ui/viewer/conversation-viewer.js";
 
 const TYPE = "colored-reviewer";
 const DISPLAY_NAME = "Code Reviewer";
