@@ -26,8 +26,8 @@ import subagentsExtension, { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG } from "../
 import { compileJsonSchema } from "../src/lib/json-schema.js";
 import type { AgentRecord } from "../src/lib/types.js";
 import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model/model-scope.js";
-import { createWorkflowHost } from "../src/workflow/host.js";
-import type { WorkflowSpawnRequest } from "../src/workflow/runtime.js";
+import { createWorkflowHost } from "../src/workflow/run/host.js";
+import type { WorkflowSpawnRequest } from "../src/workflow/run/runtime.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 
 /* ------------------------------------------------------------------------- *

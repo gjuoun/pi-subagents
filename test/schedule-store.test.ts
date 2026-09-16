@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ScheduledSubagent } from "../src/lib/types.js";
-import { resolveStorePath, ScheduleStore } from "../src/schedule-store.js";
+import { resolveStorePath, ScheduleStore } from "../src/schedule/schedule-store.js";
 
 function makeJob(overrides: Partial<ScheduledSubagent> = {}): ScheduledSubagent {
   return {

@@ -13,7 +13,7 @@
  * session file stores does not depend on the code that draws it.
  */
 
-import type { WorkflowMeta } from "./meta.js";
+import type { WorkflowMeta } from "../script/meta.js";
 import type { WorkflowEntry, WorkflowRunStatus } from "./progress.js";
 import type { WorkflowTask } from "./task.js";
 

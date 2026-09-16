@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { WorkflowControl } from "../src/workflow/runtime.js";
+import type { WorkflowControl } from "../src/workflow/run/runtime.js";
 import {
   completeWorkflowTask,
   createWorkflowTask,
@@ -18,7 +18,7 @@ import {
   pauseWorkflowTask,
   resumeWorkflowTask,
   type WorkflowTask,
-} from "../src/workflow/task.js";
+} from "../src/workflow/run/task.js";
 
 function stubControl(): WorkflowControl & { pause: ReturnType<typeof vi.fn> } {
   return {

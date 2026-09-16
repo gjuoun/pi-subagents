@@ -10,7 +10,7 @@
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { ScheduledSubagent } from "../lib/types.js";
-import type { SubagentScheduler } from "../schedule.js";
+import type { SubagentScheduler } from "../schedule/schedule.js";
 import { selectItem } from "./select-item.js";
 
 /** Format an ISO timestamp as relative time ("in 4h", "2d ago", "—"). */

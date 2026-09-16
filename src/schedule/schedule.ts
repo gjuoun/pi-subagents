@@ -18,11 +18,11 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Cron } from "croner";
 import { nanoid } from "nanoid";
-import type { AgentManager } from "./agent/agent-manager.js";
-import { normalizeMaxTurns } from "./agent/agent-runner.js";
-import { resolveSpawnType } from "./config/registry/agent-types.js";
-import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "./lib/types.js";
-import { resolveModel } from "./model/model-resolver.js";
+import type { AgentManager } from "../agent/agent-manager.js";
+import { normalizeMaxTurns } from "../agent/agent-runner.js";
+import { resolveSpawnType } from "../config/registry/agent-types.js";
+import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "../lib/types.js";
+import { resolveModel } from "../model/model-resolver.js";
 import type { ScheduleStore } from "./schedule-store.js";
 
 /** Event emitted on `pi.events` for cross-extension consumers. */

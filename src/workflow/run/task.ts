@@ -15,9 +15,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { escapeXml } from "../lib/xml.js";
+import { escapeXml } from "../../lib/xml.js";
+import type { WorkflowMeta } from "../script/meta.js";
 import type { WorkflowJournalEntry } from "./journal.js";
-import type { WorkflowMeta } from "./meta.js";
 import { collapse, elapsedMs, stats, type WorkflowEntry, type WorkflowRunStatus } from "./progress.js";
 import type { WorkflowControl, WorkflowRunResult } from "./runtime.js";
 

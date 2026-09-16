@@ -12,7 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ScheduledSubagent, ScheduleStoreData } from "./lib/types.js";
+import type { ScheduledSubagent, ScheduleStoreData } from "../lib/types.js";
 
 const LOCK_RETRY_MS = 50;
 const LOCK_MAX_RETRIES = 100;

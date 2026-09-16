@@ -15,11 +15,11 @@
 
 import { cpus } from "node:os";
 import { Worker } from "node:worker_threads";
-import { type CompiledSchema, compileJsonSchema } from "../lib/json-schema.js";
+import { type CompiledSchema, compileJsonSchema } from "../../lib/json-schema.js";
+import { extractMeta, type WorkflowMeta } from "../script/meta.js";
+import { WORKER_SOURCE } from "../script/worker-source.js";
 import { type JournalKeyInput, journalKey, type WorkflowJournalEntry } from "./journal.js";
-import { extractMeta, type WorkflowMeta } from "./meta.js";
 import type { WorkflowAgentEntry, WorkflowEntry } from "./progress.js";
-import { WORKER_SOURCE } from "./worker-source.js";
 
 /** Matches the `script` field's `maxLength` in the tool schema. */
 export const MAX_SCRIPT_LENGTH = 524_288;

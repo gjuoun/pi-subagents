@@ -22,12 +22,12 @@ import {
   WORKFLOW_AGENT_CAP,
   WORKFLOW_ITEM_CAP,
   workflowConcurrency,
-} from "../src/workflow/runtime.js";
+} from "../src/workflow/run/runtime.js";
 import { fullWorkflowToolDescription } from "../src/workflow/tool-description.js";
 
 const description = fullWorkflowToolDescription;
 const workerSource = readFileSync(
-  fileURLToPath(new URL("../src/workflow/worker-source.ts", import.meta.url)),
+  fileURLToPath(new URL("../src/workflow/script/worker-source.ts", import.meta.url)),
   "utf8",
 );
 

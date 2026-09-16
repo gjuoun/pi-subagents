@@ -21,8 +21,8 @@ import {
   type WorkflowDialogState,
   workflowDialogContentWidth,
 } from "../src/ui/workflow-dialog.js";
-import type { WorkflowMeta } from "../src/workflow/meta.js";
-import type { WorkflowAgentEntry, WorkflowEntry } from "../src/workflow/progress.js";
+import type { WorkflowAgentEntry, WorkflowEntry } from "../src/workflow/run/progress.js";
+import type { WorkflowMeta } from "../src/workflow/script/meta.js";
 
 const START = 1_000_000;
 

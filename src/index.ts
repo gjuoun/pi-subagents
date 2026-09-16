@@ -38,8 +38,8 @@ import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type Lifet
 import { escapeXml } from "./lib/xml.js";
 import { describeModel, type ModelRegistry, resolveModel } from "./model/model-resolver.js";
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model/model-scope.js";
-import { SubagentScheduler } from "./schedule.js";
-import { resolveStorePath, ScheduleStore } from "./schedule-store.js";
+import { SubagentScheduler } from "./schedule/schedule.js";
+import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import {
   type AgentActivity,
@@ -65,14 +65,14 @@ import { selectItem } from "./ui/select-item.js";
 import { renderWorkflowCard, renderWorkflowEntryCard } from "./ui/workflow-card.js";
 import { openWorkflowFromFleet, showWorkflowsMenu, type WorkflowMenuDeps } from "./ui/workflow-menu.js";
 import { decideWorkflowCollision, FOREIGN_WORKFLOW_TOOL_NAMES } from "./workflow/collisions.js";
-import { WORKFLOW_ENTRY_TYPE, type WorkflowEntryData, workflowEntryData } from "./workflow/entry.js";
-import { createWorkflowHost } from "./workflow/host.js";
-import { appendJournal, readJournal, type WorkflowJournalEntry } from "./workflow/journal.js";
-import { extractMeta, type WorkflowMeta, workflowCallName } from "./workflow/meta.js";
-import { elapsedMs } from "./workflow/progress.js";
-import { runWorkflow } from "./workflow/runtime.js";
-import { resolveWorkflowScript } from "./workflow/saved.js";
-import { completeWorkflowTask, createWorkflowTask, failWorkflowTask, formatWorkflowNotification, resolveResumeTarget, updateWorkflowProgressBatch, type WorkflowTask, workflowResultText, workflowRunId } from "./workflow/task.js";
+import { WORKFLOW_ENTRY_TYPE, type WorkflowEntryData, workflowEntryData } from "./workflow/run/entry.js";
+import { createWorkflowHost } from "./workflow/run/host.js";
+import { appendJournal, readJournal, type WorkflowJournalEntry } from "./workflow/run/journal.js";
+import { elapsedMs } from "./workflow/run/progress.js";
+import { runWorkflow } from "./workflow/run/runtime.js";
+import { completeWorkflowTask, createWorkflowTask, failWorkflowTask, formatWorkflowNotification, resolveResumeTarget, updateWorkflowProgressBatch, type WorkflowTask, workflowResultText, workflowRunId } from "./workflow/run/task.js";
+import { extractMeta, type WorkflowMeta, workflowCallName } from "./workflow/script/meta.js";
+import { resolveWorkflowScript } from "./workflow/script/saved.js";
 import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
 
 // ---- Shared helpers ----

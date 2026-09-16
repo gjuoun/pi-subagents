@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { encodeCwd } from "../../src/agent/session/output-file.js";
-import { readJournal } from "../../src/workflow/journal.js";
+import { readJournal } from "../../src/workflow/run/journal.js";
 import { runPrintMode, toolCallsNamed, toolResultsNamed } from "../helpers/print-mode-runner.js";
 
 /**
