@@ -140,11 +140,13 @@ describe("custom agent color runtime surfaces", () => {
       expect(missingType).toContain("<toolTitle>*Agent*</toolTitle>");
       expect(missingType).not.toContain(PURPLE_BACKGROUND);
 
-      // An agent without a color must render the pre-badge line byte for byte:
-      // no badge, and no row background of our own for HTML export to pick up.
+      // An agent without a color still gets the row tint. The badge used to be the trigger, which
+      // left every uncolored agent's block looking like plain transcript next to a tinted one.
       registerAgents(new Map([[TYPE, { ...config, color: undefined }]]));
       const uncolored = render({ isPartial: false, isError: false });
-      expect(uncolored.trimEnd()).toBe(`▸ <toolTitle>*${DISPLAY_NAME}*</toolTitle>  <muted>Review this change</muted>`);
+      expect(uncolored).toContain("<toolSuccessBg>");
+      expect(uncolored).not.toContain(PURPLE_BACKGROUND);
+      expect(uncolored).toContain(`▸ <toolTitle>*${DISPLAY_NAME}*</toolTitle>  <muted>Review this change</muted>`);
     } finally {
       await handlers.get("session_shutdown")?.({}, { hasUI: false, ui: {} });
     }
