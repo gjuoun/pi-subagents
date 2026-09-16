@@ -2,8 +2,9 @@
  * agent-status.ts — how a running agent reports itself on the transcript row.
  *
  * Moved out of `index.ts` as-is: the status container the Agent tool's call line draws, the
- * activity tracker that feeds it, and the two vocabularies they share (`THINKING_LEVELS` and
- * the completion labels). Pure presentation — no `pi.*` call, no activation-scope state.
+ * activity tracker that feeds it, and the completion labels. Pure presentation — no `pi.*` call,
+ * no activation-scope state. (`THINKING_LEVELS` left with the status split and now lives in
+ * `lib/agent-meta.ts`: the description builder needs it and `agent/` may not import `ui/`.)
  */
 
 import { Container, Text } from "@earendil-works/pi-tui";
@@ -77,15 +78,6 @@ export function createActivityTracker(maxTurns?: number, onStreamUpdate?: () => 
 
   return { state, callbacks };
 }
-
-/**
- * Advertised thinking levels, ordered to mirror pi-ai's EXTENDED_THINKING_LEVELS
- * (`off` + every `ThinkingLevel`). Single source for the Agent tool description,
- * the generated-agent template, and the `/agents` wizard so these lists can't
- * drift behind pi again (#147). Availability of any level still depends on the
- * host pi version and the selected model — pi clamps unsupported levels down.
- */
-export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 /** Human-readable status label for agent completion. */
 export function getStatusLabel(status: string, error?: string): string {

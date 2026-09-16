@@ -2,22 +2,20 @@
  * notifications.ts — the text and details an agent's completion produces.
  *
  * Moved out of `index.ts` as-is: the `<task-notification>` XML the orchestrating model reads,
- * the `details` object every renderer draws from, and the two small helpers only they use
- * (`textResult`, `formatToolsSuffix`). No `pi.*` call, no activation-scope state.
+ * the `details` object every renderer draws from, and `textResult`. No `pi.*` call, no
+ * activation-scope state.
  *
  * **In `ui/` rather than `lib/`** because that is the only placement the layering rule allows:
- * it reads `getStatusNote` (agent), `BUILTIN_TOOL_NAMES` (config) and the
- * `AgentActivity`/`AgentDetails` shapes (ui), so `lib/` — which imports nothing internal —
- * cannot host it. Its consumers are the Agent tool's result and the `subagent-notification`
- * renderer, both surfaces.
+ * it reads `getStatusNote` (agent) and the `AgentActivity`/`AgentDetails` shapes (ui), so `lib/`
+ * — which imports nothing internal — cannot host it. Its consumers are the Agent tool's result
+ * and the `subagent-notification` renderer, both surfaces.
  *
  * `textResult` is deliberately still written twice in this package: `agent/nested-tools.ts`
  * has its own copy with a different call shape. Unifying them is a DRY job, not this one.
  */
 
 import { getStatusNote } from "../agent/session/status-note.js";
-import { BUILTIN_TOOL_NAMES } from "../config/registry/agent-types.js";
-import type { AgentConfig, AgentRecord, NotificationDetails } from "../lib/types.js";
+import type { AgentRecord, NotificationDetails } from "../lib/types.js";
 import type { AgentActivity, AgentDetails } from "../lib/ui/theme.js";
 import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "../lib/usage.js";
 import { escapeXml } from "../lib/xml.js";
@@ -110,41 +108,4 @@ export function buildNotificationDetails(record: AgentRecord, resultMaxLen: numb
         : record.result
       : "No output.",
   };
-}
-
-/**
- * Format an agent's tool scope for the Agent tool description.
- *
- * This suffix describes BUILT-IN scope only — extension tools are resolved when
- * the agent runs (extensions can register asynchronously), so they cannot be
- * enumerated while the description is being built. That is why an agent with
- * `tools: "*, ext:mcp/search"` renders "*" and always has.
- *
- * Two distinctions matter, both of them capability claims the orchestrator acts on:
- *
- * - absent vs empty. `builtinToolNames: undefined` means the agent never narrowed
- *   its tools (the shipped defaults); `[]` is what `tools: none` and an `ext:`-only
- *   `tools:` parse to, and the runtime really does hand those agents no built-ins.
- *   Rendering both "*" tells the orchestrator a tool-less agent can run `bash`.
- * - empty-with-extensions vs empty-without. Zero built-ins does NOT imply zero
- *   tools: `tools: none` alongside `extensions:` still surfaces every extension
- *   tool (see test/fixtures/.pi/agents/tools-none.md, which expects three). Calling
- *   that "none" understates the agent instead of overstating it — better, but still
- *   wrong, and it would route work away from the only agent able to do it. "none"
- *   is therefore reserved for agents that genuinely can call nothing: `isolated`
- *   agents and those with `extensions: false`.
- */
-export function formatToolsSuffix(cfg: AgentConfig | undefined): string {
-  const tools = cfg?.builtinToolNames;
-  if (!tools) return "*";
-  if (tools.length === 0) {
-    // `isolated` overrides extensions to false in the runner, so both mean the
-    // agent has no extension tools either — and then it truly has nothing.
-    const noExtensionTools = cfg?.isolated === true || cfg?.extensions === false;
-    return noExtensionTools ? "none" : "no built-ins, extension tools only";
-  }
-  const isFullSet =
-    tools.length === BUILTIN_TOOL_NAMES.length
-    && BUILTIN_TOOL_NAMES.every((t) => tools.includes(t));
-  return isFullSet ? "*" : tools.join(", ");
 }

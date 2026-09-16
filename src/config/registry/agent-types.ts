@@ -21,6 +21,47 @@ export const BUILTIN_TOOL_NAMES: string[] = [
   ...new Set([...createCodingTools("."), ...createReadOnlyTools(".")].map((t) => t.name)),
 ];
 
+/**
+ * Format an agent's tool scope for the Agent tool description.
+ *
+ * Lives beside {@link BUILTIN_TOOL_NAMES} rather than in `lib/`, because the full-set check
+ * below is the one thing it needs and `lib/` may not reach into `config/` for it. Its callers
+ * are the description builder (agent) and the entrypoint, both of which may import `config/`.
+ *
+ * This suffix describes BUILT-IN scope only — extension tools are resolved when
+ * the agent runs (extensions can register asynchronously), so they cannot be
+ * enumerated while the description is being built. That is why an agent with
+ * `tools: "*, ext:mcp/search"` renders "*" and always has.
+ *
+ * Two distinctions matter, both of them capability claims the orchestrator acts on:
+ *
+ * - absent vs empty. `builtinToolNames: undefined` means the agent never narrowed
+ *   its tools (the shipped defaults); `[]` is what `tools: none` and an `ext:`-only
+ *   `tools:` parse to, and the runtime really does hand those agents no built-ins.
+ *   Rendering both "*" tells the orchestrator a tool-less agent can run `bash`.
+ * - empty-with-extensions vs empty-without. Zero built-ins does NOT imply zero
+ *   tools: `tools: none` alongside `extensions:` still surfaces every extension
+ *   tool (see test/fixtures/.pi/agents/tools-none.md, which expects three). Calling
+ *   that "none" understates the agent instead of overstating it — better, but still
+ *   wrong, and it would route work away from the only agent able to do it. "none"
+ *   is therefore reserved for agents that genuinely can call nothing: `isolated`
+ *   agents and those with `extensions: false`.
+ */
+export function formatToolsSuffix(cfg: AgentConfig | undefined): string {
+  const tools = cfg?.builtinToolNames;
+  if (!tools) return "*";
+  if (tools.length === 0) {
+    // `isolated` overrides extensions to false in the runner, so both mean the
+    // agent has no extension tools either — and then it truly has nothing.
+    const noExtensionTools = cfg?.isolated === true || cfg?.extensions === false;
+    return noExtensionTools ? "none" : "no built-ins, extension tools only";
+  }
+  const isFullSet =
+    tools.length === BUILTIN_TOOL_NAMES.length
+    && BUILTIN_TOOL_NAMES.every((t) => tools.includes(t));
+  return isFullSet ? "*" : tools.join(", ");
+}
+
 /** Unified runtime registry of all agents (defaults + user-defined). */
 const agents = new Map<string, AgentConfig>();
 
