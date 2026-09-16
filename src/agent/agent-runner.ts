@@ -25,6 +25,7 @@ import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getMemoryToolNames, getR
 import { DEFAULT_AGENTS } from "../config/registry/default-agents.js";
 import { runInChildSessionContext } from "../lib/child-context.js";
 import type { CompiledSchema } from "../lib/json-schema.js";
+import { EXCLUDED_TOOL_NAMES } from "../lib/tool-names.js";
 import type { SubagentType, ThinkingLevel } from "../lib/types.js";
 import type { LifetimeUsage } from "../lib/usage.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
@@ -34,7 +35,7 @@ import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./prompt/memory.js";
 import { buildAgentPrompt, type PromptExtras } from "./prompt/prompts.js";
 import { preloadSkills } from "./prompt/skill-loader.js";
 import { defaultRunLimits, type RunLimits, resolveEffectiveMaxTurns } from "./run-limits.js";
-import { EXCLUDED_TOOL_NAMES, extensionCanonicalNames, installExtensionToolScope, parseExtensionsSpec, parseExtSelectors } from "./session/extension-scope.js";
+import { extensionCanonicalNames, installExtensionToolScope, parseExtensionsSpec, parseExtSelectors } from "./session/extension-scope.js";
 import { createStructuredCapture, createStructuredOutputTool, structuredRetryPrompt } from "./session/structured-output.js";
 
 /**

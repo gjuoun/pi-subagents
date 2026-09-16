@@ -140,9 +140,9 @@ import {
   extensionCanonicalNames,
   parseExtensionsSpec,
   parseExtSelectors,
-  SUBAGENT_TOOL_NAMES,
 } from "../src/agent/session/extension-scope.js";
 import { compileJsonSchema } from "../src/lib/json-schema.js";
+import { SUBAGENT_TOOL_NAMES } from "../src/lib/tool-names.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
 let lastSession: ReturnType<typeof createSession>["session"] | undefined;

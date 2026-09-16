@@ -39,7 +39,7 @@
  * and the `setActiveTools` — see `resolveWorkflowCollisions` in index.ts.
  */
 
-import { SUBAGENT_TOOL_NAMES } from "../agent/session/extension-scope.js";
+import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
 
 /**
  * Tool names that mean "another extension already orchestrates subagents".

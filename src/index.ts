@@ -24,7 +24,6 @@ import { runMentionClone } from "./agent/mention/mention-clone.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./agent/nested-tools.js";
 import { registerRpcHandlers } from "./agent/rpc.js";
 import { getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
-import { SUBAGENT_TOOL_NAMES } from "./agent/session/extension-scope.js";
 import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./agent/session/output-file.js";
 import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
 import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
@@ -35,6 +34,7 @@ import { applyAndEmitLoaded, loadSettings, type SubagentsSettings, saveAndEmitCh
 import { ActivationContext } from "./extension/context.js";
 import { abortable } from "./lib/abortable.js";
 import { inChildSessionContext } from "./lib/child-context.js";
+import { SUBAGENT_TOOL_NAMES } from "./lib/tool-names.js";
 import { type AgentConfig, type AgentInvocation, type AgentMentionMode, type AgentRecord, type JoinMode, type NotificationDetails, type SubagentType, type ViewerMarkdownMode, type WidgetMode } from "./lib/types.js";
 import { describeActivity, fgPreservingNestedStyles, formatCost, formatDuration, formatMs, formatTokens, formatTurns } from "./lib/ui/format.js";
 import type { UICtx } from "./lib/ui/theme.js";
