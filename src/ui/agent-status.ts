@@ -8,9 +8,8 @@
 
 import { Container, Text } from "@earendil-works/pi-tui";
 import { formatTokens } from "../lib/ui/format.js";
-import type { Theme } from "../lib/ui/theme.js";
+import type { AgentActivity, Theme } from "../lib/ui/theme.js";
 import { getLifetimeTotal, type LifetimeUsage } from "../lib/usage.js";
-import type { AgentActivity } from "./agent-widget.js";
 
 export function renderRunningAgentStatus(
   frame: string,

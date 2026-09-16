@@ -26,9 +26,10 @@ import type { GroupJoinManager } from "../agent/group-join.js";
 import type { RpcHandle } from "../agent/rpc.js";
 import type { ToolDescriptionMode } from "../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../lib/types.js";
+import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
-import type { AgentActivity, AgentWidget } from "../ui/agent-widget.js";
+import type { AgentWidget } from "../ui/agent-widget.js";
 import type { FleetList } from "../ui/fleet-list.js";
 import type { WorkflowTask } from "../workflow/run/task.js";
 

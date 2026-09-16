@@ -10,11 +10,10 @@ import { type Component, Input, Markdown, type MarkdownOptions, type MarkdownThe
 import { extractText } from "../../agent/prompt/context.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../../lib/types.js";
 import { fgPreservingNestedStyles, formatDuration, formatSessionTokens } from "../../lib/ui/format.js";
-import type { Theme } from "../../lib/ui/theme.js";
+import type { AgentActivity, Theme } from "../../lib/ui/theme.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../../lib/usage.js";
 import { renderAgentName } from "../agent-color.js";
 import { buildInvocationTags, getPromptModeLabel } from "../agent-display.js";
-import type { AgentActivity } from "../agent-widget.js";
 import { blockTint, indexToolResults, renderResultBlock, renderToolBlock, resultText, type ViewerToolResult } from "./viewer-blocks.js";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
 

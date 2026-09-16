@@ -4,18 +4,19 @@
  * Displays a tree of agents with animated spinners, live stats, and activity descriptions.
  * Uses the callback form of setWidget for themed rendering.
  *
- * Only the component and the two data shapes it is handed live here. The shared UI contract
- * (`Theme`/`UICtx`) is `lib/ui/theme.ts`, the pure formatters are `lib/ui/format.ts`, and the
- * agent-identity adapters are `ui/agent-display.ts` — split out because the sibling surfaces
- * were taking a runtime import on this component to borrow types and formatters from it.
+ * Only the component lives here. The shared UI contract (`Theme`/`UICtx`) and the two data
+ * shapes it is handed (`AgentActivity`/`AgentDetails`) are `lib/ui/theme.ts`, the pure
+ * formatters are `lib/ui/format.ts`, and the agent-identity adapters are `ui/agent-display.ts` —
+ * split out because the sibling surfaces were taking a runtime import on this component to
+ * borrow types and formatters from it.
  */
 
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { type AgentManager, isTopLevelAgent } from "../agent/agent-manager.js";
 import type { SubagentType, WidgetMode } from "../lib/types.js";
 import { describeActivity, fgPreservingNestedStyles, formatCost, formatMs, formatSessionTokens, formatTurns } from "../lib/ui/format.js";
-import type { Theme, UICtx } from "../lib/ui/theme.js";
-import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type SessionLike } from "../lib/usage.js";
+import type { AgentActivity, Theme, UICtx } from "../lib/ui/theme.js";
+import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "../lib/usage.js";
 import { renderAgentName } from "./agent-color.js";
 import { buildInvocationTags, getPromptModeLabel } from "./agent-display.js";
 
@@ -29,47 +30,6 @@ export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 
 /** Statuses that indicate an error/non-success outcome (used for linger behavior and icon rendering). */
 export const ERROR_STATUSES = new Set(["error", "aborted", "steered", "stopped"]);
-
-// ---- Types ----
-
-/** Per-agent live activity state. */
-export interface AgentActivity {
-  activeTools: Map<string, string>;
-  toolUses: number;
-  responseText: string;
-  session?: SessionLike;
-  /** Current turn count. */
-  turnCount: number;
-  /** Effective max turns for this agent (undefined = unlimited). */
-  maxTurns?: number;
-}
-
-/** Metadata attached to Agent tool results for custom rendering. */
-export interface AgentDetails {
-  displayName: string;
-  description: string;
-  subagentType: string;
-  toolUses: number;
-  tokens: string;
-  durationMs: number;
-  status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error" | "background";
-  /** Human-readable description of what the agent is currently doing. */
-  activity?: string;
-  /** Current spinner frame index (for animated running indicator). */
-  spinnerFrame?: number;
-  /** Short label for the model the run used, e.g. "haiku 4.5". */
-  modelName?: string;
-  /** Notable config tags (e.g. ["thinking: high", "isolated"]). */
-  tags?: string[];
-  /** Current turn count. */
-  turnCount?: number;
-  /** Effective max turns (undefined = unlimited). */
-  maxTurns?: number;
-  /** Estimated cost in USD; 0 when the model has no pricing data. */
-  cost?: number;
-  agentId?: string;
-  error?: string;
-}
 
 // ---- Widget manager ----
 

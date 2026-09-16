@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
 import type { AgentConfig, AgentRecord } from "../src/lib/types.js";
-import { type AgentActivity, AgentWidget } from "../src/ui/agent-widget.js";
+import type { AgentActivity } from "../src/lib/ui/theme.js";
+import { AgentWidget } from "../src/ui/agent-widget.js";
 import { FleetList, type FleetUICtx } from "../src/ui/fleet-list.js";
 import { ConversationViewer } from "../src/ui/viewer/conversation-viewer.js";
 
