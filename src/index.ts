@@ -33,6 +33,8 @@ import { applyAndEmitLoaded, loadSettings, type SubagentsSettings, saveAndEmitCh
 import { abortable } from "./lib/abortable.js";
 import { inChildSessionContext } from "./lib/child-context.js";
 import { type AgentConfig, type AgentInvocation, type AgentMentionMode, type AgentRecord, type JoinMode, type NotificationDetails, type SubagentType, type ViewerMarkdownMode, type WidgetMode } from "./lib/types.js";
+import { describeActivity, fgPreservingNestedStyles, formatCost, formatDuration, formatMs, formatTokens, formatTurns } from "./lib/ui/format.js";
+import type { Theme, UICtx } from "./lib/ui/theme.js";
 import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, PendingUsagePool, toReportedUsage } from "./lib/usage.js";
 import { escapeXml } from "./lib/xml.js";
 import { describeModel, type ModelRegistry, resolveModel } from "./model/model-resolver.js";
@@ -40,25 +42,9 @@ import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./
 import { SubagentScheduler } from "./schedule/schedule.js";
 import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { renderAgentName } from "./ui/agent-color.js";
+import { buildInvocationTags, getDisplayName, getPromptModeLabel } from "./ui/agent-display.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
-import {
-  type AgentActivity,
-  type AgentDetails,
-  AgentWidget,
-  buildInvocationTags,
-  describeActivity,
-  fgPreservingNestedStyles,
-  formatCost,
-  formatDuration,
-  formatMs,
-  formatTokens,
-  formatTurns,
-  getDisplayName,
-  getPromptModeLabel,
-  SPINNER,
-  type Theme,
-  type UICtx,
-} from "./ui/agent-widget.js";
+import { type AgentActivity, type AgentDetails, AgentWidget, SPINNER } from "./ui/agent-widget.js";
 import { FleetList, type FleetUICtx, type FleetWorkflow } from "./ui/fleet-list.js";
 import { showSchedulesMenu } from "./ui/schedule-menu.js";
 import { selectItem } from "./ui/select-item.js";

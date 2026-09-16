@@ -49,6 +49,7 @@ import {
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
+import type { Theme } from "../../lib/ui/theme.js";
 import {
   buildPhaseGroups,
   displayState,
@@ -61,7 +62,7 @@ import {
   type WorkflowEntry,
 } from "../../workflow/run/progress.js";
 import type { WorkflowMeta } from "../../workflow/script/meta.js";
-import { SPINNER, type Theme } from "../agent-widget.js";
+import { SPINNER } from "../agent-widget.js";
 import {
   ASCII_GLYPHS,
   clampLine,

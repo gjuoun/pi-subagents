@@ -32,6 +32,7 @@
  */
 
 import { stripTerminalSequences, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { Theme } from "../../lib/ui/theme.js";
 import type { WorkflowEntryData } from "../../workflow/run/entry.js";
 import {
   buildPhaseGroups,
@@ -45,7 +46,6 @@ import {
   type WorkflowRunStatus,
 } from "../../workflow/run/progress.js";
 import type { WorkflowMeta } from "../../workflow/script/meta.js";
-import type { Theme } from "../agent-widget.js";
 
 /**
  * Header re-render cadence. Claude Code ticks the workflow clock once a second,

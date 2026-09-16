@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentManager } from "../src/agent/agent-manager.js";
 import { registerAgents } from "../src/config/registry/agent-types.js";
 import type { AgentConfig, AgentRecord, ViewerMarkdownMode } from "../src/lib/types.js";
-import { type AgentActivity, getDisplayName } from "../src/ui/agent-widget.js";
+import { getDisplayName } from "../src/ui/agent-display.js";
+import { type AgentActivity } from "../src/ui/agent-widget.js";
 import {
   FleetList,
   type FleetUICtx,
