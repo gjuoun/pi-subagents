@@ -16,7 +16,7 @@ import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type Exten
 import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { abortable } from "./abortable.js";
-import { hasAgentBadge, renderAgentName } from "./agent-color.js";
+import { renderAgentName } from "./agent-color.js";
 import { buildNewAgentFile, disableInContent, enableInContent, isEmptyStub, locateAgentFile, personalAgentsDir, projectAgentsDir, serializeAgentFile } from "./agent-file-toggle.js";
 import { AgentManager, isTopLevelAgent } from "./agent-manager.js";
 import { getAgentConversation, getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, SUBAGENT_TOOL_NAMES, setDefaultMaxTurns, setGraceTurns, setRememberAgents, steerAgent } from "./agent-runner.js";
@@ -86,11 +86,13 @@ export function renderRunningAgentStatus(
   frame: string,
   statsText: string,
   activity: string,
-  theme: Pick<Theme, "fg">,
+  theme: Pick<Theme, "fg"> & { bg?: Theme["bg"] },
+  bgColor?: "toolPendingBg" | "toolErrorBg" | "toolSuccessBg",
 ): Container {
+  const bgFn = bgColor && theme.bg ? (text: string) => theme.bg!(bgColor, text) : undefined;
   const container = new Container();
-  container.addChild(new Text(theme.fg("accent", frame) + (statsText ? " " + statsText : ""), 0, 0));
-  container.addChild(new Text(theme.fg("dim", `  ⎿  ${activity}`), 0, 0));
+  container.addChild(new Text(theme.fg("accent", frame) + (statsText ? " " + statsText : ""), 0, 0, bgFn));
+  container.addChild(new Text(theme.fg("dim", `  ⎿  ${activity}`), 0, 0, bgFn));
   return container;
 }
 
@@ -1672,9 +1674,10 @@ Terse command-style prompts produce shallow, generic work.
       // wraps, so closing here would leave that padding untinted, and HTML export closes
       // any open span per line anyway. No badge means no tint, so an uncolored agent
       // renders exactly the line it always did.
-      const rowBackground = hasAgentBadge(args.subagent_type)
-        ? theme.getBgAnsi(context.isPartial ? "toolPendingBg" : context.isError ? "toolErrorBg" : "toolSuccessBg")
-        : "";
+      // Always tinted, badge or not: pi's box paints the block's state background and the badge
+      // has to restore it mid-line, so an agent with no configured colour still reads as a tool
+      // block — pending while it runs, success or error once it settles.
+      const rowBackground = theme.getBgAnsi(context.isPartial ? "toolPendingBg" : context.isError ? "toolErrorBg" : "toolSuccessBg");
       const desc = args.description ?? "";
       const name = renderAgentName(args.subagent_type, theme, {
         fallbackColor: "toolTitle",
@@ -1687,11 +1690,29 @@ Terse command-style prompts produce shallow, generic work.
     renderResult(result, { expanded, isPartial }, theme, renderContext) {
       const details = result.details as AgentDetails | undefined;
       const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+      /**
+       * The result lines carry the same state background pi paints the call line with — pending
+       * while the run streams, error once it failed, success otherwise. Without it a block whose
+       * call is tinted and whose result is not reads as two different objects rather than one.
+       */
+      const status = details?.status;
+      const bgColor: "toolPendingBg" | "toolErrorBg" | "toolSuccessBg" =
+        isPartial || status === "running"
+          ? "toolPendingBg"
+          : renderContext.isError || status === "error" || status === "aborted" || status === "stopped"
+            ? "toolErrorBg"
+            : "toolSuccessBg";
+      // A theme with no background painter (test doubles, an embedded session) renders the line
+      // plain rather than failing — the tint is decoration, the text is the result.
+      const row = typeof theme.bg === "function"
+        ? (line: string) => new Text(line, 0, 0, (t: string) => theme.bg(bgColor, t))
+        : (line: string) => new Text(line, 0, 0);
       // Pi reports pre-execution failures (extension block, abort, argument
       // validation) as `{ content: [reason], details: {} }` with isError set —
       // no status to render, so show the reason instead of inventing one (#199).
       if (renderContext.isError || !details?.status) {
-        return new Text(text, 0, 0);
+        return row(text);
       }
 
       // Helper: build "haiku · thinking: high · ↻5≤30 · 3 tool uses · 33.8k tokens" stats string
@@ -1715,12 +1736,12 @@ Terse command-style prompts produce shallow, generic work.
       if (isPartial || details.status === "running") {
         const frame = SPINNER[details.spinnerFrame ?? 0];
         const s = stats(details);
-        return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme);
+        return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme, "toolPendingBg");
       }
 
       // ---- Background agent launched ----
       if (details.status === "background") {
-        return new Text(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`), 0, 0);
+        return row(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`));
       }
 
       // ---- Completed / Steered ----
@@ -1747,7 +1768,7 @@ Terse command-style prompts produce shallow, generic work.
           const doneText = isSteered ? "Wrapped up (turn limit)" : "Done";
           line += "\n" + theme.fg("dim", `  ⎿  ${doneText}`);
         }
-        return new Text(line, 0, 0);
+        return row(line);
       }
 
       // ---- Stopped (user-initiated abort) ----
@@ -1755,13 +1776,13 @@ Terse command-style prompts produce shallow, generic work.
         const s = stats(details);
         let line = theme.fg("dim", "■") + (s ? " " + s : "");
         line += "\n" + theme.fg("dim", "  ⎿  Stopped");
-        return new Text(line, 0, 0);
+        return row(line);
       }
 
       // Anything left ("queued", or a status added later) has no rendering of
       // its own — the turn-limit wording below must not be the catch-all.
       if (details.status !== "error" && details.status !== "aborted") {
-        return new Text(text, 0, 0);
+        return row(text);
       }
 
       // ---- Error / Aborted (hard max_turns) ----
@@ -1774,7 +1795,7 @@ Terse command-style prompts produce shallow, generic work.
         line += "\n" + theme.fg("warning", "  ⎿  Aborted (max turns exceeded)");
       }
 
-      return new Text(line, 0, 0);
+      return row(line);
     },
 
     // ---- Execute ----
