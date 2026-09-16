@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAvailableTypes, registerAgents, setFallbackSubagent } from "../src/agent-types.js";
-import { loadCustomAgents } from "../src/custom-agents.js";
-import { setScopeModelsEnabled } from "../src/model-scope.js";
+import { getAvailableTypes, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
+import { loadCustomAgents } from "../src/config/registry/custom-agents.js";
+import { setScopeModelsEnabled } from "../src/model/model-scope.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager, setMaxSubagentDepth } from "../src/nested-tools.js";
 import { encodeCwd } from "../src/output-file.js";
 

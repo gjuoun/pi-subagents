@@ -68,7 +68,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   SettingsManager: { create: settingsManagerCreate },
 }));
 
-vi.mock("../src/agent-types.js", () => ({
+vi.mock("../src/config/registry/agent-types.js", () => ({
   BUILTIN_TOOL_NAMES: ["read", "bash", "edit", "write", "grep", "find", "ls"],
   getConfig: vi.fn(() => ({
     displayName: "Explore",
@@ -753,7 +753,7 @@ import {
   getAgentConfig,
   getConfig,
   getToolNamesForType,
-} from "../src/agent-types.js";
+} from "../src/config/registry/agent-types.js";
 import { createNestedSubagentTools } from "../src/nested-tools.js";
 
 const BUILTINS_7 = ["read", "bash", "edit", "write", "grep", "find", "ls"];

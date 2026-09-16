@@ -28,8 +28,8 @@
 import { existsSync } from "node:fs";
 import { join, sep } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { AgentConfig } from "../../lib/types.js";
 import { parseAgentFrontmatter } from "./custom-agents.js";
-import type { AgentConfig } from "./lib/types.js";
 
 export type AgentFileLocation = "project" | "workspace" | "personal";
 

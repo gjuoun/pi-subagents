@@ -24,7 +24,7 @@ import type { CompiledSchema } from "./lib/json-schema.js";
 import type { AgentInvocation, AgentRecord, AgentTombstone, IsolationMode, MentionResolution, SubagentType, ThinkingLevel } from "./lib/types.js";
 import { addUsage, type LifetimeUsage } from "./lib/usage.js";
 import { assignHandle, handleBase } from "./mention.js";
-import { describeModel } from "./model-resolver.js";
+import { describeModel } from "./model/model-resolver.js";
 import { cleanupWorktree, createWorktree, isWorktreeIsolationEnabled, pruneWorktrees, } from "./worktree.js";
 
 export type OnAgentComplete = (record: AgentRecord) => void;

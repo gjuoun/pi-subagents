@@ -30,8 +30,8 @@ import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runAgent } from "../src/agent-runner.js";
-import { getAgentConfig, registerAgents } from "../src/agent-types.js";
-import { loadCustomAgents } from "../src/custom-agents.js";
+import { getAgentConfig, registerAgents } from "../src/config/registry/agent-types.js";
+import { loadCustomAgents } from "../src/config/registry/custom-agents.js";
 import { resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { registerFauxProvider } from "./helpers/pi-ai.js";
 

@@ -13,8 +13,8 @@ import {
   getAvailableTypesIn,
   resolveEnabledTypeIn,
   resolveTypeIn,
-} from "./agent-types.js";
-import { loadCustomAgents } from "./custom-agents.js";
+} from "./config/registry/agent-types.js";
+import { loadCustomAgents } from "./config/registry/custom-agents.js";
 import { isolationParam, resolveAgentInvocationConfig } from "./invocation-config.js";
 import { abortable } from "./lib/abortable.js";
 import type {
@@ -25,8 +25,8 @@ import type {
   ThinkingLevel,
 } from "./lib/types.js";
 import { addUsage } from "./lib/usage.js";
-import { resolveModel } from "./model-resolver.js";
-import { checkModelScope } from "./model-scope.js";
+import { resolveModel } from "./model/model-resolver.js";
+import { checkModelScope } from "./model/model-scope.js";
 import {
   createOutputFilePath,
   getOutputTranscriptDefault,

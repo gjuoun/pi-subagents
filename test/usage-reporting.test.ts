@@ -18,7 +18,7 @@ vi.mock("../src/agent-runner.js", async () => {
 });
 
 import { resumeAgent, runAgent } from "../src/agent-runner.js";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
 import { addUsage } from "../src/lib/usage.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi } from "./helpers/boot-extension.js";

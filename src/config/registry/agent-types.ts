@@ -6,8 +6,8 @@
  */
 
 import { createCodingTools, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
+import type { AgentConfig } from "../../lib/types.js";
 import { DEFAULT_AGENTS } from "./default-agents.js";
-import type { AgentConfig } from "./lib/types.js";
 
 /**
  * All known built-in tool names, derived from pi's own tool factories rather

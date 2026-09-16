@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getAgentConfig, registerAgents } from "../src/agent-types.js";
+import { getAgentConfig, registerAgents } from "../src/config/registry/agent-types.js";
 import type { AgentConfig, EnvInfo } from "../src/lib/types.js";
 import { buildAgentPrompt } from "../src/prompts.js";
 

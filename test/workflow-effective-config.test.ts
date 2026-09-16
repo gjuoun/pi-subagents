@@ -29,7 +29,7 @@ vi.mock("../src/worktree.js", () => ({
 
 import { AgentManager } from "../src/agent-manager.js";
 import { runAgent } from "../src/agent-runner.js";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
 import { createWorkflowHost } from "../src/workflow/host.js";
 import type { WorkflowSpawnRequest } from "../src/workflow/runtime.js";
 import { ctx } from "./helpers/boot-extension.js";

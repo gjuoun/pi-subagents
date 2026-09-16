@@ -20,9 +20,9 @@ import { Cron } from "croner";
 import { nanoid } from "nanoid";
 import type { AgentManager } from "./agent-manager.js";
 import { normalizeMaxTurns } from "./agent-runner.js";
-import { resolveSpawnType } from "./agent-types.js";
+import { resolveSpawnType } from "./config/registry/agent-types.js";
 import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "./lib/types.js";
-import { resolveModel } from "./model-resolver.js";
+import { resolveModel } from "./model/model-resolver.js";
 import type { ScheduleStore } from "./schedule-store.js";
 
 /** Event emitted on `pi.events` for cross-extension consumers. */

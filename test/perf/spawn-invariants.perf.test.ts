@@ -20,8 +20,8 @@ vi.mock("../../src/agent-runner.js", async () => {
   return { ...actual, runAgent: vi.fn(), resumeAgent: vi.fn() };
 });
 
-vi.mock("../../src/custom-agents.js", async () => {
-  const actual = await vi.importActual<typeof import("../../src/custom-agents.js")>("../../src/custom-agents.js");
+vi.mock("../../src/config/registry/custom-agents.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/config/registry/custom-agents.js")>("../../src/config/registry/custom-agents.js");
   return {
     ...actual,
     loadCustomAgents: (...args: Parameters<typeof actual.loadCustomAgents>) => {
@@ -32,7 +32,7 @@ vi.mock("../../src/custom-agents.js", async () => {
 });
 
 import { runAgent } from "../../src/agent-runner.js";
-import { registerAgents } from "../../src/agent-types.js";
+import { registerAgents } from "../../src/config/registry/agent-types.js";
 import subagentsExtension from "../../src/index.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi } from "../helpers/boot-extension.js";
 

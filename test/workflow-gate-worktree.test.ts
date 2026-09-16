@@ -30,7 +30,7 @@ vi.mock("../src/agent-runner.js", () => ({
 
 import { AgentManager } from "../src/agent-manager.js";
 import { runAgent } from "../src/agent-runner.js";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
 import { createWorkflowHost } from "../src/workflow/host.js";
 import type { WorkflowAgentEntry, WorkflowEntry } from "../src/workflow/progress.js";
 import { runWorkflow, type WorkflowSpawnRequest } from "../src/workflow/runtime.js";

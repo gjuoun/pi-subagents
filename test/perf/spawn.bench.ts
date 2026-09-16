@@ -25,8 +25,8 @@ vi.mock("../../src/agent-runner.js", async () => {
 });
 
 import { runAgent } from "../../src/agent-runner.js";
-import { registerAgents } from "../../src/agent-types.js";
-import { loadCustomAgents } from "../../src/custom-agents.js";
+import { registerAgents } from "../../src/config/registry/agent-types.js";
+import { loadCustomAgents } from "../../src/config/registry/custom-agents.js";
 import subagentsExtension from "../../src/index.js";
 import { ctx, type Hermetic, hermeticDir, makePi } from "../helpers/boot-extension.js";
 

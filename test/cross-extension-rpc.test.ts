@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type EventBus, PROTOCOL_VERSION, type RpcDeps, registerRpcHandlers, type SpawnCapable } from "../src/cross-extension-rpc.js";
-import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model-scope.js";
+import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model/model-scope.js";
 
 /** Simple in-process event bus for testing. */
 function createEventBus(): EventBus {

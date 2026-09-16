@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
 import type { AgentConfig, AgentRecord } from "../src/lib/types.js";
 import { type AgentActivity, AgentWidget } from "../src/ui/agent-widget.js";
