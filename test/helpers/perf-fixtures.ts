@@ -269,7 +269,6 @@ export function mountViewer(
     undefined,
     undefined,
     undefined,
-    false,
     markdownMode,
   );
   return viewer;

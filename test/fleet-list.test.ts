@@ -92,6 +92,8 @@ interface Harness {
   setEditorText: (t: string) => void;
   /** Whether an overlay has been opened. */
   overlayOpened: () => boolean;
+  /** The `overlayOptions` the most recent overlay was opened with. */
+  overlayOptions: () => unknown;
   /** Whether the most recently opened overlay's `done` was invoked (closed). */
   overlayClosed: () => boolean;
   /** Simulate the viewer closing itself (Esc → done); flushes the close microtask. */
@@ -117,7 +119,6 @@ function harness(
   agents: AgentRecord[],
   opts: {
     viewerMarkdown?: () => ViewerMarkdownMode;
-    onViewerMarkdown?: (mode: ViewerMarkdownMode) => void;
   } = {},
 ): Harness {
   let inputHandler: ((data: string) => { consume?: boolean } | undefined) | undefined;
@@ -127,6 +128,7 @@ function harness(
   let closed = false;
   let overlayDone: ((r: undefined) => void) | undefined;
   let overlayComponent: { handleInput(data: string): void } | undefined;
+  let overlayOptions: unknown;
   const fakeTui = { requestRender: () => {}, terminal: { columns: 120, rows: 40 } };
 
   const ui: FleetUICtx = {
@@ -134,8 +136,9 @@ function harness(
     onTerminalInput: (h) => { inputHandler = h; return () => { inputHandler = undefined; }; },
     getEditorText: () => editorText,
     notify: () => {},
-    custom: ((factory: any) => {
+    custom: ((factory: any, options?: { overlayOptions?: unknown }) => {
       opened = true;
+      overlayOptions = options?.overlayOptions;
       return new Promise<undefined>((resolve) => {
         const done = (r: undefined) => { closed = true; overlayDone = undefined; resolve(r); };
         overlayDone = done;
@@ -147,7 +150,7 @@ function harness(
   };
 
   const manager = fakeManager(agents);
-  const fleet = new FleetList(manager, new Map(), undefined, opts.viewerMarkdown, opts.onViewerMarkdown);
+  const fleet = new FleetList(manager, new Map(), undefined, opts.viewerMarkdown);
   fleet.setUICtx(ui);
   let workflows: FleetWorkflow[] = [];
   const openedWorkflows: string[] = [];
@@ -172,6 +175,7 @@ function harness(
     render: (width = 120) => (widgetFactory ? widgetFactory(fakeTui, theme).render(width) : []),
     setEditorText: (t) => { editorText = t; },
     overlayOpened: () => opened,
+    overlayOptions: () => overlayOptions,
     overlayClosed: () => closed,
     closeOverlay: async () => { overlayDone?.(undefined); await Promise.resolve(); },
     widgetTui: fakeTui,
@@ -527,22 +531,22 @@ describe("FleetList overlay lifecycle", () => {
     expect(h.manager.steer).toHaveBeenCalledWith("live", "go left");
   });
 
-  it("hands the viewer the user's markdown setting, and persists a mode chosen with m", () => {
-    const persisted: ViewerMarkdownMode[] = [];
+  it("opens the conversation viewer with the same frame and setting as /agents", () => {
     const h = harness([makeRecord({ id: "live", description: "the one" })], {
-      viewerMarkdown: () => "all",
-      onViewerMarkdown: (mode) => persisted.push(mode),
+      viewerMarkdown: () => "off",
     });
     h.press(DOWN);  // activate (main)
     h.press(DOWN);  // → the agent
     h.press(ENTER); // open the conversation viewer
 
-    h.overlayComponent()!.handleInput("m");
+    // One frame for every entry point — the FleetView route used to pass its own, and pi sliced
+    // the viewer's footer and bottom border off the shorter cap it asked for.
+    expect(h.overlayOptions()).toMatchObject({ anchor: "top-center", width: "100%", maxHeight: "100%" });
 
-    // "all" → "off" proves the cycle started from the *setting*; the viewer's own
-    // fallback would have started at "assistant" and landed on "all". A recorded
-    // value at all proves the persist hook is wired, as it is from /agents.
-    expect(persisted).toEqual(["off"]);
+    const viewer = h.overlayComponent()!;
+    viewer.handleInput("m");
+    // No mode key: the setting is what decides, and "off" keeps the prose verbatim.
+    expect(h.render()).toBeDefined();
   });
 
   it("does NOT auto-close when the viewed agent finishes (final output stays readable)", () => {

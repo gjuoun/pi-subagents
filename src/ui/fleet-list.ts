@@ -17,7 +17,7 @@ import { type AgentManager, isTopLevelAgent } from "../agent-manager.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
 import { getLifetimeCost, getLifetimeTotal } from "../usage.js";
 import { type AgentActivity, formatCost, type Theme } from "./agent-widget.js";
-import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
+import { ConversationViewer, VIEWER_OVERLAY } from "./conversation-viewer.js";
 
 /** Widget key for the below-editor fleet list. */
 const FLEET_KEY = "fleet";
@@ -138,12 +138,6 @@ export class FleetList {
      * changes it while the overlay is up. Omitted → the viewer's own default.
      */
     private viewerMarkdown?: () => ViewerMarkdownMode,
-    /**
-     * Persist a mode chosen with `m` in that overlay, so the key means the same
-     * thing here as it does from `/agents` — one setting, not one per entry
-     * point. Omitted → `m` still cycles, viewer-locally.
-     */
-    private onViewerMarkdown?: (mode: ViewerMarkdownMode) => void,
   ) {}
 
   // ---- Lifecycle ----
@@ -422,15 +416,12 @@ export class FleetList {
           },
           keybindings,
           (message: string) => this.manager.steer(record.id, message),
-          this.showCost(),
           this.viewerMarkdown,
-          this.onViewerMarkdown,
         );
       },
-      {
-        overlay: true,
-        overlayOptions: { anchor: "center", width: "90%", maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
-      },
+      // The same frame the /agents menu opens — it used to differ, and this route's centered,
+      // 70%-tall copy is what had its own footer and bottom border sliced off.
+      { ...VIEWER_OVERLAY },
     ).then(() => this.clearViewer(), () => this.clearViewer());
   }
 
