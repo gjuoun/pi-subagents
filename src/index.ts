@@ -3948,27 +3948,6 @@ Write the file using the write tool. Only write the file, nothing else.`;
   // the right toast. Successful saves show info; persistence failures downgrade
   // to warning so users aren't silently reverted on restart. Event fires regardless
   // of outcome so listeners see the in-memory change.
-  /**
-   * Persist + broadcast the settings, silent on success — for a change whose
-   * feedback is the UI it just changed: the viewer's `m` key, where a
-   * notification per press would talk over the overlay it is describing.
-   *
-   * A *failed* write still speaks. Every other settings path warns when the
-   * value is session-only, and swallowing it here would leave a preference
-   * looking persisted when the next session will not have it.
-   */
-  function persistSettings(ctx: ExtensionCommandContext | undefined, changeMsg: string): void {
-    const { message, level } = saveAndEmitChanged(
-      snapshotSettings(),
-      changeMsg,
-      (event, payload) => pi.events.emit(event, payload),
-    );
-    // `ctx` is absent only on the fleet path between sessions, where
-    // `currentCtx` has been cleared and there is no UI to carry the warning to.
-    // The write still happens.
-    if (level === "warning") ctx?.ui.notify(message, level);
-  }
-
   function notifyApplied(ctx: ExtensionCommandContext, successMsg: string) {
     const { message, level } = saveAndEmitChanged(
       snapshotSettings(),
