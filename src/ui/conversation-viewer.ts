@@ -12,7 +12,7 @@ import { extractText } from "../context.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../usage.js";
 import type { Theme } from "./agent-widget.js";
-import { type AgentActivity, buildInvocationTags, describeActivity, fgPreservingNestedStyles, formatDuration, formatSessionTokens, getPromptModeLabel } from "./agent-widget.js";
+import { type AgentActivity, buildInvocationTags, fgPreservingNestedStyles, formatDuration, formatSessionTokens, getPromptModeLabel } from "./agent-widget.js";
 import { blockTint, indexToolResults, renderResultBlock, renderToolBlock, resultText, type ViewerToolResult } from "./viewer-blocks.js";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
 
@@ -57,7 +57,7 @@ const MIN_VIEWPORT = 3;
  * therefore renders exactly `terminal.rows` rows, matching the cap rather than exceeding it, so
  * every row it draws is shown. `Esc` still closes it.
  */
-export const VIEWER_BOTTOM_RESERVED_ROWS = 8;
+export const VIEWER_BOTTOM_RESERVED_ROWS = 3;
 
 /**
  * Cap on a single tool result or bash output before the viewer elides the rest.
@@ -714,12 +714,9 @@ export class ConversationViewer implements Component {
       }
     }
 
-    // Streaming indicator for running agents
-    if (this.record.status === "running" && this.activity) {
-      const act = describeActivity(this.activity.activeTools, this.activity.responseText);
-      lines.push("");
-      lines.push(truncateToWidth(th.fg("accent", "▍ ") + th.fg("dim", act), width));
-    }
+    // No trailing activity line. It echoed the run's own prose back ("▍ I'll start with batched
+    // discovery…") directly under the message it came from, and what it added — which tool is
+    // running — is already the last block's own `⟳` head.
 
     return lines.map(l => truncateToWidth(l, width));
   }
