@@ -12,6 +12,20 @@
  * session of work it could have done itself. Excess agents in either pool are
  * queued and auto-started as slots free up. Nested children take no slot in
  * either — see `occupiesPoolSlot` / `occupiesForegroundSlot`.
+ *
+ * **Why the rest of this file is not split further.** It is long, and 22 clusters
+ * is what a 1,500-line file looks like from outside, but the clusters are not
+ * separable. Five of them mutate the same three collections (`agents`,
+ * `startups`, `tombstones`), and the queue invariant — "removing an entry from
+ * `queue` MUST release it", or the caller blocked in `spawnAndWait` hangs
+ * forever — spans five more: it is stated on the field, enforced in `remove`
+ * (`concurrency-pools.ts`), and relied on by `abort`, `abortAll` and `dispose`.
+ * The two running counters were incremented in two places and decremented in
+ * exactly one, and the pool a run is charged to is resolved once and carried
+ * into `settleRun` because recomputing it would underflow or leak. Moving
+ * `settleRun` away from `startAgent`/`startResume` — the obvious next cut — is
+ * what would invite a double-free. The one clean seam, pool admission, is
+ * already out: see `concurrency-pools.ts`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -24,6 +38,7 @@ import type { AgentInvocation, AgentRecord, AgentTombstone, IsolationMode, Menti
 import { addUsage, type LifetimeUsage } from "../lib/usage.js";
 import { describeModel } from "../model/model-resolver.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
+import { ConcurrencyPools, type Pool } from "./concurrency-pools.js";
 import { assignHandle, handleBase } from "./mention/mention.js";
 import { cleanupWorktree, createWorktree, isWorktreeIsolationEnabled, pruneWorktrees, } from "./session/worktree.js";
 
@@ -154,9 +169,6 @@ function occupiesForegroundSlot(
 ): boolean {
   return !!record.blocking && isTopLevelAgent(record);
 }
-
-/** Which concurrency pool a spawn is charged to, if any. */
-type Pool = "background" | "foreground";
 
 interface SpawnArgs {
   pi: ExtensionAPI;
@@ -367,8 +379,8 @@ export class AgentManager {
   private onStart?: OnAgentStart;
   private onCompact?: OnAgentCompact;
   private onUsage?: OnAgentUsage;
-  private maxConcurrent: number;
-  private maxConcurrentForeground = DEFAULT_MAX_CONCURRENT_FOREGROUND;
+  /** The two concurrency pools, the queue they share, and the running counters. */
+  private pools: ConcurrencyPools;
   /** Base repos worktrees were created from — so dispose() can prune them all,
    *  not just the parent repo (caller-supplied cwd can target other repos). */
   private worktreeRepos = new Set<string>();
@@ -392,26 +404,6 @@ export class AgentManager {
    */
   private tombstones = new Map<string, AgentTombstone>();
 
-  /**
-   * Agents waiting to start, tagged with the pool they wait on. One queue for
-   * both pools: `drainQueue` picks the earliest entry whose own pool has room,
-   * so neither can head-of-line-block the other, and every removal path
-   * (`abort`, `abortAll`, `dispose`) stays a single filter.
-   *
-   * `release` wakes a caller blocked in `spawnAndWait`, and is fired once the
-   * entry's `start` has SETTLED rather than at drain time: startup is async
-   * now, so releasing earlier would wake the caller before `record.promise`
-   * exists and it would read a still-starting agent as one that never ran.
-   * Removing an entry from this array MUST release it — a queued record has no
-   * promise to await, and pi has no tool-execution timeout to bail the caller
-   * out.
-   */
-  private queue: { id: string; pool: Pool; start: () => Promise<void>; release: () => void }[] = [];
-  /** Number of currently running background agents. */
-  private runningBackground = 0;
-  /** Number of currently running foreground (blocking) agents. */
-  private runningForeground = 0;
-
   constructor(
     onComplete?: OnAgentComplete,
     maxConcurrent = DEFAULT_MAX_CONCURRENT,
@@ -423,7 +415,7 @@ export class AgentManager {
     this.onStart = onStart;
     this.onCompact = onCompact;
     this.onUsage = onUsage;
-    this.maxConcurrent = maxConcurrent;
+    this.pools = new ConcurrencyPools(maxConcurrent, DEFAULT_MAX_CONCURRENT_FOREGROUND);
     // Cleanup completed agents after 10 minutes (but keep sessions for resume)
     this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
     this.cleanupInterval.unref();
@@ -431,33 +423,33 @@ export class AgentManager {
 
   /** Update the max concurrent background agents limit. */
   setMaxConcurrent(n: number) {
-    this.maxConcurrent = Math.max(1, n);
+    this.pools.maxBackground = Math.max(1, n);
     // Start queued agents if the new limit allows
     this.drainQueue();
   }
 
   getMaxConcurrent(): number {
-    return this.maxConcurrent;
+    return this.pools.maxBackground;
   }
 
   /** Update the max concurrent foreground (blocking) agents limit. 0 = unlimited. */
   setMaxConcurrentForeground(n: number) {
     // Floor 0, not 1: unlimited is a meaningful value here and the default.
-    this.maxConcurrentForeground = Math.max(0, n);
+    this.pools.maxForeground = Math.max(0, n);
     // Start queued agents if the new limit allows — including everything, when
     // the limit is cleared back to unlimited mid-run.
     this.drainQueue();
   }
 
   getMaxConcurrentForeground(): number {
-    return this.maxConcurrentForeground;
+    return this.pools.maxForeground;
   }
 
   /**
    * Which pool a spawn is charged to, or undefined for one that is charged to
    * neither (nested children, detached non-background spawns).
    *
-   * Nothing here queues when the limit is unset — `poolHasRoom` reports an
+   * Nothing here queues when the limit is unset — `hasRoom` reports an
    * unlimited pool as always having room, so that alone is what keeps the
    * default path identical. The `> 0` guard is belt and braces on top: it also
    * keeps the counter from churning and the settle path from calling a drain
@@ -467,14 +459,8 @@ export class AgentManager {
    */
   private poolFor(record: AgentRecord): Pool | undefined {
     if (occupiesPoolSlot(record)) return "background";
-    if (this.maxConcurrentForeground > 0 && occupiesForegroundSlot(record)) return "foreground";
+    if (this.pools.maxForeground > 0 && occupiesForegroundSlot(record)) return "foreground";
     return undefined;
-  }
-
-  private poolHasRoom(pool: Pool): boolean {
-    return pool === "background"
-      ? this.runningBackground < this.maxConcurrent
-      : this.maxConcurrentForeground === 0 || this.runningForeground < this.maxConcurrentForeground;
   }
 
   /**
@@ -553,7 +539,7 @@ export class AgentManager {
     const args: SpawnArgs = { pi, ctx, type, prompt, options };
 
     const pool = this.poolFor(record);
-    if (pool !== undefined && !options.bypassQueue && !this.poolHasRoom(pool)) {
+    if (pool !== undefined && !options.bypassQueue && !this.pools.hasRoom(pool)) {
       // Queue it — started when a running agent in the same pool completes.
       // Idempotent for background (already "queued"); the flip that matters is
       // a blocking foreground spawn, optimistically marked "running" above.
@@ -563,13 +549,13 @@ export class AgentManager {
       if (!this.armQueuedAbort(id, options.signal)) return id;
       let release!: () => void;
       record.startGate = new Promise<void>(resolve => { release = resolve; });
-      this.queue.push({
+      this.pools.admit({
         id,
         pool,
         start: () => this.launch(id, record, args, pool),
         release: () => release(),
       });
-      options.onQueued?.(id, this.queue.filter(e => e.pool === pool).length - 1);
+      options.onQueued?.(id, this.pools.queuedOn(pool) - 1);
       return id;
     }
 
@@ -692,15 +678,11 @@ export class AgentManager {
     // every later blocking spawn queues forever). The two startup exits below
     // never reach `settleRun`, so they hand the slot back themselves.
     const pool = this.poolFor(record);
-    const releaseSlot = () => {
-      if (pool === "background") this.runningBackground--;
-      else if (pool === "foreground") this.runningForeground--;
-    };
+    const releaseSlot = () => this.pools.release(pool);
     record.status = "running";
     record.startedAt = Date.now();
     record.startGate = undefined;
-    if (pool === "background") this.runningBackground++;
-    else if (pool === "foreground") this.runningForeground++;
+    this.pools.acquire(pool);
 
     // Worktree isolation: try to create a temporary git worktree. Strict —
     // fail loud if not possible (no silent fallback to main tree). Done BEFORE
@@ -967,8 +949,8 @@ export class AgentManager {
    */
   private settleRun(record: AgentRecord, guardCallback: boolean, pool: Pool | undefined): void {
     if (!record.isBackground) record.resultConsumed = true;
-    if (pool === "background") this.runningBackground--;
-    else if (pool === "foreground") this.runningForeground--;
+    if (pool === "background") this.pools.release("background");
+    else if (pool === "foreground") this.pools.release("foreground");
 
     if (guardCallback) {
       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
@@ -1000,16 +982,15 @@ export class AgentManager {
   /**
    * Start queued agents up to each pool's concurrency limit.
    *
-   * `findIndex` on the entry's OWN pool rather than `shift`: with one queue
-   * serving two independent limits, a saturated foreground pool at the head
-   * would otherwise stall every background agent behind it. Taking the earliest
-   * eligible entry keeps FIFO within each pool, which is what callers see.
+   * One entry per pass, not a batch: starting an entry takes its pool slot
+   * synchronously, so `nextRunnable` has to re-derive "has room" between
+   * starts. Stale entries (aborted while queued) are dropped but still
+   * released, since nothing else will.
    */
   private drainQueue() {
     for (;;) {
-      const i = this.queue.findIndex(e => this.poolHasRoom(e.pool));
-      if (i === -1) return;
-      const [next] = this.queue.splice(i, 1);
+      const next = this.pools.nextRunnable();
+      if (!next) return;
       const record = this.agents.get(next.id);
       // Stale entries (aborted while queued) are not started — but are still
       // released, since nothing else will.
@@ -1024,20 +1005,6 @@ export class AgentManager {
       // read a perfectly healthy agent as one that never ran.
       void next.start().then(() => next.release(), () => next.release());
     }
-  }
-
-  /**
-   * Remove queued entries and wake anyone blocked on them. The single point
-   * that enforces "leaving the queue releases the waiter" — a missed release is
-   * an unbounded hang, not a failed call.
-   */
-  private dequeue(pred: (entry: { id: string; pool: Pool }) => boolean): void {
-    const kept: typeof this.queue = [];
-    for (const entry of this.queue) {
-      if (pred(entry)) entry.release();
-      else kept.push(entry);
-    }
-    this.queue = kept;
   }
 
   /**
@@ -1139,13 +1106,13 @@ export class AgentManager {
       record.status = "queued";
 
       const start = () => this.startResume(id, record, prompt, signal, options);
-      if (occupiesPoolSlot(record) && !this.poolHasRoom("background")) {
+      if (occupiesPoolSlot(record) && !this.pools.hasRoom("background")) {
         // At the concurrency limit — queue it, drains when a slot frees. A
         // detached resume has no inline caller, hence nothing to release. The
         // queue is shared with spawns, whose startup is async, so entries are
         // promise-shaped even though a resume starts synchronously; failures
         // land on the record here, since drainQueue no longer catches.
-        this.queue.push({
+        this.pools.admit({
           id,
           pool: "background",
           start: async () => {
@@ -1228,7 +1195,7 @@ export class AgentManager {
 
     record.status = "running";
     record.startedAt = Date.now();
-    if (occupiesPoolSlot(record)) this.runningBackground++;
+    if (occupiesPoolSlot(record)) this.pools.acquire("background");
     this.onStart?.(record);
 
     // Fresh abort controller so /agents stop and steering target THIS run rather
@@ -1260,7 +1227,7 @@ export class AgentManager {
       }
       // Children spawned during the resumed turn must not outlive it.
       this.abortOwnedChildren(id);
-      if (occupiesPoolSlot(record)) this.runningBackground--;
+      if (occupiesPoolSlot(record)) this.pools.release("background");
       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
       this.drainQueue();
     };
@@ -1412,7 +1379,7 @@ export class AgentManager {
     // and no onComplete, matching what a queued background abort has always
     // done; a blocking caller learns of the stop from its own tool result.
     if (record.status === "queued") {
-      this.dequeue(q => q.id === id);
+      this.pools.remove(q => q.id === id);
       record.status = "stopped";
       record.completedAt = Date.now();
       return true;
@@ -1508,7 +1475,7 @@ export class AgentManager {
   abortAll(): number {
     let count = 0;
     // Clear queued agents first
-    for (const queued of this.queue) {
+    for (const queued of this.pools.queued) {
       const record = this.agents.get(queued.id);
       if (record) {
         record.status = "stopped";
@@ -1516,7 +1483,7 @@ export class AgentManager {
         count++;
       }
     }
-    this.dequeue(() => true);
+    this.pools.remove(() => true);
     // Abort running agents
     for (const record of this.agents.values()) {
       if (record.status === "running") {
@@ -1556,9 +1523,9 @@ export class AgentManager {
    */
   async dispose(pi?: ExtensionAPI): Promise<void> {
     clearInterval(this.cleanupInterval);
-    // Clear queue — via dequeue, so anyone blocked in spawnAndWait is woken
+    // Clear queue — via `remove`, so anyone blocked in spawnAndWait is woken
     // rather than left awaiting a gate nothing will ever resolve.
-    this.dequeue(() => true);
+    this.pools.remove(() => true);
     const sessions = [...this.agents.values()].map(record => record.session);
     this.agents.clear();
     this.startups.clear();
