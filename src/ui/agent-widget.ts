@@ -39,6 +39,13 @@ const TOOL_DISPLAY: Record<string, string> = {
 export type Theme = {
   fg(color: string, text: string): string;
   bold(text: string): string;
+  /**
+   * Paint a row with one of pi's background colors.
+   *
+   * Optional because a theme is not required to have one — pi's own `Theme` does, and a test
+   * double that only implements `fg`/`bold` renders no tint rather than failing.
+   */
+  bg?(color: string, text: string): string;
 };
 
 export type UICtx = {

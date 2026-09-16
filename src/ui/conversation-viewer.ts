@@ -10,16 +10,54 @@ import { type Component, Input, Markdown, type MarkdownOptions, type MarkdownThe
 import { renderAgentName } from "../agent-color.js";
 import { extractText } from "../context.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
-import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent } from "../usage.js";
+import { getLifetimeTotal, getSessionContextPercent } from "../usage.js";
 import type { Theme } from "./agent-widget.js";
-import { type AgentActivity, buildInvocationTags, describeActivity, fgPreservingNestedStyles, formatCost, formatDuration, formatSessionTokens, getPromptModeLabel } from "./agent-widget.js";
+import { type AgentActivity, buildInvocationTags, describeActivity, fgPreservingNestedStyles, formatDuration, formatSessionTokens, getPromptModeLabel } from "./agent-widget.js";
+import { blockTint, indexToolResults, renderResultBlock, renderToolBlock, resultText, type ViewerToolResult } from "./viewer-blocks.js";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
 
-/** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
-const CHROME_LINES_BASE = 6;
+/**
+ * The overlay options **every** entry point must open this viewer with.
+ *
+ * Shared rather than written out twice: the two entry points (`/agents`, and a row in the FleetView)
+ * had drifted, and the FleetView's copy still asked for a centered, 90%-wide, **70%-tall** frame.
+ * pi sizes an overlay from `maxHeight` and slices anything past it from the bottom, so on a
+ * `terminal.rows`-tall component that 70% cut this viewer's own footer row and bottom border off the
+ * screen — a frame with no bottom, opened by exactly the route the user takes.
+ */
+export const VIEWER_OVERLAY = {
+  overlay: true,
+  overlayOptions: {
+    anchor: "top-center",
+    width: "100%",
+    // A ceiling, not the size: the component reserves pi's chrome itself (see
+    // VIEWER_BOTTOM_RESERVED_ROWS) and must stay strictly under it.
+    maxHeight: "100%",
+  },
+} as const;
+
+/** Base lines consumed by chrome: top border + header + header rule + footer + bottom border. */
+const CHROME_LINES_BASE = 5;
 const MIN_VIEWPORT = 3;
-/** Height ceiling shared by the overlay's `maxHeight` and the viewer's internal viewport cap. */
-export const VIEWPORT_HEIGHT_PCT = 70;
+/**
+ * Rows at the bottom of the screen the viewer leaves uncovered.
+ *
+ * Zero: the viewer takes the whole screen, because it is opened to read one transcript and the
+ * reader asked for height twice. Raising it is a one-number change and the reason to: pi's own
+ * input editor, the fleet list below it and the status bar are drawn *after* the transcript rather
+ * than pinned to the screen bottom, so where they land depends on how long the transcript is —
+ * reserving rows at the bottom only finds them when the transcript has pushed them there, and on a
+ * fresh session the reserve is simply blank space. Nothing measurable from inside an extension can
+ * place that split, so this is a preference, not a calculation: 0 for the tallest viewer, ~10 to
+ * keep the editor and status rows in view for the common long-transcript case.
+ *
+ * The other half of the arithmetic is not a preference. An overlay is composited over the whole
+ * screen and its height is `min(component, maxHeight)`, with an over-tall component cropped **from
+ * the top** — which is what used to eat this viewer's own footer and bottom border. The component
+ * therefore renders exactly `terminal.rows` rows, matching the cap rather than exceeding it, so
+ * every row it draws is shown. `Esc` still closes it.
+ */
+export const VIEWER_BOTTOM_RESERVED_ROWS = 8;
 
 /**
  * Cap on a single tool result or bash output before the viewer elides the rest.
@@ -34,15 +72,8 @@ export const VIEWPORT_HEIGHT_PCT = 70;
  */
 export const RESULT_MAX_CHARS = 16_000;
 
-/** Cycle order for the viewer's `m` key. */
-const MARKDOWN_MODES: readonly ViewerMarkdownMode[] = ["off", "assistant", "all"];
-
-/** Footer labels — short, because the idle footer is already full at 80 columns. */
-const MARKDOWN_MODE_LABELS: Record<ViewerMarkdownMode, string> = {
-  off: "raw",
-  assistant: "md",
-  all: "md+",
-};
+/** The one mode there is: everything the viewer can render as Markdown, does. */
+const MARKDOWN_MODE: ViewerMarkdownMode = "all";
 
 /**
  * Both options keep the renderer from *rewriting* source that only looks like
@@ -145,13 +176,25 @@ export class ConversationViewer implements Component {
   private closed = false;
   /** Two-press confirm guard for the stop key, so a stray key can't kill the agent. */
   private stopArmed = false;
+  /**
+   * The `e` toggle: compact blocks by default, every body and parameter set once expanded.
+   * Viewer-local on purpose — it answers "show me more of *this* transcript", which is a
+   * per-inspection question, not a setting.
+   */
+  private expanded = false;
+  /**
+   * Live output of tools still running, keyed by tool call.
+   *
+   * Fed by `tool_execution_update` off the session stream. `write` never emits one (it
+   * ignores its update callback), which is why its "line being written" is read from the
+   * call's arguments instead — see `viewer-blocks.ts`.
+   */
+  private readonly partials = new Map<string, string>();
   private keys: ViewerKeys;
   /** Steering composer — present while the user is typing a message to the agent. */
   private composer: Input | undefined;
   /** Resolved once: pi's Markdown theme is fixed for the life of the process. */
   private readonly markdownTheme: MarkdownTheme;
-  /** Set by the `m` key. Wins over the setting so `m` works without a persist hook. */
-  private markdownModeOverride: ViewerMarkdownMode | undefined;
   /**
    * One `Markdown` per message, so its own text/width cache does the work. A
    * fresh instance per render would re-parse the whole transcript on every
@@ -159,6 +202,19 @@ export class ConversationViewer implements Component {
    * Weak so a compacted-away message doesn't pin its render.
    */
   private readonly markdownCache = new WeakMap<object, { md: Markdown; text: string; failed?: boolean }>();
+
+  /**
+   * The terminal's row count when this overlay was created.
+   *
+   * pi resolves `overlayOptions` **once**, at show time, and stores the resulting `maxHeight`; then,
+   * on every frame, it drops any overlay line beyond it (`overlayLines.slice(0, maxHeight)`). A
+   * terminal that grows while the viewer is open therefore leaves this component rendering more
+   * rows than the cap still allows, and the lines thrown away are the **last** ones — the footer
+   * and the bottom border. That is a frame with no bottom, not a clipped one. Capping the render at
+   * the height captured here keeps the component inside the cap the overlay is actually using;
+   * reopening the viewer picks up a new size.
+   */
+  private readonly rowsAtOpen: number;
 
   constructor(
     private tui: TUI,
@@ -174,27 +230,23 @@ export class ConversationViewer implements Component {
     /** Send a steering message to the agent. Omitted → no compose affordance. */
     private onSteer?: (message: string) => void,
     /**
-     * Whether the header shows an estimated cost after the token count. Read
-     * once, at construction: the overlay is opened from a menu, so the setting
-     * cannot change while it is on screen.
-     */
-    private showCost = false,
-    /**
-     * The current `viewerMarkdown` setting. Read live rather than captured,
-     * unlike `showCost`: `m` changes it while the overlay is on screen.
-     * Omitted → `assistant`.
+     * The user's `viewerMarkdown` setting, read live so a change made in
+     * `/agents → Settings` lands on the next frame. Omitted → Markdown.
      */
     private viewerMarkdown?: () => ViewerMarkdownMode,
-    /**
-     * Persist a mode chosen with `m`, so the key and `/agents → Settings` mean
-     * the same thing. Omitted → `m` still cycles, viewer-locally.
-     */
-    private onMarkdownMode?: (mode: ViewerMarkdownMode) => void,
   ) {
+    this.rowsAtOpen = tui.terminal.rows;
     this.markdownTheme = resolveMarkdownTheme(theme);
     this.keys = createViewerKeys(keybindings);
-    this.unsubscribe = session.subscribe(() => {
+    this.unsubscribe = session.subscribe((event) => {
       if (this.closed) return;
+      if (event.type === "tool_execution_update") {
+        const text = (event as any).partialResult?.content?.[0]?.text;
+        if (typeof text === "string") this.partials.set(event.toolCallId, text);
+      } else if (event.type === "tool_execution_end") {
+        // The result now carries the whole output; a stale partial would only shadow it.
+        this.partials.delete(event.toolCallId);
+      }
       this.tui.requestRender();
     });
   }
@@ -238,14 +290,14 @@ export class ConversationViewer implements Component {
       return;
     }
 
-    // Cycle raw → assistant-only → everything. The escape hatch that makes
-    // Markdown rendering safe to default on: a result the renderer reshapes
-    // (a diff, an indented log, a `#`-commented script) is one key from verbatim.
-    if (matchesKey(data, "m")) {
+    // No raw/Markdown key any more: the viewer renders Markdown, and the only switch left is
+    // the `viewerMarkdown` setting under `/agents → Settings`.
+
+    // Compact ↔ full for the whole view. One key, no per-block state: the question this
+    // answers is "give me the detail", not "expand that one block over there".
+    if (matchesKey(data, "e")) {
+      this.expanded = !this.expanded;
       this.stopArmed = false;
-      const next = MARKDOWN_MODES[(MARKDOWN_MODES.indexOf(this.markdownMode()) + 1) % MARKDOWN_MODES.length];
-      this.markdownModeOverride = next;
-      this.onMarkdownMode?.(next);
       this.tui.requestRender();
       return;
     }
@@ -290,7 +342,10 @@ export class ConversationViewer implements Component {
     const row = (content: string) =>
       th.fg("border", "│") + " " + truncateToWidth(pad(content, innerW), innerW, "...", true) + " " + th.fg("border", "│");
     const hrTop = th.fg("border", `╭${"─".repeat(width - 2)}╮`);
-    const hrBot = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
+    // The bottom edge is drawn in the accent colour, not the border colour: it lands on the row
+    // where the input box's own rule would be, and a line that looks like pi's chrome would read
+    // as the editor rather than as the viewer's edge over it.
+    const hrBot = th.fg("accent", `╰${"─".repeat(width - 2)}╯`);
     const hrMid = row(th.fg("dim", "─".repeat(innerW)));
 
     // Header
@@ -306,25 +361,57 @@ export class ConversationViewer implements Component {
           : th.fg("dim", "○");
     const duration = formatDuration(this.record.startedAt, this.record.completedAt);
 
-    const headerParts: string[] = [duration];
-    const toolUses = this.activity?.toolUses ?? this.record.toolUses;
-    if (toolUses > 0) headerParts.unshift(`${toolUses} tool${toolUses === 1 ? "" : "s"}`);
-    // Spend from the record, context from the live session: the record is the
-    // only total that survives the agent finishing and the only one carrying a
-    // nested child's spend.
+    // Context from the live session, spend from the record: the record is the only total that
+    // survives the agent finishing. Cost and the tool-use count are deliberately absent — the
+    // header carries identity and context pressure, not a running invoice.
+    const headerStats: Array<{ key: string; text: string }> = [];
     const tokens = getLifetimeTotal(this.record.lifetimeUsage);
     if (tokens > 0) {
       const percent = getSessionContextPercent(this.activity?.session);
-      headerParts.push(formatSessionTokens(tokens, percent, th, this.record.compactionCount));
+      headerStats.push({ key: "ctx", text: formatSessionTokens(tokens, percent, th, this.record.compactionCount) });
     }
-    const cost = this.showCost ? formatCost(getLifetimeCost(this.record.lifetimeUsage)) : "";
-    if (cost) headerParts.push(cost);
+    const invocation = this.headerInvocation();
+    if (invocation) headerStats.push({ key: "model", text: invocation });
+    headerStats.push({ key: "duration", text: duration });
 
-    lines.push(row(
-      `${statusIcon} ${renderAgentName(this.record.type, th, { bold: true })}${modeTag}  ${th.fg("muted", this.record.description)} ${th.fg("dim", "·")} ${fgPreservingNestedStyles(th, "dim", headerParts.join(" · "))}`,
-    ));
-    const invocationLine = this.invocationLine();
-    if (invocationLine) lines.push(row(invocationLine));
+    // The description is not a fixed cost: the reader gets every column the stats do not need,
+    // and the stats themselves are kept by priority. Measuring the *untruncated* description
+    // instead would let a long one push every stat off the line, which is the behavior this
+    // header exists to replace.
+    const headerPrefix = `${statusIcon} ${renderAgentName(this.record.type, th, { bold: true })}${modeTag}`;
+    const prefixWidth = visibleWidth(headerPrefix);
+    /**
+     * Least description worth showing, so the stats can never squeeze it out entirely.
+     *
+     * 12 columns reads as "Fix the u…", which identifies nothing; at 20 a narrow terminal
+     * still says what the agent is for, and the stats yield the columns instead.
+     */
+    const MIN_DESCRIPTION = 20;
+
+    // Priority order — the reverse of the drop order in the spec: context pressure, then
+    // elapsed time, then which model produced this at all.
+    const byKey = new Map(headerStats.map(s => [s.key, s.text]));
+    // Chosen by priority — context pressure, then elapsed time, then the model and its level —
+    // but rendered in reading order, so the line does not reshuffle itself as width changes.
+    const displayOrder = ["ctx", "model", "duration"];
+    const kept = new Set<string>();
+    for (const key of ["ctx", "duration", "model"]) {
+      if (!byKey.has(key)) continue;
+      const candidate = displayOrder.filter(k => kept.has(k) || k === key).map(k => byKey.get(k) as string);
+      // +3 for the separator between the description and the stats group.
+      if (prefixWidth + 1 + MIN_DESCRIPTION + 3 + visibleWidth(candidate.join(" · ")) <= innerW) {
+        kept.add(key);
+      }
+    }
+    const headerStatsShown = displayOrder.filter(k => kept.has(k)).map(k => byKey.get(k) as string);
+
+    const statsWidth = headerStatsShown.length > 0 ? 3 + visibleWidth(headerStatsShown.join(" · ")) : 0;
+    const descriptionBudget = Math.max(1, Math.min(visibleWidth(this.record.description), innerW - prefixWidth - 1 - statsWidth));
+    const statsText = headerStatsShown.length > 0
+      ? ` ${th.fg("dim", "·")} ${fgPreservingNestedStyles(th, "dim", headerStatsShown.join(" · "))}`
+      : "";
+
+    lines.push(row(`${headerPrefix} ${th.fg("muted", truncateToWidth(this.record.description, descriptionBudget))}${statsText}`));
     lines.push(hrMid);
 
     // Content area — rebuild every render (live data, no cache needed)
@@ -343,8 +430,8 @@ export class ConversationViewer implements Component {
       lines.push(row(visible[i] ?? ""));
     }
 
-    // Footer
-    lines.push(hrMid);
+    // Footer. The rule above it is gone: the bottom border already closes the frame, and
+    // that row is worth more as a line of transcript.
     if (this.composer) {
       // Composer row: the Input renders its own `> ` prompt and cursor.
       lines.push(row(this.composer.render(innerW)[0] ?? ""));
@@ -353,31 +440,46 @@ export class ConversationViewer implements Component {
       const composeGap = Math.max(1, innerW - visibleWidth(composeLeft) - visibleWidth(composeHint));
       lines.push(row(composeLeft + " ".repeat(composeGap) + composeHint));
     } else {
-      // Actions on the left, navigation on the right. The scroll hint keeps its
-      // full key list so the less-obvious bindings stay discoverable; it leads
-      // the right group so "Esc close" is the only part that truncates first.
+      // Operations on the left, navigation on the right, fitted by priority rather than by
+      // truncation: an overflowing row loses its tail, and the tail is where `Esc` lives —
+      // the one key a reader needs to get out of here on a narrow pane. So the navigation
+      // group has shorter forms to fall back to, and the line-count readout yields first.
       const sep = th.fg("dim", " · ");
       const actions: string[] = [];
       if (this.canSteer()) actions.push(th.fg("dim", "Enter steer"));
       if (this.isStoppable()) {
         actions.push(this.stopArmed ? th.fg("error", "x again to STOP") : th.fg("dim", "x stop"));
       }
-      // Abbreviated (`raw`/`md`/`md+`) because the idle footer is already full
-      // at 80 columns with steer + stop present, and this group has no
-      // degradation step below "drop the line-count readout".
-      actions.push(th.fg("dim", `m ${MARKDOWN_MODE_LABELS[this.markdownMode()]}`));
-      const footerRight = th.fg("dim", "↑↓ scroll · PgUp/PgDn or Shift+↑↓ · Esc close");
+      actions.push(th.fg("dim", this.expanded ? "e collapse" : "e expand"));
 
-      // Prepend the line-count/scroll-% readout only when there's spare width —
-      // it's the first thing dropped so it never crowds out the hints.
       const scrollPct = contentLines.length <= viewportHeight
         ? "100%"
         : `${Math.round(((visibleStart + viewportHeight) / contentLines.length) * 100)}%`;
       const count = th.fg("dim", `${contentLines.length} lines · ${scrollPct}`);
-      const withCount = [count, ...actions].join(sep);
-      const footerLeft = visibleWidth(withCount) + visibleWidth(footerRight) + 1 <= innerW
-        ? withCount
-        : actions.join(sep);
+      // Widest first on both sides. The left group loses its readout before any key, then its
+      // keys from the right — `e` before `m`, `m` before `x stop`, `x stop` before the steer
+      // prompt; the navigation group shortens to a bare `Esc`. Nothing here is dropped while a
+      // shorter form still fits, which is what a terminal-narrow row used to do silently.
+      const leftVariants = [[count, ...actions].join(sep)];
+      for (let dropped = 0; dropped <= actions.length; dropped++) {
+        leftVariants.push(actions.slice(0, actions.length - dropped).join(sep));
+      }
+      const rightVariants = ["↑↓ · PgUp/PgDn · Esc", "↑↓ · Esc", "Esc"].map(v => th.fg("dim", v));
+
+      let footerLeft = leftVariants[leftVariants.length - 1];
+      let footerRight = rightVariants[rightVariants.length - 1];
+      let fitted = false;
+      for (const left of leftVariants) {
+        for (const right of rightVariants) {
+          if (visibleWidth(left) + visibleWidth(right) + 1 <= innerW) {
+            footerLeft = left;
+            footerRight = right;
+            fitted = true;
+            break;
+          }
+        }
+        if (fitted) break;
+      }
 
       const footerGap = Math.max(1, innerW - visibleWidth(footerLeft) - visibleWidth(footerRight));
       lines.push(row(footerLeft + " ".repeat(footerGap) + footerRight));
@@ -392,9 +494,9 @@ export class ConversationViewer implements Component {
     return !!this.onStop && (this.record.status === "running" || this.record.status === "queued");
   }
 
-  /** The mode in force: an `m` press, else the setting, else the default. */
+  /** The mode in force: the setting, else Markdown. */
   private markdownMode(): ViewerMarkdownMode {
-    return this.markdownModeOverride ?? this.viewerMarkdown?.() ?? "assistant";
+    return this.viewerMarkdown?.() ?? MARKDOWN_MODE;
   }
 
   /** Wrap `text` literally — the pre-Markdown path, and the fallback from it. */
@@ -404,7 +506,7 @@ export class ConversationViewer implements Component {
   }
 
   /** Render `text` as Markdown, reusing this message's component instance. */
-  private markdownLines(msg: AgentSession["messages"][number], text: string, width: number, dim: boolean): string[] {
+  private markdownLines(msg: object, text: string, width: number, dim: boolean): string[] {
     let entry = this.markdownCache.get(msg);
     if (!entry) {
       entry = {
@@ -486,24 +588,30 @@ export class ConversationViewer implements Component {
   private viewportHeight(): number {
     // Cap mirrors the overlay's maxHeight — otherwise the viewer would render
     // more lines than the overlay shows and clip the footer.
-    const maxRows = Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100);
+    // The open-time height is an upper bound, never the current one — see `rowsAtOpen`.
+    const rows = Math.min(this.tui.terminal.rows, this.rowsAtOpen);
+    const maxRows = rows - VIEWER_BOTTOM_RESERVED_ROWS;
     return Math.max(MIN_VIEWPORT, maxRows - this.chromeLines());
   }
 
   private chromeLines(): number {
     // The composer adds one row above the footer hint while it's open.
-    return CHROME_LINES_BASE + (this.invocationLine() ? 1 : 0) + (this.composer ? 1 : 0);
+    return CHROME_LINES_BASE + (this.composer ? 1 : 0);
   }
 
-  private invocationLine(): string | undefined {
-    // Canonical id here, short label everywhere else: this overlay is opened to
-    // inspect one agent and has the width for it, and two providers can serve
-    // models whose short names read alike.
+  /**
+   * The model and thinking level this run used, for the header's stats.
+   *
+   * Canonical id here, short label everywhere else: this overlay is opened to inspect one
+   * agent and has the width for it, and two providers can serve models whose short names
+   * read alike. Returns undefined when nothing was captured.
+   */
+  private headerInvocation(): string | undefined {
     const { modelName, modelId, tags } = buildInvocationTags(this.record.invocation);
     const model = modelId ?? modelName;
     const parts = model ? [model, ...tags] : tags;
     if (parts.length === 0) return undefined;
-    return this.theme.fg("dim", `  ↳ ${parts.join(" · ")}`);
+    return this.theme.fg("dim", parts.join(" · "));
   }
 
   private buildContentLines(width: number): string[] {
@@ -519,62 +627,91 @@ export class ConversationViewer implements Component {
     }
 
     const mode = this.markdownMode();
-    let needsSeparator = false;
+    const results = indexToolResults(messages);
+    // Which results a tool call will draw. Anything else is standing alone (its call was
+    // compacted away or predates this session) and still gets a block of its own.
+    const carried = new Set<string>();
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.content) if (part.type === "toolCall") carried.add(part.id);
+    }
+
+    // Blocks are separated by a blank line, not a rule: every block already opens with a
+    // mark, and the rules were half the vertical budget this view is trying to win back.
+    let needsGap = false;
+    const push = (block: string[]) => {
+      if (block.length === 0) return;
+      if (needsGap) lines.push("");
+      lines.push(...block);
+      needsGap = true;
+    };
+
     for (const msg of messages) {
       if (msg.role === "user") {
-        const text = typeof msg.content === "string"
-          ? msg.content
-          : extractText(msg.content);
+        const text = typeof msg.content === "string" ? msg.content : extractText(msg.content);
         if (!text.trim()) continue;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.fg("accent", "[User]"));
-        for (const line of wrapTextWithAnsi(text.trim(), width)) {
-          lines.push(line);
-        }
-      } else if (msg.role === "assistant") {
-        const textParts: string[] = [];
-        const toolCalls: string[] = [];
-        for (const c of msg.content) {
-          if (c.type === "text" && c.text) textParts.push(c.text);
-          else if (c.type === "toolCall") {
-            toolCalls.push((c as any).name ?? (c as any).toolName ?? "unknown");
+        const wrapped = wrapTextWithAnsi(text.trim(), Math.max(1, width - 2));
+        push(wrapped.map((line, i) => (i === 0 ? `${th.fg("accent", "▌")} ${line}` : `  ${line}`)));
+        continue;
+      }
+
+      if (msg.role === "assistant") {
+        for (const part of msg.content) {
+          if (part.type === "text" && part.text?.trim()) {
+            const text = part.text.trim();
+            push(mode === "off" ? this.rawLines(text, width, false) : this.markdownLines(msg, text, width, false));
+          } else if (part.type === "toolCall") {
+            const result = results.get(part.id);
+            const capped = result ? this.capForView(result) : undefined;
+            let block = renderToolBlock(
+              { id: part.id, name: (part as any).name ?? "tool", arguments: (part as any).arguments },
+              capped?.result,
+              { width, expanded: this.expanded, partial: this.partials.get(part.id) },
+            );
+            // `md+` renders an expanded result as Markdown — the one thing that setting still
+            // buys now that bodies come from the block model rather than a raw dump.
+            if (mode === "all" && this.expanded && capped?.result && !capped.result.isError) {
+              const text = resultText(capped.result);
+              if (text) block = [block[0], ...this.markdownLines(capped.result, text, width, true).map(l => `  ${l}`)];
+            }
+            block = [this.tintedHead(block[0], width), ...block.slice(1)];
+            if (capped?.elided) block.push(truncateToWidth(th.fg("dim", truncationNote(capped.elided)), width));
+            push(block);
           }
         }
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.bold("[Assistant]"));
-        if (textParts.length > 0) {
-          const text = textParts.join("\n").trim();
-          lines.push(...(mode === "off"
-            ? this.rawLines(text, width, false)
-            : this.markdownLines(msg, text, width, false)));
+        continue;
+      }
+
+      if (msg.role === "toolResult") {
+        if (carried.has(msg.toolCallId)) continue;
+        const capped = this.capForView(msg as ViewerToolResult);
+        let block = renderResultBlock(
+          (msg as ViewerToolResult).toolName ?? "tool",
+          capped.result,
+          { width, expanded: this.expanded },
+        );
+        if (mode === "all" && this.expanded && capped.result && !capped.result.isError) {
+          const text = resultText(capped.result);
+          if (text) block = [block[0], ...this.markdownLines(capped.result, text, width, true).map(l => `  ${l}`)];
         }
-        for (const name of toolCalls) {
-          lines.push(truncateToWidth(th.fg("muted", `  [Tool: ${name}]`), width));
-        }
-      } else if (msg.role === "toolResult") {
-        const { text, elided } = capResult(extractText(msg.content).trim());
-        if (!text) continue;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.fg("dim", "[Result]"));
-        lines.push(...(mode === "all"
-          ? this.markdownLines(msg, text, width, true)
-          : this.rawLines(text, width, true)));
-        if (elided) lines.push(truncateToWidth(th.fg("dim", truncationNote(elided)), width));
-      } else if ((msg as any).role === "bashExecution") {
+        block = [this.tintedHead(block[0], width), ...block.slice(1)];
+        if (capped.elided) block.push(truncateToWidth(th.fg("dim", truncationNote(capped.elided)), width));
+        push(block);
+        continue;
+      }
+
+      if ((msg as any).role === "bashExecution") {
         const bash = msg as any;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(truncateToWidth(th.fg("muted", `  $ ${bash.command}`), width));
+        const block = [truncateToWidth(th.fg("muted", `$ ${bash.command}`), width)];
         if (bash.output?.trim()) {
           // Same cap as a tool result, never Markdown: command output is the one
           // thing here that is definitionally not authored as Markdown.
           const { text, elided } = capResult(bash.output.trim());
-          lines.push(...this.rawLines(text, width, true));
-          if (elided) lines.push(truncateToWidth(th.fg("dim", truncationNote(elided)), width));
+          block.push(...this.rawLines(text, width, true));
+          if (elided) block.push(truncateToWidth(th.fg("dim", truncationNote(elided)), width));
         }
-      } else {
-        continue;
+        push(block);
       }
-      needsSeparator = true;
     }
 
     // Streaming indicator for running agents
@@ -585,5 +722,35 @@ export class ConversationViewer implements Component {
     }
 
     return lines.map(l => truncateToWidth(l, width));
+  }
+
+  /**
+   * A block's head, painted with pi's own tool-block background and padded to the full row.
+   *
+   * The padding is the point: a background that stops at the last character outlines the text
+   * instead of marking the row. The tint is what makes a tool call read as one unit at a
+   * glance without dimming the body underneath it, which is the part worth reading.
+   */
+  private tintedHead(head: string, width: number): string {
+    const theme = this.theme;
+    // Called on the theme, never destructured: pi's `bg` is a class method that reads its own
+    // color table off `this`, so an unbound call throws on the first render of a tool call.
+    if (typeof theme.bg !== "function") return head;
+    const padded = head + " ".repeat(Math.max(0, width - visibleWidth(head)));
+    return theme.bg(blockTint(head), padded);
+  }
+
+  /**
+   * Bound a result's text before the block model sees it, keeping the elided count separate.
+   *
+   * The cap is not cosmetic — it is what bounds the per-keystroke cost of rebuilding the
+   * content — and the count has to survive as chrome, because the block model's own `⋯`
+   * markers only report the lines *it* dropped.
+   */
+  private capForView(result: ViewerToolResult): { result: ViewerToolResult; elided: number } {
+    const raw = resultText(result);
+    const { text, elided } = capResult(raw);
+    if (!elided) return { result, elided: 0 };
+    return { result: { ...result, content: [{ type: "text", text }] }, elided };
   }
 }

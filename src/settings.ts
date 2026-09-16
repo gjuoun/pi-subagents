@@ -299,7 +299,7 @@ export interface SubagentsSettings {
    * different contracts: assistant text is authored as Markdown, while a tool
    * result is whatever bytes the tool produced. Rendering the latter as
    * Markdown is lossy in ways that look like the tool misbehaved — see
-   * `ViewerMarkdownMode` for the specific rewrites — so `all` is opt-in.
+   * `ViewerMarkdownMode` for the specific rewrites.
    */
   viewerMarkdown?: ViewerMarkdownMode;
 }

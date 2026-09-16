@@ -44,7 +44,7 @@ vi.mock("@earendil-works/pi-tui", async (importOriginal) => {
 // Must import AFTER vi.mock declaration (vitest hoists vi.mock but the
 // dynamic import of the test subject must happen after)
 const { visibleWidth } = await import("@earendil-works/pi-tui");
-const { ConversationViewer, RESULT_MAX_CHARS } = await import("../src/ui/conversation-viewer.js");
+const { ConversationViewer, RESULT_MAX_CHARS, VIEWER_BOTTOM_RESERVED_ROWS, VIEWER_OVERLAY } = await import("../src/ui/conversation-viewer.js");
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -99,81 +99,92 @@ beforeEach(() => {
   markdownThrows = false;
 });
 
-describe("ConversationViewer invocation line", () => {
-  /** The `↳` metadata row for a record, or "" when the viewer renders none. */
-  function invocationLine(invocation: AgentRecord["invocation"]): string {
+describe("ConversationViewer header stats", () => {
+  /**
+   * The header row for a record.
+   *
+   * The model and its thinking level ride the header now — the separate `↳` row cost a line
+   * of transcript to say something the header had room for.
+   */
+  function header(invocation: AgentRecord["invocation"]): string {
     const viewer = new ConversationViewer(
       mockTui(30, 200), mockSession([]), mockRecord({ invocation }), undefined,
       { fg: (_c: string, t: string) => t, bold: (t: string) => t } as any,
       vi.fn(),
     );
-    // The row arrives inside the overlay's frame, padded out to the right
-    // border; what is under test is the metadata it carries.
-    const row = viewer.render(200).find(l => l.includes("↳"));
-    return row ? row.slice(row.indexOf("↳")).replace(/\s*│\s*$/, "") : "";
+    const rows = viewer.render(200);
+    expect(rows.some(l => l.includes("↳"))).toBe(false);
+    return rows[1];
   }
 
   // The canonical id, not the short label the widget uses: this overlay is
   // opened to inspect one agent and has the width to disambiguate providers.
   it("names the model with its provider", () => {
-    expect(invocationLine({
+    expect(header({
       modelName: "sonnet 4.6",
       modelId: "anthropic/claude-sonnet-4-6",
       thinking: "high",
       maxTurns: 60,
-    })).toBe("↳ anthropic/claude-sonnet-4-6 · thinking: high · max turns: 60");
+    })).toContain("anthropic/claude-sonnet-4-6 · thinking: high · max turns: 60");
   });
 
   it("falls back to the short label when no canonical id was captured", () => {
-    expect(invocationLine({ modelName: "sonnet 4.6", thinking: "high" }))
-      .toBe("↳ sonnet 4.6 · thinking: high");
+    expect(header({ modelName: "sonnet 4.6", thinking: "high" }))
+      .toContain("sonnet 4.6 · thinking: high");
   });
 
   it("discloses a model and level the run did not honor", () => {
-    expect(invocationLine({
+    expect(header({
       modelName: "haiku 4.5",
       modelId: "anthropic/claude-haiku-4-5",
       requestedModel: "google/gemini-3-pro",
       thinking: "low",
       requestedThinking: "max",
-    })).toBe("↳ anthropic/claude-haiku-4-5 (asked google/gemini-3-pro) · thinking: low (asked max)");
+    })).toContain("anthropic/claude-haiku-4-5 (asked google/gemini-3-pro) · thinking: low (asked max)");
   });
 
-  it("renders no row at all for a record with no invocation", () => {
-    expect(invocationLine(undefined)).toBe("");
+  it("carries no model metadata for a record with no invocation", () => {
+    expect(header(undefined)).not.toContain("thinking");
+  });
+
+  it("drops the model before the elapsed time when the width runs out", () => {
+    const invocation = { modelName: "sonnet 4.6", modelId: "anthropic/claude-sonnet-4-6", thinking: "high" };
+    const narrow = new ConversationViewer(
+      mockTui(30, 70), mockSession([]), mockRecord({ invocation }), undefined,
+      { fg: (_c: string, t: string) => t, bold: (t: string) => t } as any,
+      vi.fn(),
+    ).render(70)[1];
+
+    expect(narrow).not.toContain("anthropic/claude-sonnet-4-6");
+    expect(narrow).toContain("Agent (twin)");
   });
 });
 
-describe("ConversationViewer cost display", () => {
-  /** The header line, with a cost of `cost` on the record and showCost `on`. */
-  function header(on: boolean, cost: number): string {
+describe("ConversationViewer cost", () => {
+  /** The rendered view for a record carrying `cost`. */
+  function rendered(cost: number): string {
     const record = mockRecord({
       lifetimeUsage: { input: 1000, output: 200, cacheWrite: 0, cost },
     } as Partial<AgentRecord>);
     const viewer = new ConversationViewer(
       mockTui(30, 200), mockSession([]), record, undefined,
       { fg: (_c: string, t: string) => t, bold: (t: string) => t } as any,
-      vi.fn(), undefined, undefined, undefined, on,
+      vi.fn(),
     );
     return viewer.render(200).join("\n");
   }
 
-  it("shows the cost beside the token count when enabled", () => {
-    // The viewer opens on finished agents, whose live activity entry is gone —
-    // so this reads the record, and would show nothing if it did not.
-    const out = header(true, 0.0042);
-    expect(out).toContain("1.2k token");
-    expect(out).toContain("~$0.0042");
-  });
-
-  it("shows no cost when disabled", () => {
-    const out = header(false, 0.0042);
+  // Cost left this header by decision (spec D4): the header carries identity and context
+  // pressure, and a figure nobody acts on during a review does not earn a column.
+  // `showCost` still governs the widget and the Agent tool result line.
+  it("keeps the token count and prints no cost, whatever the record carries", () => {
+    const out = rendered(0.0042);
     expect(out).toContain("1.2k token");
     expect(out).not.toContain("$");
   });
 
-  it("shows no cost for a model with no pricing data", () => {
-    expect(header(true, 0)).not.toContain("$");
+  it("prints no cost for a model with no pricing data either", () => {
+    expect(rendered(0)).not.toContain("$");
   });
 });
 
@@ -188,6 +199,97 @@ describe("ConversationViewer", () => {
 
     expect(done).toHaveBeenCalledOnce();
     expect(done).toHaveBeenCalledWith(undefined);
+  });
+
+  describe("tool-call tint", () => {
+    /**
+     * A theme that paints backgrounds the way pi's own Theme does — with real SGR codes,
+     * because a marker made of printable characters would be measured as visible width.
+     */
+    const BG_CODES: Record<string, number> = { toolPendingBg: 1, toolSuccessBg: 2, toolErrorBg: 3 };
+    const bgTheme = () => ({
+      fg: (_c: string, t: string) => t,
+      bold: (t: string) => t,
+      bg: (color: string, t: string) => `\x1b[48;5;${BG_CODES[color] ?? 9}m${t}\x1b[0m`,
+    });
+
+    const blockLines = (status: string) => {
+      const messages = [
+        { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "read", arguments: { path: "src/a.ts" } }] },
+        ...(status === "running"
+          ? []
+          : [{ role: "toolResult", toolCallId: "c1", toolName: "read", isError: status === "error", content: [{ type: "text", text: status === "error" ? "ENOENT" : "ok" }], details: {} }]),
+      ];
+      const viewer = new ConversationViewer(
+        mockTui(30, 80), mockSession(messages), mockRecord({ status: "running" }), undefined,
+        bgTheme() as any, vi.fn(),
+      );
+      return ((viewer as any).buildContentLines(76) as string[]).find(l => l.includes("read src/a.ts"));
+    };
+
+    it("tints the head of a running, finished and failed call", () => {
+      expect(blockLines("running")).toContain("\x1b[48;5;1m");
+      expect(blockLines("done")).toContain("\x1b[48;5;2m");
+      expect(blockLines("error")).toContain("\x1b[48;5;3m");
+    });
+
+    it("pads the tint to the full row, so it marks the row and not the text", () => {
+      const line = blockLines("done") ?? "";
+      const start = line.indexOf("\x1b[48;5;2m") + "\x1b[48;5;2m".length;
+      const inner = line.slice(start, line.indexOf("\x1b[0m", start));
+
+      expect(visibleWidth(inner)).toBe(76);
+      expect(inner.startsWith("✔ read src/a.ts")).toBe(true);
+    });
+
+    /**
+     * pi's own `Theme.bg` is a class method that reads `this.bgColors`; a double written as an
+     * arrow function cannot catch a call that loses its receiver, which is how this shipped
+     * broken once. This one is deliberately a method over its own field.
+     */
+    class MethodTheme {
+      private readonly codes: Record<string, number> = { toolPendingBg: 1, toolSuccessBg: 2, toolErrorBg: 3 };
+      fg(_c: string, t: string): string { return t; }
+      bold(t: string): string { return t; }
+      bg(color: string, t: string): string { return `\x1b[48;5;${this.codes[color] ?? 9}m${t}\x1b[0m`; }
+    }
+
+    it("survives a theme whose bg is a class method needing its own this", () => {
+      const viewer = new ConversationViewer(
+        mockTui(30, 80),
+        mockSession([{ role: "assistant", content: [{ type: "toolCall", id: "c1", name: "read", arguments: { path: "src/a.ts" } }] }]),
+        mockRecord({ status: "running" }), undefined, new MethodTheme() as any, vi.fn(),
+      );
+
+      expect(() => viewer.render(80)).not.toThrow();
+      expect(viewer.render(80).join("\n")).toContain("\x1b[48;5;1m");
+    });
+
+    it("does not dim the body it sits above", () => {
+      const messages = [
+        { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "bash", arguments: { command: "echo hi" } }] },
+        { role: "toolResult", toolCallId: "c1", toolName: "bash", isError: false, content: [{ type: "text", text: "hi" }], details: {} },
+      ];
+      const viewer = new ConversationViewer(
+        mockTui(30, 80), mockSession(messages), mockRecord({ status: "running" }), undefined,
+        bgTheme() as any, vi.fn(),
+      );
+      const lines = (viewer as any).buildContentLines(76) as string[];
+      const body = lines.find(l => l.trim() === "hi");
+
+      expect(body).toBeDefined();
+      expect(body).not.toContain("\x1b[48;5;");
+    });
+
+    it("renders no tint at all for a theme that cannot paint one", () => {
+      const viewer = new ConversationViewer(
+        mockTui(30, 80),
+        mockSession([{ role: "assistant", content: [{ type: "toolCall", id: "c1", name: "read", arguments: { path: "src/a.ts" } }] }]),
+        mockRecord({ status: "running" }), undefined, ansiTheme(), vi.fn(),
+      );
+
+      expect((viewer as any).buildContentLines(76).join("\n")).toContain("read src/a.ts");
+    });
   });
 
   describe("render width safety", () => {
@@ -384,7 +486,7 @@ describe("ConversationViewer", () => {
     ) {
       return new ConversationViewer(
         mockTui(rows, 80), mockSession(messages), mockRecord({ status: "completed" }), undefined,
-        ansiTheme(), vi.fn(), undefined, undefined, undefined, false,
+        ansiTheme(), vi.fn(), undefined, undefined, undefined,
         mode ? () => mode : undefined, onMode,
       );
     }
@@ -408,10 +510,10 @@ describe("ConversationViewer", () => {
       expect(out).toContain("**bold**");
     });
 
-    // The reason `all` is not the default: a tool result is arbitrary bytes, and
-    // a Markdown pass rewrites several constructs that occur constantly in real
-    // command output. Each line here is a rewrite reproduced against pi-tui.
-    it("leaves tool results byte-exact under the default mode", () => {
+    // A tool result is arbitrary bytes: a Markdown pass rewrites several constructs that
+    // occur constantly in real command output, which is why results never go through one.
+    // The default view shows the tail of that text unchanged; `e` shows all of it unchanged.
+    it("shows a tool result's text unchanged while folded", () => {
       const raw = [
         "#!/bin/sh",
         "# section",
@@ -422,66 +524,83 @@ describe("ConversationViewer", () => {
         "---",
         "next",
       ].join("\n");
-      const out = strip(viewerFor(result(raw)).render(80).join("\n"));
+      const viewer = viewerFor(result(raw));
 
-      for (const line of raw.split("\n")) expect(out).toContain(line);
+      const compact = strip(viewer.render(80).join("\n"));
+      expect(compact).toContain("next"); // the tail is what a live reader wants
+      expect(compact).not.toContain("#!/bin/sh"); // the head is what `e` is for
+
+      // Expanded, the body goes through the Markdown renderer like everything else. The
+      // setting is the escape hatch when a tool's output is data rather than prose.
+      viewer.handleInput("e");
+      expect(strip(viewer.render(80).join("\n"))).toContain("section");
+
+      const verbatim = viewerFor(result(raw), "off");
+      verbatim.handleInput("e");
+      const expanded = strip(verbatim.render(80).join("\n"));
+      for (const line of raw.split("\n")) expect(expanded).toContain(line);
     });
 
-    it("renders tool-result Markdown under `all`", () => {
-      const out = strip(viewerFor(result("## ctx_execute\n\n- one\n- two"), "all").render(80).join("\n"));
+    it("renders an expanded tool result as Markdown under `all`", () => {
+      const viewer = viewerFor(result("## ctx_execute\n\n- one\n- two"), "all");
+      // `md+` is the escape hatch for a result the block shape suits badly; a folded body
+      // has nothing to render, so the setting only means something once `e` is on.
+      viewer.handleInput("e");
+      const out = strip(viewer.render(80).join("\n"));
 
       expect(out).toContain("ctx_execute");
       expect(out).not.toContain("## ctx_execute");
     });
 
     it("does not renumber ordered lists even when it does render them", () => {
-      const out = strip(viewerFor(result("3) alpha\n7) beta\n9) gamma"), "all").render(80).join("\n"));
+      const viewer = viewerFor(result("3) alpha\n7) beta\n9) gamma"), "all");
+      viewer.handleInput("e"); // the render only happens on an expanded body
+      const out = strip(viewer.render(80).join("\n"));
 
       expect(out).toContain("3) alpha");
       expect(out).not.toContain("4. beta");
     });
 
-    it("`m` cycles the mode, persists it, and shows it in the footer", () => {
-      const onMode = vi.fn();
-      const viewer = viewerFor(assistant("# Heading"), "assistant", onMode);
+    it("renders Markdown with no mode in the footer and no key to change it", () => {
+      const viewer = viewerFor(assistant("# Heading"), "assistant");
+      const out = strip(viewer.render(80).join("\n"));
 
-      expect(strip(viewer.render(80).join("\n"))).toContain("m md");
-
+      expect(out).toContain("Heading");
+      expect(out).not.toContain("# Heading");
+      // The raw/Markdown key and its readout are gone; the frame is Markdown.
+      expect(out).not.toMatch(/m (raw|md|md\+)/);
       viewer.handleInput("m");
-      expect(onMode).toHaveBeenLastCalledWith("all");
-      expect(strip(viewer.render(80).join("\n"))).toContain("m md+");
-
-      viewer.handleInput("m");
-      expect(onMode).toHaveBeenLastCalledWith("off");
-      const off = strip(viewer.render(80).join("\n"));
-      expect(off).toContain("m raw");
-      // The override, not just the label, is what took effect.
-      expect(off).toContain("# Heading");
-
-      viewer.handleInput("m");
-      expect(onMode).toHaveBeenLastCalledWith("assistant");
+      expect(strip(viewer.render(80).join("\n"))).not.toContain("# Heading");
     });
 
-    it("`m` still cycles when no persist hook is wired", () => {
-      const viewer = viewerFor(assistant("# Heading"), "assistant");
-      viewer.handleInput("m");
-      viewer.handleInput("m");
+    it("still honours a setting, which is the only switch left", () => {
+      const viewer = viewerFor(assistant("# Heading"), "off");
 
       expect(strip(viewer.render(80).join("\n"))).toContain("# Heading");
     });
 
-    it("`m` disarms a pending stop rather than confirming it", () => {
-      const onStop = vi.fn();
-      const viewer = new ConversationViewer(
-        mockTui(200, 80), mockSession(assistant("hi")), mockRecord({ status: "running" }), undefined,
-        ansiTheme(), vi.fn(), onStop,
-      );
+    it("renders a body as Markdown without needing a key", () => {
+      const viewer = viewerFor(result("## ctx_execute\n\n- one\n- two"));
+      viewer.handleInput("e");
+      const out = strip(viewer.render(80).join("\n"));
 
-      viewer.handleInput("x");
-      viewer.handleInput("m");
-      viewer.handleInput("x");
+      expect(out).toContain("ctx_execute");
+      expect(out).not.toContain("## ctx_execute");
+    });
 
-      expect(onStop).not.toHaveBeenCalled();
+    it("keeps Esc on the footer at every width, even when the hints must shorten", () => {
+      for (const width of [40, 50, 60, 70, 80, 120]) {
+        const viewer = new ConversationViewer(
+          mockTui(200, width), mockSession(assistant("hi")), mockRecord({ status: "running" }), undefined,
+          ansiTheme(), vi.fn(), vi.fn(), undefined, vi.fn(),
+        );
+        const lines = viewer.render(width);
+        const footer = strip(lines[lines.length - 2]);
+
+        // A footer whose tail is truncated loses the one key needed to leave the overlay.
+        expect(footer, `width ${width}`).toContain("Esc");
+        if (width >= 50) expect(footer, `width ${width}`).toContain("e expand");
+      }
     });
 
     it("keeps the footer's navigation hints intact at 80 columns", () => {
@@ -494,17 +613,25 @@ describe("ConversationViewer", () => {
 
       expect(footer).toContain("Enter steer");
       expect(footer).toContain("x stop");
-      expect(footer).toContain("m md");
-      expect(footer).toContain("Esc close");
+      expect(footer).not.toContain("m md"); // no raw/Markdown key any more
+      expect(footer).toContain("e expand");
+      expect(footer).toContain("↑↓ · PgUp/PgDn · Esc");
+      // The readout is the only signal of where in the transcript the reader is, so the
+      // hints are abbreviated to keep it on the line at 80 columns.
+      expect(footer).toContain("lines · ");
     });
 
     it("caps a tool result at RESULT_MAX_CHARS, not 500, and says what it dropped", () => {
       const lines = Array.from({ length: 3000 }, (_, i) => `line ${i}`);
       const out = strip(viewerFor(result(lines.join("\n")), undefined, undefined, 4000).render(80).join("\n"));
 
-      expect(out).toContain("line 100");                       // far past the old 500-char cut
-      expect(out).not.toContain("line 2999");                  // but still bounded
-      expect(out).toMatch(/\.\.\. \(truncated, [\d.]+[kM]? more characters\)/);
+      const elided = out.match(/\.\.\. \(truncated, ([\d.]+)([kM]?) more characters\)/);
+      // The elided count discriminates the cap's value, not just its existence: at the old
+      // 500-character cut this ~24k result would report ~23.5k dropped, not ~8k.
+      const dropped = Number(elided?.[1]) * (elided?.[2] === "M" ? 1e6 : elided?.[2] === "k" ? 1e3 : 1);
+      expect(dropped).toBeGreaterThan(1_000);
+      expect(dropped).toBeLessThan(16_000);
+      expect(out).not.toContain("line 2999");                  // still bounded
     });
 
     it("puts the truncation notice outside the code fence it cut into", () => {
@@ -513,8 +640,7 @@ describe("ConversationViewer", () => {
       const content = ((viewer as any).buildContentLines(76) as string[]).map(strip);
       const note = content.find(l => l.includes("... (truncated"));
 
-      // Appended into the content it lands inside the unterminated fence, where
-      // it picks up the code-block indent and reads as a line of the tool's source.
+      // Appended into the body it would read as a line of the tool's own output.
       expect(note).toMatch(/^\.\.\. \(truncated, [\d.]+[kM]? more characters\)$/);
     });
 
@@ -549,8 +675,8 @@ describe("ConversationViewer", () => {
     it("falls back to literal wrapping once for an unsafe streaming prefix", () => {
       // render() is on the TUI's critical path, so a parser throw must degrade
       // rather than take the overlay down with it.
-      const messages = result("# heading");
-      const viewer = viewerFor(messages, "all");
+      const messages = assistant("# heading");
+      const viewer = viewerFor(messages, "assistant");
       markdownThrows = true;
 
       expect(() => viewer.render(80)).not.toThrow();
@@ -598,13 +724,20 @@ describe("ConversationViewer", () => {
     it("leaves a result under the cap untouched", () => {
       // Deliberately between the old 500-char cap and the new one, so the test
       // discriminates the cap's value and not merely its existence.
-      const text = `head\n${"filler line\n".repeat(200)}tail`;
-      const out = strip(viewerFor(result(text), undefined, undefined, 600).render(80).join("\n"));
+      // Short enough that `e` shows the whole thing: the point is that a result under the
+      // cap is never rewritten, not that the expanded cap is unreachable.
+      const text = `head\n${"filler line\n".repeat(50)}tail`;
+      const viewer = viewerFor(result(text), undefined, undefined, 600);
 
       expect(text.length).toBeLessThan(RESULT_MAX_CHARS);
-      expect(out).toContain("head");
-      expect(out).toContain("tail");
-      expect(out).not.toContain("truncated");
+      const compact = strip(viewer.render(80).join("\n"));
+      expect(compact).toContain("tail");
+      expect(compact).not.toContain("truncated"); // under the cap: nothing to disclose
+
+      viewer.handleInput("e");
+      const expanded = strip(viewer.render(80).join("\n"));
+      expect(expanded).toContain("head");
+      expect(expanded).toContain("tail");
     });
 
     it("caps bash output with the same rule as a tool result", () => {
@@ -614,22 +747,17 @@ describe("ConversationViewer", () => {
       expect(out).toMatch(/\.\.\. \(truncated, [\d.]+[kM]? more characters\)/);
     });
 
-    it("keeps tool results dim even when rendering them as Markdown", () => {
-      // Reads the content line directly: every bordered row carries the theme's
-      // escape on its `│`, so asserting on rendered output would pass either way.
-      const viewer = viewerFor(result("plain result text"), "all");
-      const line = (viewer as any).buildContentLines(76)
-        .find((l: string) => strip(l).includes("plain result text"));
-
-      expect(line).toContain("\x1b[38;5;240m");
-    });
-
-    it("keeps tool results dim on the literal path too", () => {
+    it("renders a tool result's body without dimming it", () => {
+      // The body is the payload — a diff's changed lines, a test run's output — so it is the
+      // reading surface, not a wall of text to recede. The indent and the head's mark carry
+      // the hierarchy instead. (Reads the content line directly: every bordered row carries
+      // the theme's escape on its `│`, so asserting on rendered output would pass either way.)
       const viewer = viewerFor(result("plain result text"));
       const line = (viewer as any).buildContentLines(76)
         .find((l: string) => strip(l).includes("plain result text"));
 
-      expect(line).toContain("\x1b[38;5;240m");
+      expect(line).toBeDefined();
+      expect(line).not.toContain("\x1b[38;5;240m");
     });
 
     it("reuses one Markdown per message across renders", () => {
@@ -757,6 +885,65 @@ describe("ConversationViewer", () => {
         mockTui(30, w), mockSession(messages), mockRecord(), undefined, ansiTheme(), vi.fn(),
       );
       assertAllLinesFit(callBuildContentLines(viewer, w), w);
+    });
+  });
+
+  describe("overlay geometry", () => {
+    it("leaves pi's editor and status rows showing", () => {
+      // The overlay is composited over the whole screen; a literal 100% covered the status bar.
+      for (const rows of [24, 30, 40, 60]) {
+        const viewer = new ConversationViewer(
+          mockTui(rows, 100), mockSession([]), mockRecord(), undefined, ansiTheme(), vi.fn(),
+        );
+        const rendered = viewer.render(100).length;
+
+        // A fixed reserve, so a taller terminal is a taller viewer — the reserve does not grow.
+        expect(rendered, `${rows}-row terminal`).toBe(rows - VIEWER_BOTTOM_RESERVED_ROWS);
+      }
+    });
+
+    it("keeps the chrome at five rows, so the reservation is content", () => {
+      const viewer = new ConversationViewer(
+        mockTui(40, 100), mockSession([]), mockRecord(), undefined, ansiTheme(), vi.fn(),
+      );
+      const lines = viewer.render(100);
+
+      // top border + header + rule + content + footer + bottom border
+      expect(lines.length - 5).toBeGreaterThan(0);
+    });
+  });
+
+  describe("overlay frame", () => {
+    it("is one shared definition, so both entry points open the same frame", () => {
+      // The /agents menu and a FleetView row used to pass their own options, and the FleetView's
+      // copy was centered, 90% wide and 70% tall — which pi sliced from the bottom, cutting this
+      // viewer's own footer and border off exactly for the route the user takes.
+      expect(VIEWER_OVERLAY.overlay).toBe(true);
+      expect(VIEWER_OVERLAY.overlayOptions).toEqual({ anchor: "top-center", width: "100%", maxHeight: "100%" });
+    });
+  });
+
+  describe("growth after the overlay was sized", () => {
+    it("never renders more rows than the height the overlay was created with", () => {
+      // pi resolves overlayOptions once and keeps that maxHeight, then drops every line past it
+      // (slice(0, maxHeight)) — and the lines it drops are the last ones: the footer and the
+      // bottom border. So a terminal that grows under an open viewer must not grow the component.
+      const tui = mockTui(40, 100) as any;
+      const viewer = new ConversationViewer(tui, mockSession([]), mockRecord(), undefined, ansiTheme(), vi.fn());
+      const atOpen = viewer.render(100).length;
+
+      expect(atOpen).toBe(40 - VIEWER_BOTTOM_RESERVED_ROWS);
+      tui.terminal.rows = 60;
+      expect(viewer.render(100).length).toBe(atOpen);
+    });
+
+    it("still follows the terminal when it shrinks", () => {
+      const tui = mockTui(40, 100) as any;
+      const viewer = new ConversationViewer(tui, mockSession([]), mockRecord(), undefined, ansiTheme(), vi.fn());
+      tui.terminal.rows = 30;
+
+      // Shrinking is safe: a smaller component is still inside the stale (larger) cap.
+      expect(viewer.render(100).length).toBe(30 - VIEWER_BOTTOM_RESERVED_ROWS);
     });
   });
 
