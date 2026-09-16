@@ -8,6 +8,14 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
+  createOutputFilePath,
+  getOutputTranscriptDefault,
+  streamToOutputFile,
+  writeInitialEntry,
+} from "./agent/session/output-file.js";
+import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
+import { isWorktreeIsolationEnabled } from "./agent/session/worktree.js";
+import {
   buildAgentRegistry,
   getAgentConfigIn,
   getAvailableTypesIn,
@@ -27,14 +35,6 @@ import type {
 import { addUsage } from "./lib/usage.js";
 import { resolveModel } from "./model/model-resolver.js";
 import { checkModelScope } from "./model/model-scope.js";
-import {
-  createOutputFilePath,
-  getOutputTranscriptDefault,
-  streamToOutputFile,
-  writeInitialEntry,
-} from "./output-file.js";
-import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
-import { isWorktreeIsolationEnabled } from "./worktree.js";
 
 /**
  * Hard ceiling on nesting for every branch: main session = 0, its subagents = 1,

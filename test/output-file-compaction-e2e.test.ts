@@ -18,7 +18,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { streamToOutputFile, writeInitialEntry } from "../src/output-file.js";
+import { streamToOutputFile, writeInitialEntry } from "../src/agent/session/output-file.js";
 import { fauxModelBackend } from "./helpers/faux-model-backend.js";
 import { registerFauxProvider } from "./helpers/pi-ai.js";
 

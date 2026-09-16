@@ -13,11 +13,11 @@ vi.mock("../src/agent-runner.js", async () => {
   const actual = await vi.importActual<typeof import("../src/agent-runner.js")>("../src/agent-runner.js");
   return { ...actual, runAgent: vi.fn(), resumeAgent: vi.fn() };
 });
-vi.mock("../src/mention-clone.js", () => ({ runMentionClone: vi.fn() }));
+vi.mock("../src/agent/mention/mention-clone.js", () => ({ runMentionClone: vi.fn() }));
 
+import { runMentionClone } from "../src/agent/mention/mention-clone.js";
 import { resumeAgent, runAgent } from "../src/agent-runner.js";
 import subagentsExtension from "../src/index.js";
-import { runMentionClone } from "../src/mention-clone.js";
 import { ctx, type Hermetic, hermeticDir, makePi } from "./helpers/boot-extension.js";
 
 let hermetic: Hermetic | undefined;

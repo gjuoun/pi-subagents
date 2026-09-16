@@ -21,9 +21,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Context, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { encodeCwd } from "../src/agent/session/output-file.js";
 import { registerAgents } from "../src/config/registry/agent-types.js";
 import { loadCustomAgents } from "../src/config/registry/custom-agents.js";
-import { encodeCwd } from "../src/output-file.js";
 import {
   agentCall,
   type FauxReply,

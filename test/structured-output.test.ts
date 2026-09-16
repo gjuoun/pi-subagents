@@ -7,13 +7,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { compileJsonSchema } from "../src/lib/json-schema.js";
 import {
   createStructuredCapture,
   createStructuredOutputTool,
   STRUCTURED_OUTPUT_TOOL_NAME,
   structuredRetryPrompt,
-} from "../src/structured-output.js";
+} from "../src/agent/session/structured-output.js";
+import { compileJsonSchema } from "../src/lib/json-schema.js";
 
 const SCHEMA = {
   type: "object",

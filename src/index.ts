@@ -15,6 +15,11 @@ import { isAbsolute, join } from "node:path";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, getAgentDir, getSettingsListTheme } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./agent/mention/mention.js";
+import { runMentionClone } from "./agent/mention/mention-clone.js";
+import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./agent/session/output-file.js";
+import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
+import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
 import { renderAgentName } from "./agent-color.js";
 import { AgentManager, isTopLevelAgent } from "./agent-manager.js";
 import { getAgentConversation, getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, SUBAGENT_TOOL_NAMES, setDefaultMaxTurns, setGraceTurns, setRememberAgents, steerAgent } from "./agent-runner.js";
@@ -30,15 +35,11 @@ import { inChildSessionContext } from "./lib/child-context.js";
 import { type AgentConfig, type AgentInvocation, type AgentMentionMode, type AgentRecord, type JoinMode, type NotificationDetails, type SubagentType, type ViewerMarkdownMode, type WidgetMode } from "./lib/types.js";
 import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, PendingUsagePool, toReportedUsage } from "./lib/usage.js";
 import { escapeXml } from "./lib/xml.js";
-import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./mention.js";
-import { runMentionClone } from "./mention-clone.js";
 import { describeModel, type ModelRegistry, resolveModel } from "./model/model-resolver.js";
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model/model-scope.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
-import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./output-file.js";
 import { SubagentScheduler } from "./schedule.js";
 import { resolveStorePath, ScheduleStore } from "./schedule-store.js";
-import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import {
   type AgentActivity,
@@ -73,7 +74,6 @@ import { runWorkflow } from "./workflow/runtime.js";
 import { resolveWorkflowScript } from "./workflow/saved.js";
 import { completeWorkflowTask, createWorkflowTask, failWorkflowTask, formatWorkflowNotification, resolveResumeTarget, updateWorkflowProgressBatch, type WorkflowTask, workflowResultText, workflowRunId } from "./workflow/task.js";
 import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
-import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./worktree.js";
 
 // ---- Shared helpers ----
 

@@ -10,8 +10,8 @@ vi.mock("../src/agent-runner.js", async () => {
 
 // Only the filesystem side is faked; the transcript default is real module
 // state (both spawn paths read it there), so it must be reset between tests.
-vi.mock("../src/output-file.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/output-file.js")>("../src/output-file.js");
+vi.mock("../src/agent/session/output-file.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/agent/session/output-file.js")>("../src/agent/session/output-file.js");
   return {
     ...actual,
     createOutputFilePath: vi.fn(() => "/tmp/fake-subagent.output"),
@@ -20,9 +20,9 @@ vi.mock("../src/output-file.js", async () => {
   };
 });
 
+import { createOutputFilePath, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "../src/agent/session/output-file.js";
 import { runAgent } from "../src/agent-runner.js";
 import subagentsExtension from "../src/index.js";
-import { createOutputFilePath, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "../src/output-file.js";
 
 function makePi() {
   const tools = new Map<string, any>();

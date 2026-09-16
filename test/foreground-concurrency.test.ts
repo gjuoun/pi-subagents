@@ -20,15 +20,15 @@ vi.mock("../src/agent-runner.js", () => ({
   resumeAgent: vi.fn(),
 }));
 
-vi.mock("../src/worktree.js", () => ({
+vi.mock("../src/agent/session/worktree.js", () => ({
   createWorktree: vi.fn(),
   cleanupWorktree: vi.fn(() => ({ hasChanges: false })),
   pruneWorktrees: vi.fn(),
   isWorktreeIsolationEnabled: vi.fn(() => true),
 }));
 
+import { createWorktree } from "../src/agent/session/worktree.js";
 import { runAgent } from "../src/agent-runner.js";
-import { createWorktree } from "../src/worktree.js";
 
 const mockPi = {} as any;
 const mockCtx = { cwd: "/tmp" } as any;

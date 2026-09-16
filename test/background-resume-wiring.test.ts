@@ -15,8 +15,8 @@ vi.mock("../src/agent-runner.js", async () => {
   return { ...actual, runAgent: vi.fn(), resumeAgent: vi.fn() };
 });
 
-vi.mock("../src/output-file.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/output-file.js")>("../src/output-file.js");
+vi.mock("../src/agent/session/output-file.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/agent/session/output-file.js")>("../src/agent/session/output-file.js");
   return {
     ...actual,
     createOutputFilePath: vi.fn(() => "/tmp/fake-subagent.output"),
@@ -26,9 +26,9 @@ vi.mock("../src/output-file.js", async () => {
   };
 });
 
+import { ensureOutputFile, streamToOutputFile, writeInitialEntry } from "../src/agent/session/output-file.js";
 import { resumeAgent, runAgent } from "../src/agent-runner.js";
 import subagentsExtension from "../src/index.js";
-import { ensureOutputFile, streamToOutputFile, writeInitialEntry } from "../src/output-file.js";
 
 function makePi() {
   const tools = new Map<string, any>();

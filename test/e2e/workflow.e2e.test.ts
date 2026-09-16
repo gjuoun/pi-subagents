@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import { encodeCwd } from "../../src/output-file.js";
+import { encodeCwd } from "../../src/agent/session/output-file.js";
 import { readJournal } from "../../src/workflow/journal.js";
 import { runPrintMode, toolCallsNamed, toolResultsNamed } from "../helpers/print-mode-runner.js";
 

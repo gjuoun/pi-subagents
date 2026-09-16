@@ -95,20 +95,20 @@ vi.mock("../src/config/registry/agent-types.js", () => ({
   getToolNamesForType: vi.fn(() => ["read"]),
 }));
 
-vi.mock("../src/env.js", () => ({
+vi.mock("../src/agent/prompt/env.js", () => ({
   detectEnv: vi.fn(async () => ({ isGitRepo: false, branch: "", platform: "linux" })),
 }));
 
-vi.mock("../src/prompts.js", () => ({
+vi.mock("../src/agent/prompt/prompts.js", () => ({
   buildAgentPrompt: vi.fn(() => "system prompt"),
 }));
 
-vi.mock("../src/memory.js", () => ({
+vi.mock("../src/agent/prompt/memory.js", () => ({
   buildMemoryBlock: vi.fn(() => ""),
   buildReadOnlyMemoryBlock: vi.fn(() => ""),
 }));
 
-vi.mock("../src/skill-loader.js", () => ({
+vi.mock("../src/agent/prompt/skill-loader.js", () => ({
   preloadSkills: vi.fn(() => []),
 }));
 
@@ -265,7 +265,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("forwards worktreeBase to the prompt builder, and omits it otherwise", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("ISOLATED");
     createAgentSession.mockResolvedValue({ session });
 
@@ -277,7 +277,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("marks a workflow child so its prompt says the final text is the return value", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("RAW");
     createAgentSession.mockResolvedValue({ session });
 
@@ -289,7 +289,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("leaves the block off a schema-bearing child, which answers through StructuredOutput", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("RAW");
     createAgentSession.mockResolvedValue({ session });
 

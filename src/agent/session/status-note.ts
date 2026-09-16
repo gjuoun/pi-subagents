@@ -8,7 +8,7 @@
  * through agent-runner).
  */
 
-import type { AgentRecord } from "./lib/types.js";
+import type { AgentRecord } from "../../lib/types.js";
 
 /**
  * Explicit parenthetical note for a non-normal terminal outcome, so the parent

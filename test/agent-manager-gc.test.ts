@@ -16,7 +16,7 @@ vi.mock("../src/agent-runner.js", () => ({
   resumeAgent: vi.fn(),
 }));
 
-vi.mock("../src/worktree.js", () => ({
+vi.mock("../src/agent/session/worktree.js", () => ({
   createWorktree: vi.fn(),
   cleanupWorktree: vi.fn(() => ({ hasChanges: false })),
   pruneWorktrees: vi.fn(),

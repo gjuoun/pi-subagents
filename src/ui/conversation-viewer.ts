@@ -7,8 +7,8 @@
 
 import { type AgentSession, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { type Component, Input, Markdown, type MarkdownOptions, type MarkdownTheme, matchesKey, type TUI, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { extractText } from "../agent/prompt/context.js";
 import { renderAgentName } from "../agent-color.js";
-import { extractText } from "../context.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../lib/types.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../lib/usage.js";
 import type { Theme } from "./agent-widget.js";
