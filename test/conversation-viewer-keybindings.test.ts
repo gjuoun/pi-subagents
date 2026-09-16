@@ -1,6 +1,6 @@
 import { KeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRecord } from "../src/types.js";
+import type { AgentRecord } from "../src/lib/types.js";
 import { ConversationViewer } from "../src/ui/conversation-viewer.js";
 import type { ViewerKeybindings } from "../src/ui/viewer-keys.js";
 import { createViewerKeys } from "../src/ui/viewer-keys.js";

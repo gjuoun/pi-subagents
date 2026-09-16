@@ -22,8 +22,8 @@ vi.mock("../src/agent-runner.js", async () => {
 
 import { getDefaultMaxTurns, normalizeMaxTurns } from "../src/agent-runner.js";
 import subagentsExtension from "../src/index.js";
+import type { ScheduledSubagent } from "../src/lib/types.js";
 import { resolveStorePath, ScheduleStore } from "../src/schedule-store.js";
-import type { ScheduledSubagent } from "../src/types.js";
 import { ctx, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 
 const SESSION_ID = "sched-wiring-session";

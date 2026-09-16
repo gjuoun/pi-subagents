@@ -21,7 +21,7 @@ import {
   setFallbackSubagent,
 } from "../src/agent-types.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
-import type { AgentConfig } from "../src/types.js";
+import type { AgentConfig } from "../src/lib/types.js";
 
 function makeAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {

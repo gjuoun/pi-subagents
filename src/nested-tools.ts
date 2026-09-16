@@ -7,7 +7,6 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { abortable } from "./abortable.js";
 import {
   buildAgentRegistry,
   getAgentConfigIn,
@@ -17,6 +16,15 @@ import {
 } from "./agent-types.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { isolationParam, resolveAgentInvocationConfig } from "./invocation-config.js";
+import { abortable } from "./lib/abortable.js";
+import type {
+  AgentConfig,
+  AgentInvocation,
+  AgentRecord,
+  IsolationMode,
+  ThinkingLevel,
+} from "./lib/types.js";
+import { addUsage } from "./lib/usage.js";
 import { resolveModel } from "./model-resolver.js";
 import { checkModelScope } from "./model-scope.js";
 import {
@@ -26,14 +34,6 @@ import {
   writeInitialEntry,
 } from "./output-file.js";
 import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
-import type {
-  AgentConfig,
-  AgentInvocation,
-  AgentRecord,
-  IsolationMode,
-  ThinkingLevel,
-} from "./types.js";
-import { addUsage } from "./usage.js";
 import { isWorktreeIsolationEnabled } from "./worktree.js";
 
 /**

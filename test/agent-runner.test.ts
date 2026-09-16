@@ -138,7 +138,7 @@ import {
   setGraceTurns,
   setRememberAgents,
 } from "../src/agent-runner.js";
-import { compileJsonSchema } from "../src/workflow/json-schema.js";
+import { compileJsonSchema } from "../src/lib/json-schema.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
 let lastSession: ReturnType<typeof createSession>["session"] | undefined;

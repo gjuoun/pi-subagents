@@ -13,6 +13,7 @@
  * frame. They are — until one of them stops being O(1).
  */
 import { bench, describe } from "vitest";
+import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent } from "../../src/lib/usage.js";
 import {
   buildInvocationTags,
   describeActivity,
@@ -21,7 +22,6 @@ import {
   formatSessionTokens,
   formatTurns,
 } from "../../src/ui/agent-widget.js";
-import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent } from "../../src/usage.js";
 import { NOW, perfSession, perfTheme } from "../helpers/perf-fixtures.js";
 
 const INVOCATION = {

@@ -15,8 +15,8 @@
 
 import { cpus } from "node:os";
 import { Worker } from "node:worker_threads";
+import { type CompiledSchema, compileJsonSchema } from "../lib/json-schema.js";
 import { type JournalKeyInput, journalKey, type WorkflowJournalEntry } from "./journal.js";
-import { type CompiledSchema, compileJsonSchema } from "./json-schema.js";
 import { extractMeta, type WorkflowMeta } from "./meta.js";
 import type { WorkflowAgentEntry, WorkflowEntry } from "./progress.js";
 import { WORKER_SOURCE } from "./worker-source.js";

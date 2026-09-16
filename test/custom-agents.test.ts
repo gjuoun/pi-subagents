@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeAgentFile } from "../src/agent-file-toggle.js";
 import { BUILTIN_TOOL_NAMES } from "../src/agent-types.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
-import type { AgentConfig } from "../src/types.js";
+import type { AgentConfig } from "../src/lib/types.js";
 
 describe("loadCustomAgents", () => {
   let tmpDir: string;
