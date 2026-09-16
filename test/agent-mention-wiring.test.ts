@@ -25,8 +25,9 @@ vi.mock("../src/agent/agent-runner.js", async () => {
 // when it comes back empty. mention-clone.test.ts covers the clone itself.
 vi.mock("../src/agent/mention/mention-clone.js", () => ({ runMentionClone: vi.fn() }));
 
-import { getDefaultMaxTurns, resumeAgent, runAgent, setDefaultMaxTurns } from "../src/agent/agent-runner.js";
+import { resumeAgent, runAgent } from "../src/agent/agent-runner.js";
 import { runMentionClone } from "../src/agent/mention/mention-clone.js";
+import { getDefaultMaxTurns, setDefaultMaxTurns } from "../src/agent/run-limits.js";
 import subagentsExtension from "../src/index.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 

@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentManager } from "../src/agent/agent-manager.js";
-import { SUBAGENT_TOOL_NAMES } from "../src/agent/agent-runner.js";
+import { SUBAGENT_TOOL_NAMES } from "../src/agent/session/extension-scope.js";
 import { NO_FALLBACK, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
 import subagentsExtension, { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG } from "../src/index.js";
 import { compileJsonSchema } from "../src/lib/json-schema.js";

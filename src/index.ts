@@ -16,13 +16,15 @@ import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type Exten
 import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { AgentManager, isTopLevelAgent } from "./agent/agent-manager.js";
-import { getAgentConversation, getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, SUBAGENT_TOOL_NAMES, setDefaultMaxTurns, setGraceTurns, setRememberAgents, steerAgent } from "./agent/agent-runner.js";
+import { getAgentConversation, steerAgent } from "./agent/agent-runner.js";
 import { GroupJoinManager } from "./agent/group-join.js";
 import { isolationParam, resolveAgentInvocationConfig, resolveJoinMode } from "./agent/invocation.js";
 import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./agent/mention/mention.js";
 import { runMentionClone } from "./agent/mention/mention-clone.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./agent/nested-tools.js";
 import { type RpcHandle, registerRpcHandlers } from "./agent/rpc.js";
+import { getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
+import { SUBAGENT_TOOL_NAMES } from "./agent/session/extension-scope.js";
 import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./agent/session/output-file.js";
 import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
 import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./agent/session/worktree.js";

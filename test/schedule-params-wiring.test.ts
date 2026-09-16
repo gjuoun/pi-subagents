@@ -20,7 +20,7 @@ vi.mock("../src/agent/agent-runner.js", async () => {
   return { ...actual, runAgent: vi.fn() };
 });
 
-import { getDefaultMaxTurns, normalizeMaxTurns } from "../src/agent/agent-runner.js";
+import { getDefaultMaxTurns, normalizeMaxTurns } from "../src/agent/run-limits.js";
 import subagentsExtension from "../src/index.js";
 import type { ScheduledSubagent } from "../src/lib/types.js";
 import { resolveStorePath, ScheduleStore } from "../src/schedule/schedule-store.js";

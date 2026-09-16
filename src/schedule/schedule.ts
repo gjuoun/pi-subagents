@@ -19,7 +19,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Cron } from "croner";
 import { nanoid } from "nanoid";
 import type { AgentManager } from "../agent/agent-manager.js";
-import { normalizeMaxTurns } from "../agent/agent-runner.js";
+import { normalizeMaxTurns } from "../agent/run-limits.js";
 import { resolveSpawnType } from "../config/registry/agent-types.js";
 import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "../lib/types.js";
 import { resolveModel } from "../model/model-resolver.js";

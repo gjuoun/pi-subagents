@@ -122,22 +122,26 @@ vi.mock("../src/agent/nested-tools.js", () => ({
 }));
 
 import {
-  extensionCanonicalName,
-  extensionCanonicalNames,
   getAgentConversation,
-  getDefaultMaxTurns,
-  getGraceTurns,
-  parseExtensionsSpec,
-  parseExtSelectors,
   resolveDefaultModel,
-  resolveEffectiveMaxTurns,
   resumeAgent,
   runAgent,
-  SUBAGENT_TOOL_NAMES,
+} from "../src/agent/agent-runner.js";
+import {
+  getDefaultMaxTurns,
+  getGraceTurns,
+  resolveEffectiveMaxTurns,
   setDefaultMaxTurns,
   setGraceTurns,
   setRememberAgents,
-} from "../src/agent/agent-runner.js";
+} from "../src/agent/run-limits.js";
+import {
+  extensionCanonicalName,
+  extensionCanonicalNames,
+  parseExtensionsSpec,
+  parseExtSelectors,
+  SUBAGENT_TOOL_NAMES,
+} from "../src/agent/session/extension-scope.js";
 import { compileJsonSchema } from "../src/lib/json-schema.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
