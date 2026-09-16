@@ -13,9 +13,9 @@
 // exercises a path out of the queue therefore asserts the waiter RESOLVES.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentManager } from "../src/agent-manager.js";
+import { AgentManager } from "../src/agent/agent-manager.js";
 
-vi.mock("../src/agent-runner.js", () => ({
+vi.mock("../src/agent/agent-runner.js", () => ({
   runAgent: vi.fn(),
   resumeAgent: vi.fn(),
 }));
@@ -27,8 +27,8 @@ vi.mock("../src/agent/session/worktree.js", () => ({
   isWorktreeIsolationEnabled: vi.fn(() => true),
 }));
 
+import { runAgent } from "../src/agent/agent-runner.js";
 import { createWorktree } from "../src/agent/session/worktree.js";
-import { runAgent } from "../src/agent-runner.js";
 
 const mockPi = {} as any;
 const mockCtx = { cwd: "/tmp" } as any;

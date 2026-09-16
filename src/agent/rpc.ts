@@ -13,10 +13,10 @@
  * completion-notification race, and what protocol version 2 does not promise.
  */
 
+import type { AgentRecord } from "../lib/types.js";
+import { type ModelRegistry, resolveModel } from "../model/model-resolver.js";
+import { checkModelScope } from "../model/model-scope.js";
 import { isTopLevelAgent } from "./agent-manager.js";
-import type { AgentRecord } from "./lib/types.js";
-import { type ModelRegistry, resolveModel } from "./model/model-resolver.js";
-import { checkModelScope } from "./model/model-scope.js";
 
 /** Minimal event bus interface needed by the RPC handlers. */
 export interface EventBus {

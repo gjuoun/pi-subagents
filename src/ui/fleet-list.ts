@@ -12,8 +12,8 @@
  */
 
 import { Editor, isKeyRelease, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { type AgentManager, isTopLevelAgent } from "../agent/agent-manager.js";
 import { hasAgentBadge, renderAgentName } from "../agent-color.js";
-import { type AgentManager, isTopLevelAgent } from "../agent-manager.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../lib/types.js";
 import { getLifetimeCost, getLifetimeTotal } from "../lib/usage.js";
 import { type AgentActivity, formatCost, type Theme } from "./agent-widget.js";

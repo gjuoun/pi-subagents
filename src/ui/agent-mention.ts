@@ -43,8 +43,8 @@
  */
 
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
+import type { AgentManager } from "../agent/agent-manager.js";
 import { handleBase, MENTION_TRIGGER } from "../agent/mention/mention.js";
-import type { AgentManager } from "../agent-manager.js";
 import type { AgentRecord, AgentTombstone } from "../lib/types.js";
 
 /**

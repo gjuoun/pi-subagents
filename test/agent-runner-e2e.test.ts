@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { extensionCanonicalName, runAgent } from "../src/agent-runner.js";
+import { extensionCanonicalName, runAgent } from "../src/agent/agent-runner.js";
 import { registerAgents } from "../src/config/registry/agent-types.js";
 import type { AgentConfig } from "../src/lib/types.js";
 import { registerFauxProvider } from "./helpers/pi-ai.js";

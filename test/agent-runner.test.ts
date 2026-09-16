@@ -112,7 +112,7 @@ vi.mock("../src/agent/prompt/skill-loader.js", () => ({
   preloadSkills: vi.fn(() => []),
 }));
 
-vi.mock("../src/nested-tools.js", () => ({
+vi.mock("../src/agent/nested-tools.js", () => ({
   getMaxSubagentDepth: vi.fn(() => 2),
   createNestedSubagentTools: vi.fn(() => [
     { name: "Agent" },
@@ -137,7 +137,7 @@ import {
   setDefaultMaxTurns,
   setGraceTurns,
   setRememberAgents,
-} from "../src/agent-runner.js";
+} from "../src/agent/agent-runner.js";
 import { compileJsonSchema } from "../src/lib/json-schema.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
@@ -749,12 +749,12 @@ describe("getAgentConversation", () => {
 //     so late arrivals are judged too.
 // `lastToolsPassed()` returns what the LLM can actually call under either shape.
 
+import { createNestedSubagentTools } from "../src/agent/nested-tools.js";
 import {
   getAgentConfig,
   getConfig,
   getToolNamesForType,
 } from "../src/config/registry/agent-types.js";
-import { createNestedSubagentTools } from "../src/nested-tools.js";
 
 const BUILTINS_7 = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 

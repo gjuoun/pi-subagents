@@ -17,19 +17,19 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { buildParentContext, extractText } from "./agent/prompt/context.js";
-import { detectEnv } from "./agent/prompt/env.js";
-import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./agent/prompt/memory.js";
-import { buildAgentPrompt, type PromptExtras } from "./agent/prompt/prompts.js";
-import { preloadSkills } from "./agent/prompt/skill-loader.js";
-import { createStructuredCapture, createStructuredOutputTool, structuredRetryPrompt } from "./agent/session/structured-output.js";
-import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getMemoryToolNames, getReadOnlyMemoryToolNames, getToolNamesForType } from "./config/registry/agent-types.js";
-import { DEFAULT_AGENTS } from "./config/registry/default-agents.js";
-import { runInChildSessionContext } from "./lib/child-context.js";
-import type { CompiledSchema } from "./lib/json-schema.js";
-import type { SubagentType, ThinkingLevel } from "./lib/types.js";
-import type { LifetimeUsage } from "./lib/usage.js";
+import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getMemoryToolNames, getReadOnlyMemoryToolNames, getToolNamesForType } from "../config/registry/agent-types.js";
+import { DEFAULT_AGENTS } from "../config/registry/default-agents.js";
+import { runInChildSessionContext } from "../lib/child-context.js";
+import type { CompiledSchema } from "../lib/json-schema.js";
+import type { SubagentType, ThinkingLevel } from "../lib/types.js";
+import type { LifetimeUsage } from "../lib/usage.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
+import { buildParentContext, extractText } from "./prompt/context.js";
+import { detectEnv } from "./prompt/env.js";
+import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./prompt/memory.js";
+import { buildAgentPrompt, type PromptExtras } from "./prompt/prompts.js";
+import { preloadSkills } from "./prompt/skill-loader.js";
+import { createStructuredCapture, createStructuredOutputTool, structuredRetryPrompt } from "./session/structured-output.js";
 
 /**
  * Tool names registered by THIS extension. Single source of truth so the

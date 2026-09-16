@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentManager } from "../src/agent-manager.js";
+import { AgentManager } from "../src/agent/agent-manager.js";
 import type { AgentRecord } from "../src/lib/types.js";
 
-vi.mock("../src/agent-runner.js", () => ({
+vi.mock("../src/agent/agent-runner.js", () => ({
   runAgent: vi.fn(),
   resumeAgent: vi.fn(),
 }));
@@ -18,8 +18,8 @@ vi.mock("../src/agent/session/worktree.js", () => ({
   isWorktreeIsolationEnabled: vi.fn(() => true),
 }));
 
+import { resumeAgent, runAgent } from "../src/agent/agent-runner.js";
 import { isWorktreeIsolationEnabled } from "../src/agent/session/worktree.js";
-import { resumeAgent, runAgent } from "../src/agent-runner.js";
 import { addUsage } from "../src/lib/usage.js";
 
 const mockPi = {} as any;
@@ -787,7 +787,7 @@ describe("AgentManager — lifetime usage + compaction count are eagerly initial
     expect(manager.getRecord(id)!.compactionCount).toBe(0);
 
     // Now resume — drive callbacks via the mocked resumeAgent
-    const { resumeAgent: resumeMock } = await import("../src/agent-runner.js");
+    const { resumeAgent: resumeMock } = await import("../src/agent/agent-runner.js");
     vi.mocked(resumeMock).mockImplementation(async (_session, _prompt, opts: any) => {
       opts.onAssistantUsage?.({ input: 70, output: 30, cacheWrite: 5, cost: 0.007 });
       opts.onCompaction?.({ reason: "overflow", tokensBefore: 999 });
@@ -1629,7 +1629,7 @@ describe("AgentManager — resolved runs with a failed final turn map to error (
     await record.promise;
     expect(record.status).toBe("completed");
 
-    const { resumeAgent: resumeMock } = await import("../src/agent-runner.js");
+    const { resumeAgent: resumeMock } = await import("../src/agent/agent-runner.js");
     // resumeAgent bounds its fallback to this invocation, so a failed empty
     // resume yields text "" — never the prior turn's answer (#144 root-fix).
     vi.mocked(resumeMock).mockResolvedValue({
@@ -1651,7 +1651,7 @@ describe("AgentManager — resolved runs with a failed final turn map to error (
     const record = manager.getRecord(id)!;
     await record.promise;
 
-    const { resumeAgent: resumeMock } = await import("../src/agent-runner.js");
+    const { resumeAgent: resumeMock } = await import("../src/agent/agent-runner.js");
     vi.mocked(resumeMock).mockResolvedValue({
       text: "new partial progress",
       failure: "provider died mid-turn",

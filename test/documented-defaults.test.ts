@@ -24,17 +24,17 @@ describe("documented defaults (README:441)", () => {
   const HEAVY_REIMPORT_MS = 60_000;
 
   it("grace turns after the soft limit default to 5", async () => {
-    const { getGraceTurns } = await import("../src/agent-runner.js");
+    const { getGraceTurns } = await import("../src/agent/agent-runner.js");
     expect(getGraceTurns()).toBe(5);
   }, HEAVY_REIMPORT_MS);
 
   it("max turns is unlimited by default", async () => {
-    const { getDefaultMaxTurns } = await import("../src/agent-runner.js");
+    const { getDefaultMaxTurns } = await import("../src/agent/agent-runner.js");
     expect(getDefaultMaxTurns()).toBeUndefined();
   }, HEAVY_REIMPORT_MS);
 
   it("nested subagent depth defaults to 2", async () => {
-    const { getMaxSubagentDepth } = await import("../src/nested-tools.js");
+    const { getMaxSubagentDepth } = await import("../src/agent/nested-tools.js");
     expect(getMaxSubagentDepth()).toBe(2);
   });
 
@@ -42,7 +42,7 @@ describe("documented defaults (README:441)", () => {
   // foreground bypasses the pool entirely, so a limit tuned for opt-in
   // background would now queue the tail of ordinary parallel fan-outs.
   it("background concurrency defaults to 10", async () => {
-    const { AgentManager } = await import("../src/agent-manager.js");
+    const { AgentManager } = await import("../src/agent/agent-manager.js");
     const manager = new AgentManager();
     try {
       expect(manager.getMaxConcurrent()).toBe(10);
@@ -55,7 +55,7 @@ describe("documented defaults (README:441)", () => {
   // message's tool calls through Promise.all, so any default above 0 would be a
   // behaviour change for everyone rather than an opt-in for #253's reporter.
   it("foreground concurrency is unlimited by default", async () => {
-    const { AgentManager } = await import("../src/agent-manager.js");
+    const { AgentManager } = await import("../src/agent/agent-manager.js");
     const manager = new AgentManager();
     try {
       expect(manager.getMaxConcurrentForeground()).toBe(0);
@@ -65,7 +65,7 @@ describe("documented defaults (README:441)", () => {
   });
 
   it("top-level spawns default to background, nested spawns to foreground", async () => {
-    const { resolveAgentInvocationConfig } = await import("../src/invocation-config.js");
+    const { resolveAgentInvocationConfig } = await import("../src/agent/invocation.js");
     // The setting's default (true) is what index.ts passes for top-level calls.
     expect(resolveAgentInvocationConfig(undefined, {}, { defaultRunInBackground: true }).runInBackground).toBe(true);
     // nested-tools.ts passes false unconditionally.

@@ -8,33 +8,33 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
-  createOutputFilePath,
-  getOutputTranscriptDefault,
-  streamToOutputFile,
-  writeInitialEntry,
-} from "./agent/session/output-file.js";
-import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./agent/session/status-note.js";
-import { isWorktreeIsolationEnabled } from "./agent/session/worktree.js";
-import {
   buildAgentRegistry,
   getAgentConfigIn,
   getAvailableTypesIn,
   resolveEnabledTypeIn,
   resolveTypeIn,
-} from "./config/registry/agent-types.js";
-import { loadCustomAgents } from "./config/registry/custom-agents.js";
-import { isolationParam, resolveAgentInvocationConfig } from "./invocation-config.js";
-import { abortable } from "./lib/abortable.js";
+} from "../config/registry/agent-types.js";
+import { loadCustomAgents } from "../config/registry/custom-agents.js";
+import { abortable } from "../lib/abortable.js";
 import type {
   AgentConfig,
   AgentInvocation,
   AgentRecord,
   IsolationMode,
   ThinkingLevel,
-} from "./lib/types.js";
-import { addUsage } from "./lib/usage.js";
-import { resolveModel } from "./model/model-resolver.js";
-import { checkModelScope } from "./model/model-scope.js";
+} from "../lib/types.js";
+import { addUsage } from "../lib/usage.js";
+import { resolveModel } from "../model/model-resolver.js";
+import { checkModelScope } from "../model/model-scope.js";
+import { isolationParam, resolveAgentInvocationConfig } from "./invocation.js";
+import {
+  createOutputFilePath,
+  getOutputTranscriptDefault,
+  streamToOutputFile,
+  writeInitialEntry,
+} from "./session/output-file.js";
+import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./session/status-note.js";
+import { isWorktreeIsolationEnabled } from "./session/worktree.js";
 
 /**
  * Hard ceiling on nesting for every branch: main session = 0, its subagents = 1,
