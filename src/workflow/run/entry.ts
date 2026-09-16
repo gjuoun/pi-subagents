@@ -20,6 +20,9 @@ import type { WorkflowTask } from "./task.js";
 /** `customType` of the session entry a flag-launched workflow renders through. */
 export const WORKFLOW_ENTRY_TYPE = "subagents:workflow";
 
+/** CLI flag that runs a workflow script at session start. */
+export const WORKFLOW_FILE_FLAG = "subagents-workflow-file";
+
 /** The persisted snapshot of a settled run. */
 export interface WorkflowEntryData {
   name: string;
