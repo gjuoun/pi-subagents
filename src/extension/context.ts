@@ -12,9 +12,12 @@
  * The one thing that did change is that they are now reachable from outside `index.ts`, which is
  * what the extractions that follow need.
  *
- * Fields are plain and public on purpose. The setter-shaped helpers that repaint
- * (`setShowCost` also calls `widget.update()`) stay in `index.ts`, because they are wiring —
- * this object owns state, not side effects.
+ * The settings accessors live here too. They were 26 free functions in the factory body, one pair
+ * per cell; a cluster lifted out of `index.ts` would otherwise have to be handed all of them as a
+ * callback bag, which is the coupling this object exists to remove. The setter-shaped ones are
+ * allowed to repaint (`setShowCost` also calls `widget.update()`) because the surfaces they
+ * repaint belong to the same activation and are fields right here. Every mutation path funnels
+ * through these, so there is exactly one place a setting changes.
  *
  * Layering: not one of the six domains. It is the entrypoint's own state, so `layout-check`
  * treats it like `index` — unconstrained in what it may import, and never imported by a domain.
@@ -38,32 +41,82 @@ export class ActivationContext {
 
   /** Whether a bad custom agent file is fatal on load. Loaded before settings apply. */
   strictAgentFiles = false;
+
   /** Attach subagent spend to tool results, so the parent session counts it. */
   reportUsage = false;
+  isReportUsageEnabled(): boolean { return this.reportUsage; }
+  setReportUsage(b: boolean): void {
+    this.reportUsage = b;
+    // Whatever accumulated while it was on is stale the moment it goes off:
+    // draining it later would bill the parent for a window the user opted out
+    // of, in one lump, on some unrelated later tool call.
+    if (!b) this.pendingUsage.drain();
+  }
+
   /** Show `~$X` next to token counts in the subagent surfaces. */
   showCost = false;
+  isShowCostEnabled(): boolean { return this.showCost; }
+  setShowCost(b: boolean): void { this.showCost = b; this.widget.update(); this.fleet.update(); }
+
   /** Name the model and thinking level on the widget's running rows. */
   showModel = false;
+  isShowModelEnabled(): boolean { return this.showModel; }
+  setShowModel(b: boolean): void { this.showModel = b; this.widget.update(); }
+
   /** How much of the conversation viewer renders as Markdown. */
   viewerMarkdown: ViewerMarkdownMode = "all";
+  getViewerMarkdown(): ViewerMarkdownMode { return this.viewerMarkdown; }
+  setViewerMarkdown(mode: ViewerMarkdownMode): void { this.viewerMarkdown = mode; }
+
   /** What the above-editor widget shows. */
   widgetMode: WidgetMode = "background";
+  getWidgetMode(): WidgetMode { return this.widgetMode; }
+  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.widget.update(); }
+
   /** Whether the below-editor FleetView is drawn at all. */
   fleetViewEnabled = true;
+  isFleetViewEnabled(): boolean { return this.fleetViewEnabled; }
+  setFleetViewEnabled(b: boolean): void { this.fleetViewEnabled = b; this.fleet.setEnabled(b); }
+
   /** How `@handle` mentions resolve: model-decided, always clone, or off. */
   agentMentionMode: AgentMentionMode = "model";
+  getAgentMentionMode(): AgentMentionMode { return this.agentMentionMode; }
+  setAgentMentionMode(mode: AgentMentionMode): void { this.agentMentionMode = mode; }
+  // `model` and `direct` differ only in who starts a not-yet-running agent, so
+  // everything that just asks "are mentions live at all" — the suggestion list,
+  // the steer and resume branches — reads this instead of the mode.
+  isAgentMentionsEnabled(): boolean { return this.agentMentionMode !== "off"; }
+
   /** Grouping behaviour for a fan-out that does not ask for one. */
   defaultJoinMode: JoinMode = "smart";
+  getDefaultJoinMode(): JoinMode { return this.defaultJoinMode; }
+  setDefaultJoinMode(mode: JoinMode): void { this.defaultJoinMode = mode; }
+
   /** Whether a top-level spawn without `run_in_background` detaches. */
   backgroundByDefault = true;
+  getBackgroundByDefault(): boolean { return this.backgroundByDefault; }
+  setBackgroundByDefault(b: boolean): void { this.backgroundByDefault = b; }
+
   /** Master switch for `schedule` params and the schedule store. */
   schedulingEnabled = true;
+  isSchedulingEnabled(): boolean { return this.schedulingEnabled; }
+  setSchedulingEnabled(b: boolean): void { this.schedulingEnabled = b; }
+
   /** Master switch for the `SubagentWorkflow` tool and everything behind it. */
   workflowsEnabled = true;
   /** Whether `workflowsEnabled` came from the user rather than from its default. */
   workflowsPinned = false;
+  isWorkflowsEnabled(): boolean { return this.workflowsEnabled; }
+  isWorkflowsPinned(): boolean { return this.workflowsPinned; }
+  setWorkflowsEnabled(b: boolean): void {
+    this.workflowsEnabled = b;
+    this.workflowsPinned = true;
+  }
+
   /** Which Agent tool description is registered. */
   toolDescriptionMode: ToolDescriptionMode = "full";
+  getToolDescriptionMode(): ToolDescriptionMode { return this.toolDescriptionMode; }
+  setToolDescriptionMode(mode: ToolDescriptionMode): void { this.toolDescriptionMode = mode; }
 
   // ---- Activation lifecycle ----
 
