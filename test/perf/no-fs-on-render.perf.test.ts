@@ -33,22 +33,12 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...wrapped, default: wrapped };
 });
 
-const { AgentWidget } = await import("../../src/ui/agent-widget.js");
+// The AgentWidget frame case left with the widget (single Agent View); the status row is a pure
+// string builder with no render pipeline, so it has no frame to police here.
 const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
 const { makeFleet, makeSession, mountViewer, mountWidget } = await import("../helpers/perf-fixtures.js");
 
 describe("a rendered frame touches no filesystem", () => {
-  it("AgentWidget.render", () => {
-    const w = mountWidget(AgentWidget, makeFleet({ running: 5, queued: 3, finished: 2 }));
-    w.render(); // construction and priming may legitimately read; the frame may not
-    FS_CALLS.length = 0;
-
-    w.render();
-    w.render();
-    w.dispose();
-
-    expect(FS_CALLS).toEqual([]);
-  });
 
   it("ConversationViewer.render", () => {
     const viewer = mountViewer(ConversationViewer, makeSession(40));

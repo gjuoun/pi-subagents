@@ -30,7 +30,8 @@ import type { AgentsUiDeps } from "./deps.js";
  * each value's type and rejects a mistyped key, but leaves the return type
  * inferred so `_NoMissingSettingsKeys` below can check completeness.
  */
-function snapshotSettings(deps: AgentsUiDeps) {
+/** The whole settings snapshot, as one object — exported so `/agent` persists the same shape. */
+export function snapshotSettings(deps: AgentsUiDeps) {
   return {
     maxConcurrent: deps.context.manager.getMaxConcurrent(),
     // 0 = unlimited, and the default — see SubagentsSettings.

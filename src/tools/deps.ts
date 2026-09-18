@@ -18,7 +18,7 @@ import type { AgentRecord, JoinMode } from "../lib/types.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
-import type { AgentWidget } from "../ui/agent-widget.js";
+import type { AgentStatusBar } from "../ui/agent-status-bar.js";
 import type { FleetList } from "../ui/fleet-list.js";
 import type { WorkflowTask } from "../workflow/run/task.js";
 
@@ -28,9 +28,9 @@ export interface ToolsContext {
   manager: AgentManager;
   /** Live per-agent activity, read by the workflow host's callbacks. */
   agentActivity: Map<string, AgentActivity>;
-  /** The above-editor widget, refreshed when a run starts or settles. */
-  widget: AgentWidget;
-  /** The below-editor list, refreshed alongside the widget. */
+  /** The status row, refreshed when a run starts or settles. */
+  status: AgentStatusBar;
+  /** The below-editor list, refreshed alongside it. */
   fleet: FleetList;
   /** The schedule store, for the Agent tool's `schedule` param. */
   scheduler: SubagentScheduler;

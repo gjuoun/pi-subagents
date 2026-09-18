@@ -156,7 +156,7 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     expect(reply![1].data.id).toBeTruthy();
   });
 
-  it("renders an RPC-spawned agent in the native widget while it is running", async () => {
+  it("renders an RPC-spawned agent on the status row while it is running", async () => {
     const { pi, lifecycle, busHandlers } = makePi();
     const activeCtx = ctx(true);
     subagentsExtension(pi);
@@ -173,24 +173,25 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
       });
 
       await vi.waitFor(() => {
-        expect(activeCtx.ui.setWidget).toHaveBeenCalledWith(
-          "agents",
-          expect.any(Function),
-          { placement: "aboveEditor" },
+        // The above-editor widget is gone (one Agent View); the status row is the surface that
+        // proves the agent is visible while it runs — a filled coloured mark per running agent.
+        expect(activeCtx.ui.setStatus).toHaveBeenCalledWith(
+          "subagents",
+          expect.stringContaining("●"),
         );
-        expect(activeCtx.ui.setStatus).toHaveBeenCalledWith("subagents", "1 running agent");
       });
     } finally {
       await lifecycle.get("session_shutdown")();
     }
   });
 
-  it("shows live tool activity for an RPC-spawned background agent", async () => {
+  it("tracks live tool activity for an RPC-spawned background agent", async () => {
     const { pi, lifecycle, busHandlers } = makePi();
-    let widgetFactory: any;
-    const setWidget = vi.fn((key: string, content: any) => {
-      if (key === "agents" && content) widgetFactory = content;
-    });
+    // The activity LINE renders in the FleetView now; whether that list registers on this path
+    // is settled live (plan Step 7 captures a pane), not by this unit harness — what is pinned
+    // here is the wiring below it: the RPC spawn creates a tracker, and the agent reaches the
+    // surviving surface as a mark on the status row.
+    const setWidget = vi.fn();
     const extensionCtx = ctx(true, setWidget);
     let onToolActivity: ((activity: { type: "start" | "end"; toolName: string }) => void) | undefined;
     vi.mocked(runAgent).mockImplementation((_ctx, _type, _prompt, options: any) => {
@@ -213,13 +214,7 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     await vi.waitFor(() => expect(onToolActivity).toBeTypeOf("function"));
     onToolActivity!({ type: "start", toolName: "bash" });
 
-    expect(widgetFactory).toBeTypeOf("function");
-    const lines = widgetFactory(
-      { terminal: { columns: 120 }, requestRender: vi.fn() },
-      { fg: (_color: string, text: string) => text, bold: (text: string) => text },
-    ).render().join("\n");
-    expect(lines).toContain("running command…");
-    expect(lines).not.toContain("thinking…");
+    expect(extensionCtx.ui.setStatus).toHaveBeenCalledWith("subagents", expect.stringContaining("●"));
   });
 
   it("is idempotent — a second session_start does not re-advertise or double-register", async () => {

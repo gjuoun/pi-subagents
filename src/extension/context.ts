@@ -32,7 +32,7 @@ import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from 
 import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
-import type { AgentWidget } from "../ui/agent-widget.js";
+import type { AgentStatusBar } from "../ui/agent-status-bar.js";
 import type { FleetList } from "../ui/fleet-list.js";
 import type { WorkflowTask } from "../workflow/run/task.js";
 
@@ -56,12 +56,12 @@ export class ActivationContext {
   /** Show `~$X` next to token counts in the subagent surfaces. */
   showCost = false;
   isShowCostEnabled(): boolean { return this.showCost; }
-  setShowCost(b: boolean): void { this.showCost = b; this.widget.update(); this.fleet.update(); }
+  setShowCost(b: boolean): void { this.showCost = b; this.status.update(); this.fleet.update(); }
 
   /** Name the model and thinking level on the widget's running rows. */
   showModel = false;
   isShowModelEnabled(): boolean { return this.showModel; }
-  setShowModel(b: boolean): void { this.showModel = b; this.widget.update(); }
+  setShowModel(b: boolean): void { this.showModel = b; this.status.update(); }
 
   /** How much of the conversation viewer renders as Markdown. */
   viewerMarkdown: ViewerMarkdownMode = "all";
@@ -71,7 +71,7 @@ export class ActivationContext {
   /** What the above-editor widget shows. */
   widgetMode: WidgetMode = "background";
   getWidgetMode(): WidgetMode { return this.widgetMode; }
-  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.widget.update(); }
+  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.status.update(); }
 
   /** Whether the below-editor FleetView is drawn at all. */
   fleetViewEnabled = true;
@@ -145,7 +145,7 @@ export class ActivationContext {
   manager!: AgentManager;
   groupJoin!: GroupJoinManager;
   agentActivity!: Map<string, AgentActivity>;
-  widget!: AgentWidget;
+  status!: AgentStatusBar;
   fleet!: FleetList;
   scheduler!: SubagentScheduler;
   workflowTasks!: Map<string, WorkflowTask>;

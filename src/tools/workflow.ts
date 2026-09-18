@@ -101,7 +101,7 @@ export async function runWorkflowTask(deps: ToolsDeps, ctx: ExtensionContext, ta
  * triggers a turn, rendered by the existing `subagent-notification` renderer.
  */
 function notifyWorkflowFinished(deps: ToolsDeps, task: WorkflowTask) {
-  deps.context.widget.update();
+  deps.context.status.update();
   deps.context.fleet.update();
   const result = workflowResultText(task);
   deps.scheduleNudge(task.id, () => {
@@ -279,7 +279,7 @@ export function createWorkflowTool(deps: ToolsDeps) {
       // are owned by it, so their lifecycle callbacks no longer refresh these
       // surfaces — nothing else would register the widget for a run whose
       // first agent has not started yet.
-      deps.context.widget.update();
+      deps.context.status.update();
       deps.context.fleet.update();
 
       // Background, like Claude Code: the id comes back now and the run keeps

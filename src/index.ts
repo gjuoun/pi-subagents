@@ -45,7 +45,8 @@ import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-re
 import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/workflow.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import { createActivityTracker, renderRunningAgentStatus } from "./ui/agent-status.js";
-import { AgentWidget, } from "./ui/agent-widget.js";
+import { AgentStatusBar } from "./ui/agent-status-bar.js";
+import { showAgentViewMenu } from "./ui/agent-view-menu.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
@@ -236,22 +237,22 @@ export default function (pi: ExtensionAPI) {
 
   function sendIndividualNudge(record: AgentRecord) {
     context.agentActivity.delete(record.id);
-    context.widget.markFinished(record.id);
+    context.status.markFinished(record.id);
     context.fleet.onAgentFinished(record.id);
     scheduleNudge(record.id, () => emitIndividualNudge(record));
-    context.widget.update();
+    context.status.update();
   }
 
   // ---- Group join manager ----
   context.groupJoin = new GroupJoinManager(
     (records, partial) => {
-      for (const r of records) { context.agentActivity.delete(r.id); context.widget.markFinished(r.id); context.fleet.onAgentFinished(r.id); }
+      for (const r of records) { context.agentActivity.delete(r.id); context.status.markFinished(r.id); context.fleet.onAgentFinished(r.id); }
 
       const groupKey = `group:${records.map(r => r.id).join(",")}`;
       scheduleNudge(groupKey, () => {
         // Re-check at send time
         const unconsumed = records.filter(r => !r.resultConsumed);
-        if (unconsumed.length === 0) { context.widget.update(); return; }
+        if (unconsumed.length === 0) { context.status.update(); return; }
 
         const notifications = unconsumed.map(r => formatTaskNotification(r, 300, context.showCost)).join('\n\n');
         const label = partial
@@ -271,7 +272,7 @@ export default function (pi: ExtensionAPI) {
           details,
         }, { deliverAs: "followUp", triggerTurn: true });
       });
-      context.widget.update();
+      context.status.update();
     },
     30_000,
   );
@@ -341,16 +342,16 @@ export default function (pi: ExtensionAPI) {
     // Skip notification if result was already consumed via get_subagent_result
     if (record.resultConsumed) {
       context.agentActivity.delete(record.id);
-      context.widget.markFinished(record.id);
+      context.status.markFinished(record.id);
       context.fleet.onAgentFinished(record.id);
-      context.widget.update();
+      context.status.update();
       return;
     }
 
     // If this agent is pending batch finalization (debounce window still open),
     // don't send an individual nudge — finalizeBatch will pick it up retroactively.
     if (context.currentBatchAgents.some(a => a.id === record.id)) {
-      context.widget.update();
+      context.status.update();
       return;
     }
 
@@ -360,14 +361,14 @@ export default function (pi: ExtensionAPI) {
     }
     // 'held' → do nothing, group will fire later
     // 'delivered' → group callback already fired
-    context.widget.update();
+    context.status.update();
   }, undefined, (record) => {
     if (!isTopLevelAgent(record)) return;
     // Agent-tool spawns refresh these surfaces in their tool handler, but RPC
     // and scheduler spawns enter through the manager directly.
     if (context.currentCtx?.hasUI) {
-      context.widget.ensureTimer();
-      context.widget.update();
+      context.status.ensureTimer();
+      context.status.update();
       context.fleet.ensureTimer();
       context.fleet.update();
     }
@@ -556,7 +557,7 @@ export default function (pi: ExtensionAPI) {
     const ownSessionId = ctx.sessionManager?.getSessionId?.();
     if (ownSessionId) sessionManagers.set(ownSessionId, registryEntry);
     if (ctx.hasUI) {
-      context.widget.setUICtx(ctx.ui);
+      context.status.setUICtx(ctx.ui);
       context.fleet.setUICtx(ctx.ui as any);
     }
     context.manager.clearCompleted(true);
@@ -902,8 +903,14 @@ export default function (pi: ExtensionAPI) {
   // the Agent tool result, so showing them here too is a duplicate, #118), keep
   // everything else; "off" = hide the widget entirely. Read live at render time.
   context.widgetMode = "background";
-  context.widget = new AgentWidget(context.manager, context.agentActivity,
-    () => context.getWidgetMode(), () => context.isShowCostEnabled(), () => context.isShowModelEnabled());
+  // The Agent View is the FleetView below the editor. The only other surface this extension
+  // owns is the status row, and that is a line of coloured marks rather than a list — so there
+  // is no second view to keep in step with the first.
+  context.status = new AgentStatusBar({
+    listAgents: () => context.manager.listAgents()
+      .filter(isTopLevelAgent)
+      .map((record) => ({ id: record.id, type: record.type, status: record.status })),
+  });
 
   // Claude Code-style FleetView: navigable list of main + subagents below the editor.
   // The setting is passed in so a conversation overlay opened here renders like one opened from
@@ -1084,12 +1091,15 @@ export default function (pi: ExtensionAPI) {
     }
 
     context.agentActivity.set(id, bgState);
-    // This agent already finished once, so the widget holds a finished-age
+    // This agent already finished once, so the status row holds a finished-age
     // for it that is past the linger limit — without clearing it, the
     // resumed run's ✓/✗ line never renders and the agent just vanishes.
-    context.widget.markRunning(id);
-    context.widget.ensureTimer();
-    context.widget.update();
+    context.status.markRunning(id);
+    context.status.ensureTimer();
+    context.status.update();
+    // The FleetView is the only agent surface now, so a run started on this path has to refresh
+    // it here — otherwise the agent stays invisible until some later event repaints the list.
+    context.fleet.update();
     context.fleet.ensureTimer();
     context.fleet.update();
 
@@ -1109,9 +1119,9 @@ export default function (pi: ExtensionAPI) {
 
   // Grab UI context from first tool execution + clear lingering widget on new turn
   pi.on("tool_execution_start", async (_event, ctx) => {
-    context.widget.setUICtx(ctx.ui as UICtx);
+    context.status.setUICtx(ctx.ui as UICtx);
     context.fleet.setUICtx(ctx.ui as unknown as FleetUICtx);
-    context.widget.onTurnStart();
+    context.status.onTurnStart();
   });
 
 
@@ -1234,7 +1244,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       context.workflowsEnabled = false; // not setWorkflowsEnabled: this is not the user pinning it
-      context.widget.update();
+      context.status.update();
       context.fleet.update();
       warn(verdict.message);
 
@@ -1309,7 +1319,7 @@ export default function (pi: ExtensionAPI) {
 
     const task = createWorkflowTask({ id: workflowRunId(), script, scriptPath: path, meta });
     context.workflowTasks.set(task.id, task);
-    context.widget.update();
+    context.status.update();
     context.fleet.update();
     report(`Running workflow ${meta.name}…`, "info");
 
@@ -1325,7 +1335,7 @@ export default function (pi: ExtensionAPI) {
         content: formatWorkflowNotification(task),
         display: false,
       }, { deliverAs: "nextTurn" });
-      context.widget.update();
+      context.status.update();
       context.fleet.update();
     });
   }
@@ -1357,6 +1367,13 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("agents", {
     description: "Manage agents",
     handler: async (_args, ctx) => { await showAgentsMenu(ctx, agentsUiDeps, workflowMenuDeps); },
+  });
+
+  // `/agent` is the switch for the one Agent View, not a second agents menu: reachable in the TUI
+  // and in the browser alike because it is built on `ctx.ui.select`.
+  pi.registerCommand("agent", {
+    description: "Show or hide the Agent View",
+    handler: async (_args, ctx) => { await showAgentViewMenu(ctx, agentsUiDeps); },
   });
 
   context.fleet.setWorkflowSource(() => fleetWorkflows(toolsDeps), id => openWorkflowFromFleet(id, workflowMenuDeps));

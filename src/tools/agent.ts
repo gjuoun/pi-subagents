@@ -30,8 +30,7 @@ import { describeModel, resolveModel } from "../model/model-resolver.js";
 import { checkModelScope } from "../model/model-scope.js";
 import { renderAgentName } from "../ui/agent-color.js";
 import { buildInvocationTags, getDisplayName, getPromptModeLabel } from "../ui/agent-display.js";
-import { createActivityTracker, formatLifetimeTokens, renderRunningAgentStatus } from "../ui/agent-status.js";
-import { SPINNER } from "../ui/agent-widget.js";
+import { createActivityTracker, formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-status.js";
 import { buildDetails, textResult } from "../ui/notifications.js";
 import type { ToolsDeps } from "./deps.js";
 
@@ -246,7 +245,7 @@ export function createAgentTool(deps: ToolsDeps) {
 
     execute: async (toolCallId, params, signal, onUpdate, ctx) => {
       // Ensure we have UI context for widget rendering
-      deps.context.widget.setUICtx(ctx.ui as UICtx);
+      deps.context.status.setUICtx(ctx.ui as UICtx);
 
       // Reload custom agents so new project/global .md files are picked up without restart
       deps.reloadCustomAgents();
@@ -575,8 +574,8 @@ export function createAgentTool(deps: ToolsDeps) {
         }
 
         deps.context.agentActivity.set(id, bgState);
-        deps.context.widget.ensureTimer();
-        deps.context.widget.update();
+        deps.context.status.ensureTimer();
+        deps.context.status.update();
         deps.context.fleet.ensureTimer();
         deps.context.fleet.update();
 
@@ -661,7 +660,7 @@ export function createAgentTool(deps: ToolsDeps) {
           if (a.session === session) {
             fgId = a.id;
             deps.context.agentActivity.set(a.id, fgState);
-            deps.context.widget.ensureTimer();
+            deps.context.status.ensureTimer();
             deps.context.fleet.ensureTimer();
             deps.context.fleet.update();
             break;
@@ -717,7 +716,7 @@ export function createAgentTool(deps: ToolsDeps) {
         clearInterval(spinnerInterval);
         if (fgId) {
           deps.context.agentActivity.delete(fgId);
-          deps.context.widget.markFinished(fgId);
+          deps.context.status.markFinished(fgId);
           deps.context.fleet.onAgentFinished(fgId);
         }
       }

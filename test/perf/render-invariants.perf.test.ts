@@ -43,7 +43,7 @@ vi.mock("@earendil-works/pi-tui", async (importOriginal) => {
 });
 
 // After the mock, so the subjects bind the counting versions.
-const { AgentWidget } = await import("../../src/ui/agent-widget.js");
+const { AgentStatusBar } = await import("../../src/ui/agent-status-bar.js");
 const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
 const { makeActivity, makeFleet, makeSession, mountViewer, perfTheme, perfTui } = await import(
   "../helpers/perf-fixtures.js"
@@ -103,27 +103,22 @@ describe("ConversationViewer — cost stays linear in transcript length", () => 
   });
 });
 
-describe("AgentWidget — one frame does not rescan per agent", () => {
-  /** Renders one frame over `n` agents; returns how often the manager was asked. */
-  function listCallsPerRender(n: number): number {
+describe("AgentStatusBar — one update does not rescan per agent", () => {
+  /** Runs one update over `n` agents; returns how often the agent list was asked for. */
+  function listCallsPerUpdate(n: number): number {
     const records = makeFleet({ running: n });
     let listAgentsCalls = 0;
-    const manager = {
+    const bar = new AgentStatusBar({
       listAgents: () => {
         listAgentsCalls++;
-        return records;
+        return records.map((r: any) => ({ id: r.id, type: r.type, status: r.status }));
       },
-    } as any;
-
-    const widget = new AgentWidget(manager, makeActivity(records), () => "all", () => false, () => false);
-    let factory: any;
-    widget.setUICtx({ setStatus: () => {}, setWidget: (_k: string, c: any) => { factory = c; } } as any);
-    widget.update();
-    const tui = perfTui();
-    factory?.(tui, perfTheme).render(); // prime
+      resolveColor: () => undefined,
+    });
+    bar.setUICtx({ setStatus: () => {} });
     listAgentsCalls = 0;
-    factory?.(tui, perfTheme).render();
-    widget.dispose?.();
+    bar.update();
+    bar.dispose();
     return listAgentsCalls;
   }
 
@@ -131,9 +126,9 @@ describe("AgentWidget — one frame does not rescan per agent", () => {
   // "a constant, and the same constant at 100 agents as at 1" — a per-agent
   // lookup added to the row builder would break it, and collapsing the two
   // remaining scans into one would not.
-  it("asks the manager for the agent list a constant number of times", () => {
-    expect(listCallsPerRender(1)).toBeLessThanOrEqual(2);
-    expect(listCallsPerRender(100)).toBeLessThanOrEqual(2);
-    expect(listCallsPerRender(100)).toBe(listCallsPerRender(1));
+  it("asks for the agent list a constant number of times", () => {
+    expect(listCallsPerUpdate(1)).toBeLessThanOrEqual(2);
+    expect(listCallsPerUpdate(100)).toBeLessThanOrEqual(2);
+    expect(listCallsPerUpdate(100)).toBe(listCallsPerUpdate(1));
   });
 });

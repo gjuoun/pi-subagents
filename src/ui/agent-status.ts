@@ -12,6 +12,15 @@ import { formatTokens } from "../lib/ui/format.js";
 import type { AgentActivity, Theme } from "../lib/ui/theme.js";
 import { getLifetimeTotal, type LifetimeUsage } from "../lib/usage.js";
 
+/**
+ * Braille spinner frames for the running indicator.
+ *
+ * Moved here when the above-editor widget was deleted: three surfaces draw it (the transcript's
+ * running line, the workflow card, the workflow dialog) and none of them should import a widget
+ * that no longer exists.
+ */
+export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 export function renderRunningAgentStatus(
   frame: string,
   statsText: string,
