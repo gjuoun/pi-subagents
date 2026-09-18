@@ -1058,6 +1058,15 @@ src/                  # Layered by domain. A directory may import only from the 
                       # lifted out of the factory body without changing behaviour
 ```
 
+## Troubleshooting
+
+### A second agent surface above the editor
+
+An older copy of this package installed under `~/.pi/agent/npm/node_modules/@tintinweb/pi-subagents` still registers an
+`aboveEditor` widget (key `agents`) from `src/ui/agent-widget.ts`. This checkout does not ship that widget, and pi does
+not load the copy - it is not in `settings.packages` - but `~/.pi/agent/npm/package.json` still declares the dependency,
+so `npm install` in that root can re-materialise it. If a second, stale agent view reappears above the input, check that
+copy first.
 ## License
 
 MIT — [tintinweb](https://github.com/tintinweb)

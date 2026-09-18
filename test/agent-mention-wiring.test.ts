@@ -484,7 +484,11 @@ describe("mentioning an agent that has never run", () => {
       await lifecycle.get("input")({ type: "input", text: "@explore go", source: "interactive" }, uiCtx);
       await flush();
 
-      expect(setStatus).toHaveBeenCalledWith("subagents", expect.stringContaining("●"));
+      // Any phase of the run cycle — see RUN_PHASE_GLYPHS.
+      expect(setStatus).toHaveBeenCalledWith(
+        "subagents",
+        expect.stringMatching(/[▪■□]/),
+      );
     } finally {
       setDefaultMaxTurns(prevMax);
     }

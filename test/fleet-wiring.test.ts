@@ -141,4 +141,44 @@ describe("FleetView wiring (real extension lifecycle)", () => {
     await lifecycle.get("session_shutdown")?.({}, ctxWith(uiCtx()));
     expect(ui.setWidget).toHaveBeenCalledWith("fleet", undefined); // dispose cleared it
   });
+
+  // The measured defect of the agent-view-tui round, as a test: a background spawn's session
+  // lands AFTER the refresh that follows the spawn, and the list hides a session-less record — so
+  // a fleet refreshed only at spawn time never sees the agent, and (before the fix) had already
+  // cleared its own clock. Nothing else re-checks on this path: no completion arrives while the
+  // agent is running, and no key is pressed. Hence a run that is not simply "still pending" but
+  // permanently invisible, which is what the live probe saw.
+  it("draws the agent once its session lands, with no later refresh to depend on", async () => {
+    vi.mocked(runAgent).mockImplementation(async (_ctx, _type, _prompt, options: any) => {
+      // Async, like the real one: the session is created inside runAgent, after the spawn returned.
+      setTimeout(
+        () => options.onSessionCreated?.({ subscribe: () => () => {}, messages: [], dispose: vi.fn() } as any),
+        10,
+      );
+      return new Promise(() => {}) as any; // still running — nothing will refresh the list again
+    });
+
+    const { pi, tools, lifecycle } = makePi();
+    subagentsExtension(pi);
+
+    const ui = uiCtx();
+    await lifecycle.get("tool_execution_start")?.({}, ctxWith(ui)); // fleet captures THIS ui
+
+    const spawn = await tools.get("Agent").execute(
+      "tc",
+      { prompt: "go", description: "still running", subagent_type: "general-purpose", run_in_background: true },
+      undefined,
+      undefined,
+      ctxWith(uiCtx()),
+    );
+    expect(textOf(spawn)).toMatch(/Agent ID:/);
+
+    await new Promise((r) => setTimeout(r, 40)); // the session attaches here; nothing else fires
+
+    const fleetRegs = ui.setWidget.mock.calls.filter(c => c[0] === "fleet" && typeof c[1] === "function");
+    expect(fleetRegs.length, "the session attach must register the fleet widget").toBeGreaterThan(0);
+    expect(fleetRegs.at(-1)?.[2]).toEqual({ placement: "belowEditor" });
+
+    await lifecycle.get("session_shutdown")?.({}, ctxWith(uiCtx()));
+  });
 });

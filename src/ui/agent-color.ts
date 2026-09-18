@@ -145,28 +145,83 @@ export function renderAgentNameLabel(
 }
 
 /**
+ * Mix `amount` of white into a colour — the finish pop's second frame, where the mark keeps its
+ * dark glyph on a lighter ground. Clamped to the channel range; 0 is the colour itself.
+ */
+function lightenRgb({ r, g, b }: Rgb, amount: number): Rgb {
+  const channel = (value: number) => Math.min(255, Math.max(0, Math.round(value + (255 - value) * amount)));
+  return { r: channel(r), g: channel(g), b: channel(b) };
+}
+
+/**
+ * How a mark is painted, beyond its glyph and the agent's colour.
+ *
+ * Two axes, and neither touches the glyph — a status row's mark must stay one column wide whatever
+ * it is doing: `faint` is the SGR 2 attribute, and `invert` is the finish pop's dark cut-out.
+ */
+export interface MarkPaint {
+  /** SGR 2. ansi_up renders the attribute as `opacity: .7`, so the browser greys the mark out. */
+  faint?: boolean;
+  /**
+   * The finish pop: the glyph goes black and the agent's colour becomes the *background*, mixed
+   * `invert` of the way toward white (0 = the colour itself, 0.5 = half-way to white).
+   */
+  invert?: number;
+}
+
+/**
  * Render an agent's configured colour as one status mark.
  *
  * Literal SGR on purpose: the extension status row is a plain string with no theme attached, and
  * pi-web hands extensions a PlainTextTheme whose `fg()` is the identity function — a theme-token
  * colour would reach the browser colourless. Truecolor is the one form both hosts actually render.
  *
- * `intensity` scales the colour rather than changing the glyph: a hollow circle already means
- * `queued`, so a blink built on glyphs would collide with that state.
+ * The glyph is the caller's (the status row cycles it); this function only decides how the colour
+ * wraps it. A type with no colour configured paints nothing at all — not even the `faint` or
+ * `invert` attributes — because there is no colour for them to qualify.
  */
 export function renderAgentMark(
   color: string | undefined,
-  kind: "filled" | "hollow",
-  intensity = 1,
+  glyph: string,
+  paint: MarkPaint = {},
 ): string {
-  const glyph = kind === "hollow" ? "○" : "●";
   const resolved = resolveAgentColor(color);
   if (!resolved) return glyph;
   const rgb = parseHex(resolved);
-  const scaled = intensity >= 1
-    ? rgb
-    : { r: Math.round(rgb.r * intensity), g: Math.round(rgb.g * intensity), b: Math.round(rgb.b * intensity) };
-  return ansiColor("foreground", scaled) + glyph + "\u001b[39m";
+  if (paint.invert !== undefined) {
+    // Closed in the reverse order they were opened: background, then foreground.
+    return ansiColor("foreground", BLACK)
+      + ansiColor("background", lightenRgb(rgb, paint.invert))
+      + glyph
+      + "\u001b[49m"
+      + "\u001b[39m";
+  }
+  const foreground = ansiColor("foreground", rgb);
+  // SGR 2 needs its own reset (22): 39 only clears the foreground, so a faint mark would otherwise
+  // grey out every mark the row paints after it.
+  return paint.faint
+    ? `\u001b[2m${foreground}${glyph}\u001b[39m\u001b[22m`
+    : `${foreground}${glyph}\u001b[39m`;
+}
+
+/**
+ * Paint text in an agent's configured colour, or in a theme token when it configures none.
+ *
+ * Literal truecolor, the same path the status marks take and for the same reason: an agent colour
+ * is arbitrary hex (or one of the palette names above), and a theme can only paint the tokens it
+ * was built with. The pair of escapes is zero-width, so painted text keeps whatever padding
+ * arithmetic its caller already did — which is what lets the conversation viewer's hand-drawn
+ * frame take a colour without its borders shifting.
+ */
+export function paintAgentColor(
+  color: string | undefined,
+  theme: AgentNameTheme,
+  text: string,
+  fallbackToken: string,
+): string {
+  const resolved = resolveAgentColor(color);
+  if (!resolved) return theme.fg(fallbackToken, text);
+  return ansiColor("foreground", parseHex(resolved)) + text + "\u001b[39m";
 }
 
 /** Whether an agent renders as a badge — i.e. it has a valid configured color. */
