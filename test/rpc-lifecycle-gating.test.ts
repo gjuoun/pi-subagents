@@ -174,10 +174,12 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
 
       await vi.waitFor(() => {
         // The above-editor widget is gone (one Agent View); the status row is the surface that
-        // proves the agent is visible while it runs — a filled coloured mark per running agent.
+        // proves the agent is visible while it runs — one mark per running agent, drawing whichever
+        // glyph of the run cycle (RUN_PHASE_GLYPHS) its phase owns. This harness configures no
+        // colour for the type, so the mark here is bare.
         expect(activeCtx.ui.setStatus).toHaveBeenCalledWith(
           "subagents",
-          expect.stringContaining("●"),
+          expect.stringMatching(/[▪■□]/),
         );
       });
     } finally {
@@ -214,7 +216,11 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     await vi.waitFor(() => expect(onToolActivity).toBeTypeOf("function"));
     onToolActivity!({ type: "start", toolName: "bash" });
 
-    expect(extensionCtx.ui.setStatus).toHaveBeenCalledWith("subagents", expect.stringContaining("●"));
+    // Any phase of the run cycle — see RUN_PHASE_GLYPHS.
+    expect(extensionCtx.ui.setStatus).toHaveBeenCalledWith(
+      "subagents",
+      expect.stringMatching(/[▪■□]/),
+    );
   });
 
   it("is idempotent — a second session_start does not re-advertise or double-register", async () => {

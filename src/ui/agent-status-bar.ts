@@ -3,12 +3,18 @@
  *
  * What survives of `AgentWidget` once the above-editor widget is gone: the status text, the
  * turn-based aging of finished marks, and the clock. The widget's 80 ms timer existed to animate a
- * spinner; here the only reason to tick at all is the running marks' blink, so:
+ * spinner; here the clock has exactly two jobs — cycling the running marks' glyph, and playing out a
+ * finishing mark's pop — so:
  *
- *   - the clock runs only while something is RUNNING (queued and finished marks are steady),
+ *   - the clock runs only while there is something to animate: a RUNNING or QUEUED mark, or a
+ *     finish pop still owed (a pop armed by the last agent to finish has to outlive its run),
  *   - a frame identical to the last one is not written, so an idle row costs nothing,
  *   - finished marks stay solid until `onTurnStart()` ages them out — the same 'one turn' rule the
  *     widget used, with errors lingering an extra turn so a failure is not missed.
+ *
+ * None of that is the look. What a cycling mark looks like is `RUN_PHASE_GLYPHS` in
+ * `agent-status-line.ts` — one exported table, swappable without touching this file, the clock rule
+ * or the tests. This file only decides when the phase advances and how many beats a pop burns for.
  *
  * In pi-web every `setStatus` is an event that re-renders the chat, which is exactly why the two
  * guards above are load-bearing rather than nice to have.
@@ -16,13 +22,16 @@
 import {
   type ColorResolver,
   formatAgentStatusLine,
+  RUN_PHASE_GLYPHS,
   type StatusAgent,
   type StatusPhase,
 } from "./agent-status-line.js";
 
 const STATUS_KEY = "subagents";
-/** Blink cadence. Fast enough to read as blinking, slow enough to stay cheap in the browser. */
+/** Cycle cadence: one glyph per beat, so a full four-frame cycle is 2.4 s. */
 const BLINK_MS = 600;
+/** Beats a finish pop burns for: two frames, ~1.2 s, then the mark settles back to steady. */
+const POP_FRAMES = 2;
 /** How many turns a completed mark stays solid before it drops. */
 const FINISHED_LINGER_TURNS = 1;
 /** A failure lingers one turn longer, so it cannot be missed between repaints. */
@@ -34,7 +43,7 @@ export interface StatusSink {
   setStatus(key: string, text: string | undefined): void;
 }
 
-/** Injectable clock, so the blink cadence is provable without waiting on one. */
+/** Injectable clock, so the beat cadence is provable without waiting on one. */
 export interface StatusClock {
   set(fn: () => void, ms: number): unknown;
   clear(handle: unknown): void;
@@ -63,6 +72,21 @@ export class AgentStatusBar {
   private wrote = false;
   /** Turn age of each finished mark, keyed by agent id. */
   private readonly finishedAge = new Map<string, number>();
+  /** Beats of finish pop still owed, keyed by agent id. Deleted the beat it reaches zero. */
+  private readonly pop = new Map<string, number>();
+  /**
+   * Frames of cycle lag per agent id — the cascade that makes the running marks travel left to
+   * right instead of flashing together. Assigned once, on an id's first render, and keyed by the id
+   * and never by its position in the row: a position-derived lag would re-phase every later mark
+   * the moment an earlier one aged out or finished, which reads as a glitch rather than a wave.
+   */
+  private readonly offsets = new Map<string, number>();
+  /**
+   * Slots handed out so far, monotonic on purpose: an agent that starts after an older one has
+   * finished takes the next slot in the wave rather than the freed one, so the cascade carries on
+   * where it was instead of resetting.
+   */
+  private assignedOffsets = 0;
 
   constructor(private readonly deps: AgentStatusBarDeps) {}
 
@@ -80,9 +104,13 @@ export class AgentStatusBar {
     this.update();
   }
 
-  /** An agent settled. Its mark stays solid until the turn ages it out. */
+  /**
+   * An agent settled. Its mark pops for `POP_FRAMES` beats and then stays solid until the turn ages
+   * it out — which means the clock has to outlive the run it was armed for.
+   */
   markFinished(id: string): void {
     if (!this.finishedAge.has(id)) this.finishedAge.set(id, 0);
+    this.pop.set(id, POP_FRAMES);
     this.update();
   }
 
@@ -99,10 +127,15 @@ export class AgentStatusBar {
 
   update(): void {
     const rows = this.rows();
-    const running = rows.some((row) => row.status === "running");
-    this.syncClock(running);
+    // Anything worth animating keeps the clock alive: a cycling mark, a queued one that may start
+    // next beat, or a pop still owed by a mark that has already settled. An idle row keeps it
+    // off — an always-on tick is what made the TUI and pi-web fight over redraws.
+    const animating = this.pop.size > 0
+      || rows.some((row) => row.status === "running" || row.status === "queued");
+    this.syncClock(animating);
+    this.assignOffsets(rows);
 
-    const text = formatAgentStatusLine(rows, this.phase, this.deps.resolveColor);
+    const text = formatAgentStatusLine(rows, this.phase, this.deps.resolveColor, this.pop, this.offsets);
     if (this.wrote && text === this.last) return;
     this.last = text;
     this.wrote = true;
@@ -113,6 +146,8 @@ export class AgentStatusBar {
     this.syncClock(false);
     this.ctx?.setStatus(STATUS_KEY, undefined);
     this.finishedAge.clear();
+    this.pop.clear();
+    this.offsets.clear();
     this.ctx = undefined;
     this.last = undefined;
     this.wrote = false;
@@ -129,8 +164,32 @@ export class AgentStatusBar {
   }
 
   private tick(): void {
-    this.phase = this.phase === 0 ? 1 : 0;
+    this.phase = ((this.phase + 1) % 4) as StatusPhase;
+    for (const [id, beats] of this.pop) {
+      if (beats <= 1) this.pop.delete(id);
+      else this.pop.set(id, beats - 1);
+    }
     this.update();
+  }
+
+  /**
+   * Hand each mark its place in the cascade, in the order the row shows them, and forget the marks
+   * that are no longer in the row.
+   *
+   * Slots are assigned once per id and wrapped to the cycle, so a fifth mark restarts the pattern
+   * rather than running off the table. The counter behind them only ever climbs: pruning a departed
+   * mark's entry keeps the map honest without letting the next new agent step into a slot that the
+   * wave has already passed. The glyph count is the one thing read from the table — the characters
+   * themselves stay the look's business, so swapping them still needs no edit here.
+   */
+  private assignOffsets(rows: readonly StatusAgent[]): void {
+    const live = new Set(rows.map((row) => row.id));
+    for (const id of [...this.offsets.keys()]) if (!live.has(id)) this.offsets.delete(id);
+    for (const row of rows) {
+      if (this.offsets.has(row.id)) continue;
+      this.offsets.set(row.id, this.assignedOffsets % RUN_PHASE_GLYPHS.length);
+      this.assignedOffsets += 1;
+    }
   }
 
   /** The agents worth a mark right now, in the caller's order. */

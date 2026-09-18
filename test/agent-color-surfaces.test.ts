@@ -160,7 +160,8 @@ describe("custom agent color runtime surfaces", () => {
     registerAgents(new Map([[TYPE, config]]));
     const line = formatAgentStatusLine([{ id: "status-row", type: TYPE, status: "running" }], 0);
 
-    expect(line).toContain("\u001b[38;2;130;125;189m\u25cf");
+    // Phase 0 of the glyph cycle, in the type's own colour: see RUN_PHASE_GLYPHS.
+    expect(line).toContain("\u001b[38;2;130;125;189m\u25aa");
     expect(line).toContain("\u001b[39m");
   });
 
