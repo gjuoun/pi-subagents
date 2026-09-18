@@ -1,0 +1,11 @@
+{
+  "answers": {
+    "agent": {
+      "type": "choice",
+      "choice": "worker",
+      "probabilities": { "worker": 0.68, "finder": 0.15, "expert": 0.1, "prospector": 0.07 }
+    }
+  },
+  "providerMetadata": { "typesafe": { "confidence": { "agent": 0.64 } } },
+  "usage": { "inputTokens": 2087, "outputTokens": 116 }
+}

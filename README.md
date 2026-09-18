@@ -18,6 +18,7 @@ https://github.com/user-attachments/assets/8685261b-9338-4fea-8dfe-1c590d5df543
 - **FleetView** — Claude Code-style navigable list of `main` + every running subagent rendered below the editor (earliest-launched first). Press `↓` (or `←`) at an empty prompt to jump in, `↑`/`↓` to move the selection, `Enter` to open the selected agent's live, auto-updating conversation, `Esc` to return. Finished agents linger briefly before dropping out, and a viewer stays open through completion so you can read the final output. Toggle via `/agents → Settings → Fleet view`
 - **Conversation viewer** — select any agent in `/agents` to open a live-scrolling overlay of its full conversation (auto-follows new content, scroll up to pause). Each tool call renders as one compact block shaped by the tool: `read` collapses to the file and its line count, `edit` shows the lines it changed, `bash` leads with the complete command and streams its output, `write` shows the line being written, `grep`/`find`/`ls` inline their parameters, and any other tool shows its parameters — or `{ ... }` when those run past twenty lines. Each head is painted with pi's own tool-block background — pending while the call runs, success or error once it settles — so a call reads as one object rather than a run of text. `e` expands every block to its full body and full parameters, and the view stays compact until you ask. The overlay takes the full width and every row above the bottom three, anchored at the top: those three are pi's own status rows — an overlay is composited over the whole screen, so they are a budget rather than a guarantee. pi draws them *after* the transcript instead of pinning them to the screen bottom, so the reserve only finds them when the transcript is long enough to have pushed them down; on a fresh, short session those rows are simply blank. `VIEWER_BOTTOM_RESERVED_ROWS` in `src/ui/conversation-viewer.ts` is the one number to tune: 0 for the tallest possible viewer, ~10 to keep the editor and the fleet list in view. The frame does not follow a terminal that is resized while it is open — pi sizes an overlay once — so close and reopen it (or press `Esc` and open it again) after changing your window. The footer fits itself by priority, so `Esc` stays on screen at any width. A failure still names itself: `✘` plus the error line, on every tool. Steer a running agent inline by pressing `Enter` to open a composer, typing, then `Enter` to send (`Esc` or an empty submit returns) — the message appears as a user message and redirects the agent after its current tool. Stop a still-running agent by pressing `x` (then `x` again to confirm) — both work for background agents too. Everything it renders goes through Markdown — assistant prose and, once expanded, a tool result's body; the `viewerMarkdown` setting under `/agents → Settings` is the one switch, for the cases where a tool's output is data rather than prose (see [Viewer markdown](#persistent-settings))
 - **Custom agent types** — define agents in `.pi/agents/<name>.md` or `.agents/agents/<name>.md` (project) or globally, with YAML frontmatter: custom system prompts, model selection, thinking levels, tool restrictions, and Claude Code-compatible colored name badges
+- **Jev agent selector (opt-in)** — the toggleable `jev` tool (`jevEnabled` setting): a real-time decision model picks which agent type should execute a task under the routing rules (winner + probability distribution + confidence, fails open). Off by default; enable via `/agents → Settings → Jev agent selector`
 - **Nested subagents** — opt-in, default-off delegation: a custom agent that sets `allowed_subagents` gets its own ownership-scoped `Agent`, `get_subagent_result`, and `steer_subagent` tools, depth-capped from the main session (default 2). It can control only its own children, they are stopped when it finishes, and their transcripts and token spend roll up to it. The allowlist is a privilege boundary — a child runs with its own tools, so pick it as carefully as `tools:` itself
 - **Agent mentions** — subagents are first-class: type `@explore also check the RPC path` at the prompt and it goes to that agent instead of the main model, without a word of it entering the chat. One syntax covers the whole lifecycle — message it while it runs, resume it once it has finished, reopen its session from disk long after that, or start it if it never ran. Mentioning an agent that isn't running spawns it through an off-screen clone of the conversation, so it gets Claude Code's context-written prompt and a real `Agent` tool call without a word of it reaching the chat; `direct` mode starts it here from your text instead, with no model call at all. The orchestrator can `name` an agent so you address it as `@auth-audit`, and handles work in `steer_subagent`/`get_subagent_result` too. `@` completes live agents, resumable ones, and startable types alongside pi's file completion; `@main` forces text back to the main model. Toggle via `/agents → Settings → Agent mentions`
 - **Scripted workflows** — a `SubagentWorkflow` tool that runs a deterministic JavaScript script orchestrating many subagents: `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()` and `args`, with a pure-literal `meta` block declaring the phases. `pipeline()` has no barrier between stages, so one item can be in a later stage while another is still in the first — unlike `parallel()`, which idles every fast agent until the slowest finishes. Runs in the background with a live card, inspectable via `/agents → Workflows` or by selecting the run in FleetView. `agent()` also takes `gate: "npm test"` to verify a child by running a command (inside its worktree, when isolated) rather than asking another model, and `resume: "<label>"` to continue a child instead of re-paying its context. Scripts run in a `node:vm` sandbox on a worker thread where `Date.now()`, `Math.random()` and `eval` throw. On by default, but it stands down for company: if another extension already provides a `Workflow` or `SubagentWorkflow` tool, this one warns and disables itself for the session rather than offering the model two orchestrators. Pin it either way with `"workflowsEnabled"` in `subagents.json` or `/agents → Settings → Workflows`. A script written for Claude Code's `Workflow` tool runs here unchanged: same globals, `schema` returns a validated object exactly as it does there, `budget` is present and always reports no token target (pi has no such directive) so its `budget.total`-guarded patterns still take the branch they were written for, and nested `workflow()` composes saved workflows one level deep. **[Full guide](https://github.com/tintinweb/pi-subagents/blob/master/docs/workflows.md)**
@@ -105,6 +106,38 @@ Restrictions:
 - `run_in_background: false` is refused — scheduled jobs always run in the background. Omitting it, or passing `true`, is fine.
 - Scheduled fires bypass the `maxConcurrent` queue so a 5-minute interval cannot be deferred behind long-running manual agents.
 - **Headless `pi -p` doesn't wait for scheduled subagents.**
+
+## Jev agent selector
+
+An **opt-in** decision tool: with `/agents → Settings → Jev agent selector → enabled`, the orchestrator session gains the `jev` tool it can call to decide which agent type should execute a task, instead of picking by hand:
+
+```
+jev({
+  task: "Find why this flaky test fails and fix it",
+  conf_min: 0.6,   // optional: flag escalate when the winner's confidence is below this
+})
+```
+
+The tool sends the task, optional `context`, and the routing ruleset to **TypeSafe Jev** (a System One decision model — typed answers, not prose) and returns the recommended agent type, its top-3 probability distribution, confidence, and cost. The `choice` criteria are the currently enabled agent types and their descriptions, so the recommendation always names real, spawnable agents.
+
+**Fail-open:** the tool never throws and never blocks a dispatch. Missing key, network failure, or a classifier error returns a visible `jev unavailable: …` message with a remedy — the orchestrator proceeds with its own judgment.
+
+**Configuration:** the key and transport are environment variables, read at call time:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `JEV_API_KEY` | — | Classifier key (preferred) |
+| `VERCEL_AI_GATEWAY_API_KEY` | — | Fallback key — the Vercel AI Gateway transport |
+| `JEV_BASE_URL` | `https://ai-gateway.vercel.sh/v4/ai` | Evaluation endpoint base (OpenRouter / direct API = a config change, not a code change) |
+| `JEV_MODEL_ID` | `typesafe-ai/jev` | Model id, sent in the `ai-model-id` header |
+| `JEV_ROUTING_RULES` | — | Path to the routing-ruleset text injected into the state; falls back to shadow's `agent-routing.md` if present, else omitted |
+| `JEV_TIMEOUT_MS` | `5000` | Per-call timeout |
+
+See [docs/jev.md](docs/jev.md) for the decision semantics (state composition, confidence/escalation, transport notes).
+
+**Disable:** `/agents → Settings → Jev agent selector → disabled` — the `jev` tool will be absent on the next pi session.
+
+**Persisted as:** the setting key is `jevEnabled` (off by default). For machine-wide defaults hand-edit `~/.pi/agent/subagents.json`, or the project's `.pi/subagents.json`: `{ "jevEnabled": true }`.
 
 ## UI
 
@@ -476,7 +509,15 @@ Send a steering message to a running agent. The message interrupts after the cur
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_id` | string | yes | Agent ID to steer |
-| `message` | string | yes | Message to inject into agent conversation |
+### `jev`
+
+Ask TypeSafe Jev which agent type should execute a task. Registered only when the Jev agent selector setting is enabled — see [Jev agent selector](#jev-agent-selector). Fails open: any error returns a visible message, never a throw.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task` | string | yes | The task to be dispatched — the text the orchestrator would send to the Agent tool |
+| `context` | string | no | Optional situation detail for Jev to weigh |
+| `conf_min` | number | no | Confidence gate: winner confidence below this flags `escalate` |
 
 ## Commands
 
@@ -610,7 +651,7 @@ When on, each subagent spawn's effective model is validated against pi's own `en
 
 ## Persistent Settings
 
-Runtime tuning values set via `/agents` → Settings (max concurrency, max foreground concurrency, default max turns, grace turns, nested depth, fallback agent, default join mode, scheduling on/off, scope models on/off, disable defaults on/off, strict agent files on/off, agent mentions on/off, output transcript on/off, tool description full/compact/custom, widget all/background/off, usage reporting on/off, cost display on/off, model display on/off, viewer markdown off/assistant/all) persist across pi restarts. Two files, merged on load:
+Runtime tuning values set via `/agents` → Settings (max concurrency, max foreground concurrency, default max turns, grace turns, nested depth, fallback agent, default join mode, scheduling on/off, scope models on/off, disable defaults on/off, strict agent files on/off, agent mentions on/off, output transcript on/off, tool description full/compact/custom, widget all/background/off, usage reporting on/off, cost display on/off, model display on/off, viewer markdown off/assistant/all, jev agent selector on/off) persist across pi restarts. Two files, merged on load:
 
 - **Global:** `~/.pi/agent/subagents.json` — your machine-wide defaults. Edit by hand; the `/agents` menu never writes here.
 - **Project:** `<cwd>/.pi/subagents.json` — per-project overrides. Written by `/agents` → Settings.

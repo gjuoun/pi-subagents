@@ -44,6 +44,11 @@ export function createAgentTool(deps: ToolsDeps) {
     }),
     promptSnippet: "Launch autonomous sub-agents for complex multi-step tasks",
     promptGuidelines: [
+      ...(deps.context.isJevEnabled()
+        ? [
+            "When enabled, consult the `jev` tool for dispatch decisions before spawning an Agent — it classifies the task under the routing rules and recommends the best agent type.",
+          ]
+        : []),
       "Use Agent with specialized agents when the task matches an agent type's description. Subagents are valuable for parallelizing independent queries or for protecting the main context window from excessive results, but should not be used excessively when not needed. Importantly, avoid duplicating work that subagents are already doing — if you delegate research to a subagent, do not also perform the same searches yourself.",
       "For broad codebase exploration or research, spawn Agent with an appropriate subagent_type (e.g. Explore). Otherwise use direct tools (read, grep, find) when the target is already known.",
       "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",

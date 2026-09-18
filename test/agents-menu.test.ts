@@ -26,6 +26,8 @@ function makeDeps(on: boolean) {
       isWorkflowsEnabled: () => false,
       isWorkflowsPinned: () => false,
       isSchedulingEnabled: () => false,
+      isJevEnabled: () => false,
+      setJevEnabled: vi.fn(),
       isReportUsageEnabled: () => false,
       isShowCostEnabled: () => false,
       isShowModelEnabled: () => false,

@@ -19,6 +19,8 @@ export const SUBAGENT_TOOL_NAMES = {
   WORKFLOW: "SubagentWorkflow",
   GET_RESULT: "get_subagent_result",
   STEER: "steer_subagent",
+  /** Toggleable Jev agent selector — parent-side only (see EXCLUDED_TOOL_NAMES). */
+  JEV: "jev",
 } as const;
 
 /** Names of tools registered by this extension that subagents must NOT inherit. */

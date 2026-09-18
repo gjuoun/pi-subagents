@@ -56,6 +56,8 @@ export interface AgentsUiContext {
   isWorkflowsEnabled(): boolean;
   isWorkflowsPinned(): boolean;
   setWorkflowsEnabled(b: boolean): void;
+  isJevEnabled(): boolean;
+  setJevEnabled(b: boolean): void;
   getToolDescriptionMode(): ToolDescriptionMode;
   setToolDescriptionMode(mode: ToolDescriptionMode): void;
 }
