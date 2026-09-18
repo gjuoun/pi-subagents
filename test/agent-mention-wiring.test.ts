@@ -15,19 +15,20 @@ import { unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/agent-runner.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/agent-runner.js")>("../src/agent-runner.js");
+vi.mock("../src/agent/agent-runner.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/agent/agent-runner.js")>("../src/agent/agent-runner.js");
   return { ...actual, runAgent: vi.fn(), resumeAgent: vi.fn() };
 });
 
 // The clone forks a real pi session and runs a real model turn. What this file
 // pins is the wiring around it — when it is called, with what, and what happens
 // when it comes back empty. mention-clone.test.ts covers the clone itself.
-vi.mock("../src/mention-clone.js", () => ({ runMentionClone: vi.fn() }));
+vi.mock("../src/agent/mention/mention-clone.js", () => ({ runMentionClone: vi.fn() }));
 
-import { getDefaultMaxTurns, resumeAgent, runAgent, setDefaultMaxTurns } from "../src/agent-runner.js";
+import { resumeAgent, runAgent } from "../src/agent/agent-runner.js";
+import { runMentionClone } from "../src/agent/mention/mention-clone.js";
+import { getDefaultMaxTurns, setDefaultMaxTurns } from "../src/agent/run-limits.js";
 import subagentsExtension from "../src/index.js";
-import { runMentionClone } from "../src/mention-clone.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 
 let hermetic: Hermetic | undefined;
@@ -460,21 +461,22 @@ describe("mentioning an agent that has never run", () => {
 
   });
 
-  it("shows the turn limit it will actually be held to (#181)", async () => {
-    // The spawn passes no maxTurns on purpose (see the test above), so the
-    // tracker has to resolve the same limit runAgent will enforce — otherwise
-    // the row reads `↻1` where the Agent tool would read `↻1≤9`.
+  it("puts a mentioned agent on the surviving agent surface (#181)", async () => {
+    // This used to render the above-editor widget and assert its `↻1≤9` turn cap. That surface
+    // is gone with the single-Agent-View change, and the FleetView row does not render the cap,
+    // so the assertion moved down to what still exists: the marked status row. Restoring the cap
+    // as a visible field is a new row feature, not a test retarget.
     const prevMax = getDefaultMaxTurns();
     try {
       const { lifecycle } = bootDirect({ defaultMaxTurns: 9 });
       heldRun(fakeSession());
-      let factory: any;
+      const setStatus = vi.fn();
       const uiCtx = ctx({
         hasUI: true,
         ui: {
-          setStatus: vi.fn(), notify: vi.fn(), addAutocompleteProvider: vi.fn(),
+          setStatus, notify: vi.fn(), addAutocompleteProvider: vi.fn(),
           onTerminalInput: vi.fn(() => vi.fn()), getEditorText: vi.fn(() => ""), custom: vi.fn(),
-          setWidget: vi.fn((key: string, content: any) => { if (key === "agents" && content) factory = content; }),
+          setWidget: vi.fn(),
         },
       });
       await lifecycle.get("session_start")({}, uiCtx);
@@ -482,9 +484,7 @@ describe("mentioning an agent that has never run", () => {
       await lifecycle.get("input")({ type: "input", text: "@explore go", source: "interactive" }, uiCtx);
       await flush();
 
-      const theme = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
-      const lines = factory({ terminal: { columns: 200 }, requestRender: vi.fn() }, theme).render().join("\n");
-      expect(lines).toContain("≤9");
+      expect(setStatus).toHaveBeenCalledWith("subagents", expect.stringContaining("●"));
     } finally {
       setDefaultMaxTurns(prevMax);
     }

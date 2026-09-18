@@ -19,15 +19,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentManager } from "../src/agent-manager.js";
-import { SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
-import { NO_FALLBACK, registerAgents, setFallbackSubagent } from "../src/agent-types.js";
+import type { AgentManager } from "../src/agent/agent-manager.js";
+import { NO_FALLBACK, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
 import subagentsExtension, { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG } from "../src/index.js";
-import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model-scope.js";
-import type { AgentRecord } from "../src/types.js";
-import { createWorkflowHost } from "../src/workflow/host.js";
-import { compileJsonSchema } from "../src/workflow/json-schema.js";
-import type { WorkflowSpawnRequest } from "../src/workflow/runtime.js";
+import { compileJsonSchema } from "../src/lib/json-schema.js";
+import { SUBAGENT_TOOL_NAMES } from "../src/lib/tool-names.js";
+import type { AgentRecord } from "../src/lib/types.js";
+import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model/model-scope.js";
+import { createWorkflowHost } from "../src/workflow/run/host.js";
+import type { WorkflowSpawnRequest } from "../src/workflow/run/runtime.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 
 /* ------------------------------------------------------------------------- *

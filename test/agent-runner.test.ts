@@ -68,7 +68,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   SettingsManager: { create: settingsManagerCreate },
 }));
 
-vi.mock("../src/agent-types.js", () => ({
+vi.mock("../src/config/registry/agent-types.js", () => ({
   BUILTIN_TOOL_NAMES: ["read", "bash", "edit", "write", "grep", "find", "ls"],
   getConfig: vi.fn(() => ({
     displayName: "Explore",
@@ -95,24 +95,24 @@ vi.mock("../src/agent-types.js", () => ({
   getToolNamesForType: vi.fn(() => ["read"]),
 }));
 
-vi.mock("../src/env.js", () => ({
+vi.mock("../src/agent/prompt/env.js", () => ({
   detectEnv: vi.fn(async () => ({ isGitRepo: false, branch: "", platform: "linux" })),
 }));
 
-vi.mock("../src/prompts.js", () => ({
+vi.mock("../src/agent/prompt/prompts.js", () => ({
   buildAgentPrompt: vi.fn(() => "system prompt"),
 }));
 
-vi.mock("../src/memory.js", () => ({
+vi.mock("../src/agent/prompt/memory.js", () => ({
   buildMemoryBlock: vi.fn(() => ""),
   buildReadOnlyMemoryBlock: vi.fn(() => ""),
 }));
 
-vi.mock("../src/skill-loader.js", () => ({
+vi.mock("../src/agent/prompt/skill-loader.js", () => ({
   preloadSkills: vi.fn(() => []),
 }));
 
-vi.mock("../src/nested-tools.js", () => ({
+vi.mock("../src/agent/nested-tools.js", () => ({
   getMaxSubagentDepth: vi.fn(() => 2),
   createNestedSubagentTools: vi.fn(() => [
     { name: "Agent" },
@@ -122,23 +122,27 @@ vi.mock("../src/nested-tools.js", () => ({
 }));
 
 import {
-  extensionCanonicalName,
-  extensionCanonicalNames,
   getAgentConversation,
-  getDefaultMaxTurns,
-  getGraceTurns,
-  parseExtensionsSpec,
-  parseExtSelectors,
   resolveDefaultModel,
-  resolveEffectiveMaxTurns,
   resumeAgent,
   runAgent,
-  SUBAGENT_TOOL_NAMES,
+} from "../src/agent/agent-runner.js";
+import {
+  getDefaultMaxTurns,
+  getGraceTurns,
+  resolveEffectiveMaxTurns,
   setDefaultMaxTurns,
   setGraceTurns,
   setRememberAgents,
-} from "../src/agent-runner.js";
-import { compileJsonSchema } from "../src/workflow/json-schema.js";
+} from "../src/agent/run-limits.js";
+import {
+  extensionCanonicalName,
+  extensionCanonicalNames,
+  parseExtensionsSpec,
+  parseExtSelectors,
+} from "../src/agent/session/extension-scope.js";
+import { compileJsonSchema } from "../src/lib/json-schema.js";
+import { SUBAGENT_TOOL_NAMES } from "../src/lib/tool-names.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
 let lastSession: ReturnType<typeof createSession>["session"] | undefined;
@@ -265,7 +269,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("forwards worktreeBase to the prompt builder, and omits it otherwise", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("ISOLATED");
     createAgentSession.mockResolvedValue({ session });
 
@@ -277,7 +281,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("marks a workflow child so its prompt says the final text is the return value", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("RAW");
     createAgentSession.mockResolvedValue({ session });
 
@@ -289,7 +293,7 @@ describe("agent-runner final output capture", () => {
   });
 
   it("leaves the block off a schema-bearing child, which answers through StructuredOutput", async () => {
-    const { buildAgentPrompt } = await import("../src/prompts.js");
+    const { buildAgentPrompt } = await import("../src/agent/prompt/prompts.js");
     const { session } = createSession("RAW");
     createAgentSession.mockResolvedValue({ session });
 
@@ -749,12 +753,12 @@ describe("getAgentConversation", () => {
 //     so late arrivals are judged too.
 // `lastToolsPassed()` returns what the LLM can actually call under either shape.
 
+import { createNestedSubagentTools } from "../src/agent/nested-tools.js";
 import {
   getAgentConfig,
   getConfig,
   getToolNamesForType,
-} from "../src/agent-types.js";
-import { createNestedSubagentTools } from "../src/nested-tools.js";
+} from "../src/config/registry/agent-types.js";
 
 const BUILTINS_7 = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 

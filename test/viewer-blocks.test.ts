@@ -11,7 +11,7 @@ import {
   renderToolBlock,
   resultText,
   visibleWidth,
-} from "../src/ui/viewer-blocks.js";
+} from "../src/ui/viewer/viewer-blocks.js";
 
 const WIDTH = 100;
 

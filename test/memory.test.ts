@@ -13,7 +13,8 @@ vi.mock("node:os", async (importOriginal) => {
   return { ...actual, homedir: mockHomedir };
 });
 
-import { buildMemoryBlock, buildReadOnlyMemoryBlock, ensureMemoryDir, isSymlink, isUnsafeName, readMemoryIndex, resolveMemoryDir, safeReadFile } from "../src/memory.js";
+import { buildMemoryBlock, buildReadOnlyMemoryBlock, ensureMemoryDir, readMemoryIndex, resolveMemoryDir } from "../src/agent/prompt/memory.js";
+import { isSymlink, isUnsafeName, safeReadFile } from "../src/lib/fs-safe.js";
 
 describe("memory", () => {
   let tmpDir: string;

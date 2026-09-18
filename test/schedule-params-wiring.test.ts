@@ -15,15 +15,15 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/agent-runner.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/agent-runner.js")>("../src/agent-runner.js");
+vi.mock("../src/agent/agent-runner.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/agent/agent-runner.js")>("../src/agent/agent-runner.js");
   return { ...actual, runAgent: vi.fn() };
 });
 
-import { getDefaultMaxTurns, normalizeMaxTurns } from "../src/agent-runner.js";
+import { getDefaultMaxTurns, normalizeMaxTurns } from "../src/agent/run-limits.js";
 import subagentsExtension from "../src/index.js";
-import { resolveStorePath, ScheduleStore } from "../src/schedule-store.js";
-import type { ScheduledSubagent } from "../src/types.js";
+import type { ScheduledSubagent } from "../src/lib/types.js";
+import { resolveStorePath, ScheduleStore } from "../src/schedule/schedule-store.js";
 import { ctx, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
 
 const SESSION_ID = "sched-wiring-session";

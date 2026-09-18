@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/worktree.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/worktree.js")>("../src/worktree.js");
+vi.mock("../src/agent/session/worktree.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/agent/session/worktree.js")>("../src/agent/session/worktree.js");
   return { ...actual, createWorktree: vi.fn(() => undefined) };
 });
 

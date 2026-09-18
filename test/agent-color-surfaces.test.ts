@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
-import type { AgentConfig, AgentRecord } from "../src/types.js";
-import { type AgentActivity, AgentWidget } from "../src/ui/agent-widget.js";
-import { ConversationViewer } from "../src/ui/conversation-viewer.js";
+import type { AgentConfig, AgentRecord } from "../src/lib/types.js";
+import type { AgentActivity } from "../src/lib/ui/theme.js";
+import { formatAgentStatusLine } from "../src/ui/agent-status-line.js";
 import { FleetList, type FleetUICtx } from "../src/ui/fleet-list.js";
+import { ConversationViewer } from "../src/ui/viewer/conversation-viewer.js";
 
 const TYPE = "colored-reviewer";
 const DISPLAY_NAME = "Code Reviewer";
@@ -65,7 +66,7 @@ function makeRecord(): AgentRecord {
   };
 }
 
-function makeActivity(): AgentActivity {
+function _makeActivity(): AgentActivity {
   return {
     activeTools: new Map(),
     toolUses: 0,
@@ -152,36 +153,15 @@ describe("custom agent color runtime surfaces", () => {
     }
   });
 
-  it("renders the above-editor Agent widget with the display name and color", () => {
-    const record = makeRecord();
-    const widget = new AgentWidget(
-      { listAgents: () => [record] } as unknown as ConstructorParameters<typeof AgentWidget>[0],
-      new Map([[record.id, makeActivity()]]),
-      () => "all",
-    );
-    let factory: WidgetFactory | undefined;
-    let placement: string | undefined;
-    widget.setUICtx({
-      setStatus: vi.fn(),
-      setWidget: (_key, content, options) => {
-        if (typeof content === "function") factory = content as WidgetFactory;
-        placement = options?.placement;
-      },
-    });
+  it("renders the status-row mark in the agent’s configured color", () => {
+    // The above-editor widget is gone; the status row is the surface that still paints an
+    // agent's configured colour, and it paints it as a literal truecolor mark.
+    // Re-registered here: an earlier test in this file deliberately registers it colourless.
+    registerAgents(new Map([[TYPE, config]]));
+    const line = formatAgentStatusLine([{ id: "status-row", type: TYPE, status: "running" }], 0);
 
-    try {
-      widget.update();
-      const output = factory?.(
-        { terminal: { columns: 120 }, requestRender: vi.fn() },
-        theme,
-      ).render().join("\n");
-
-      expect(placement).toBe("aboveEditor");
-      expect(output).toContain(DISPLAY_NAME);
-      expect(output).toContain(PURPLE_BACKGROUND);
-    } finally {
-      widget.dispose();
-    }
+    expect(line).toContain("\u001b[38;2;130;125;189m\u25cf");
+    expect(line).toContain("\u001b[39m");
   });
 
   it("renders the FleetView row with the display name and color", () => {

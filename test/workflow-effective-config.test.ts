@@ -15,23 +15,23 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/agent-runner.js", () => ({
+vi.mock("../src/agent/agent-runner.js", () => ({
   runAgent: vi.fn(),
   resumeAgent: vi.fn(),
 }));
 
-vi.mock("../src/worktree.js", () => ({
+vi.mock("../src/agent/session/worktree.js", () => ({
   createWorktree: vi.fn(),
   cleanupWorktree: vi.fn(async () => ({ hasChanges: false })),
   pruneWorktrees: vi.fn(async () => {}),
   isWorktreeIsolationEnabled: vi.fn(() => false),
 }));
 
-import { AgentManager } from "../src/agent-manager.js";
-import { runAgent } from "../src/agent-runner.js";
-import { registerAgents } from "../src/agent-types.js";
-import { createWorkflowHost } from "../src/workflow/host.js";
-import type { WorkflowSpawnRequest } from "../src/workflow/runtime.js";
+import { AgentManager } from "../src/agent/agent-manager.js";
+import { runAgent } from "../src/agent/agent-runner.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
+import { createWorkflowHost } from "../src/workflow/run/host.js";
+import type { WorkflowSpawnRequest } from "../src/workflow/run/runtime.js";
 import { ctx } from "./helpers/boot-extension.js";
 
 const pi = {} as any;
