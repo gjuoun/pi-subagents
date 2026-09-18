@@ -144,6 +144,31 @@ export function renderAgentNameLabel(
     + (style.restoreBackground ?? "\u001b[49m");
 }
 
+/**
+ * Render an agent's configured colour as one status mark.
+ *
+ * Literal SGR on purpose: the extension status row is a plain string with no theme attached, and
+ * pi-web hands extensions a PlainTextTheme whose `fg()` is the identity function — a theme-token
+ * colour would reach the browser colourless. Truecolor is the one form both hosts actually render.
+ *
+ * `intensity` scales the colour rather than changing the glyph: a hollow circle already means
+ * `queued`, so a blink built on glyphs would collide with that state.
+ */
+export function renderAgentMark(
+  color: string | undefined,
+  kind: "filled" | "hollow",
+  intensity = 1,
+): string {
+  const glyph = kind === "hollow" ? "○" : "●";
+  const resolved = resolveAgentColor(color);
+  if (!resolved) return glyph;
+  const rgb = parseHex(resolved);
+  const scaled = intensity >= 1
+    ? rgb
+    : { r: Math.round(rgb.r * intensity), g: Math.round(rgb.g * intensity), b: Math.round(rgb.b * intensity) };
+  return ansiColor("foreground", scaled) + glyph + "\u001b[39m";
+}
+
 /** Whether an agent renders as a badge — i.e. it has a valid configured color. */
 export function hasAgentBadge(type: string | undefined): boolean {
   return type !== undefined && resolveAgentColor(getConfig(type).color) !== undefined;
