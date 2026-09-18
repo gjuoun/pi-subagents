@@ -8,11 +8,12 @@
 import { type AgentSession, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { type Component, Input, Markdown, type MarkdownOptions, type MarkdownTheme, matchesKey, type TUI, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { extractText } from "../../agent/prompt/context.js";
+import { getConfig } from "../../config/registry/agent-types.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../../lib/types.js";
 import { fgPreservingNestedStyles, formatDuration, formatSessionTokens } from "../../lib/ui/format.js";
 import type { AgentActivity, Theme } from "../../lib/ui/theme.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../../lib/usage.js";
-import { renderAgentName } from "../agent-color.js";
+import { paintAgentColor, renderAgentName } from "../agent-color.js";
 import { buildInvocationTags, getPromptModeLabel } from "../agent-display.js";
 import { blockTint, indexToolResults, renderResultBlock, renderToolBlock, resultText, type ViewerToolResult } from "./viewer-blocks.js";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "./viewer-keys.js";
@@ -340,13 +341,20 @@ export class ConversationViewer implements Component {
       const vis = visibleWidth(s);
       return s + " ".repeat(Math.max(0, len - vis));
     };
+    // The frame of an agent's conversation is drawn in that agent type's colour, so an open
+    // overlay reads as "the finder's session" before a word of it is read. Only the frame: the
+    // transcript keeps the ordinary viewer styling, and an agent that configures no colour (or an
+    // invalid one) keeps exactly the tokens this frame always used.
+    const agentColor = getConfig(this.record.type).color;
+    const border = (s: string) => paintAgentColor(agentColor, th, s, "border");
+    const accent = (s: string) => paintAgentColor(agentColor, th, s, "accent");
     const row = (content: string) =>
-      th.fg("border", "│") + " " + truncateToWidth(pad(content, innerW), innerW, "...", true) + " " + th.fg("border", "│");
-    const hrTop = th.fg("border", `╭${"─".repeat(width - 2)}╮`);
+      border("│") + " " + truncateToWidth(pad(content, innerW), innerW, "...", true) + " " + border("│");
+    const hrTop = border(`╭${"─".repeat(width - 2)}╮`);
     // The bottom edge is drawn in the accent colour, not the border colour: it lands on the row
     // where the input box's own rule would be, and a line that looks like pi's chrome would read
     // as the editor rather than as the viewer's edge over it.
-    const hrBot = th.fg("accent", `╰${"─".repeat(width - 2)}╯`);
+    const hrBot = accent(`╰${"─".repeat(width - 2)}╯`);
     const hrMid = row(th.fg("dim", "─".repeat(innerW)));
 
     // Header
