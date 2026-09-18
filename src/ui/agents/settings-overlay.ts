@@ -30,7 +30,7 @@ import type { AgentsUiDeps } from "./deps.js";
  * each value's type and rejects a mistyped key, but leaves the return type
  * inferred so `_NoMissingSettingsKeys` below can check completeness.
  */
-/** The whole settings snapshot, as one object — exported so `/agent` persists the same shape. */
+/** The whole settings snapshot, as one object — exported so every other entry point persists the same shape. */
 export function snapshotSettings(deps: AgentsUiDeps) {
   return {
     maxConcurrent: deps.context.manager.getMaxConcurrent(),
@@ -281,8 +281,8 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       },
       {
         id: "widgetMode",
-        label: "Widget",
-        description: "Above-editor agent widget: all = every agent; background = hide foreground (they already render inline); off = hide the widget.",
+        label: "Widget (legacy)",
+        description: "The above-editor widget is gone — the Agent view below the editor is the only agent list. Kept so an older subagents.json keeps its value; no surface reads the mode any more.",
         currentValue: deps.context.getWidgetMode(),
         values: ["all", "background", "off"],
       },

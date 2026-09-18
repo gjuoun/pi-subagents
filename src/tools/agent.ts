@@ -522,6 +522,14 @@ export function createAgentTool(deps: ToolsDeps) {
         const origBgOnSession = bgCallbacks.onSessionCreated;
         bgCallbacks.onSessionCreated = (session: any) => {
           origBgOnSession(session);
+          // The fleet learns about this agent HERE, not at the refresh below the spawn: the
+          // session lands a beat after it, and the list hides a session-less record, so a refresh
+          // only at spawn time finds nothing and stops its clock — the agent then stays invisible
+          // for the whole run. This is the hook, not a poll, which is why it does not reopen the
+          // 200 ms tick problem the single-Agent-View round closed (#agent-view-tui Step 6). The
+          // foreground sibling above does the same for its own spawn.
+          deps.context.fleet.ensureTimer();
+          deps.context.fleet.update();
           const rec = deps.context.manager.getRecord(id);
           if (rec?.outputFile) {
             rec.outputCleanup = streamToOutputFile(session, rec.outputFile, id, ctx.cwd);

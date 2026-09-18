@@ -46,7 +46,6 @@ import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/wor
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import { createActivityTracker, renderRunningAgentStatus } from "./ui/agent-status.js";
 import { AgentStatusBar } from "./ui/agent-status-bar.js";
-import { showAgentViewMenu } from "./ui/agent-view-menu.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
@@ -907,8 +906,11 @@ export default function (pi: ExtensionAPI) {
   // owns is the status row, and that is a line of coloured marks rather than a list — so there
   // is no second view to keep in step with the first.
   context.status = new AgentStatusBar({
+    // `listAgents()` is newest-first, so mapping straight through put the agent launched FIRST on
+    // the far RIGHT of the row. Earliest launch first, the same order the FleetView rows use.
     listAgents: () => context.manager.listAgents()
       .filter(isTopLevelAgent)
+      .sort((a, b) => a.startedAt - b.startedAt)
       .map((record) => ({ id: record.id, type: record.type, status: record.status })),
   });
 
@@ -1367,13 +1369,6 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("agents", {
     description: "Manage agents",
     handler: async (_args, ctx) => { await showAgentsMenu(ctx, agentsUiDeps, workflowMenuDeps); },
-  });
-
-  // `/agent` is the switch for the one Agent View, not a second agents menu: reachable in the TUI
-  // and in the browser alike because it is built on `ctx.ui.select`.
-  pi.registerCommand("agent", {
-    description: "Show or hide the Agent View",
-    handler: async (_args, ctx) => { await showAgentViewMenu(ctx, agentsUiDeps); },
   });
 
   context.fleet.setWorkflowSource(() => fleetWorkflows(toolsDeps), id => openWorkflowFromFleet(id, workflowMenuDeps));

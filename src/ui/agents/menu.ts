@@ -11,12 +11,13 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { isTopLevelAgent } from "../../agent/agent-manager.js";
 import { getAllTypes } from "../../config/registry/agent-types.js";
+import { saveAndEmitChanged } from "../../config/settings.js";
 import { showSchedulesMenu } from "../schedule-menu.js";
 import { showWorkflowsMenu, type WorkflowMenuDeps } from "../workflow/workflow-menu.js";
 import { showCreateWizard } from "./create-wizard.js";
 import type { AgentsUiDeps } from "./deps.js";
 import { showRunningAgents } from "./running.js";
-import { showSettings } from "./settings-overlay.js";
+import { showSettings, snapshotSettings } from "./settings-overlay.js";
 import { showAllAgentsList } from "./type-list.js";
 
 export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsUiDeps, workflowMenuDeps: WorkflowMenuDeps): Promise<void> {
@@ -25,6 +26,12 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
 
   // Build select options
   const options: string[] = [];
+
+  // The Agent View switch, on the root screen: /agents is the only way in, and seeing the view
+  // must not need a keypress first — so the toggle is a row here rather than a hidden setting.
+  // Same `fleetView` key and the same save path as the Settings row, so the two cannot drift.
+  const TOGGLE_PREFIX = "Agent view: ";
+  options.push(`${TOGGLE_PREFIX}${deps.context.isFleetViewEnabled() ? "on" : "off"}`);
 
   // Running agents entry (only if there are active agents)
   const agents = deps.context.manager.listAgents().filter(isTopLevelAgent);
@@ -68,7 +75,17 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
   const choice = await ctx.ui.select("Agents", options);
   if (!choice) return;
 
-  if (choice.startsWith("Running agents (")) {
+  if (choice.startsWith(TOGGLE_PREFIX)) {
+    const next = !deps.context.isFleetViewEnabled();
+    deps.context.setFleetViewEnabled(next);
+    const { message, level } = saveAndEmitChanged(
+      snapshotSettings(deps),
+      `Agent view ${next ? "on" : "off"}`,
+      (event, payload) => deps.pi.events.emit(event, payload),
+    );
+    ctx.ui.notify(message, level);
+    await showAgentsMenu(ctx, deps, workflowMenuDeps);
+  } else if (choice.startsWith("Running agents (")) {
     await showRunningAgents(ctx, deps);
     await showAgentsMenu(ctx, deps, workflowMenuDeps);
   } else if (choice.startsWith("Agent types (")) {

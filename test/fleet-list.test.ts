@@ -366,6 +366,56 @@ describe("FleetList navigation", () => {
   });
 });
 
+describe("FleetList liveness (a session that attaches after the spawn)", () => {
+  // Measured on the Agent-tool path (agent-view-tui plan, Step 5/6): the fleet was refreshed once
+  // at wiring time, ~20 ms BEFORE the spawn's `onSessionCreated` landed. `hasRows` was false at
+  // that moment, so the 200 ms tick was cleared and nothing ever re-checked the list — with two
+  // agents RUNNING the widget was still never registered. The list now keeps ticking while a
+  // top-level agent is live, so it notices the late attach on its own.
+  it("shows the row once a live agent's session lands, with no further update() call", () => {
+    vi.useFakeTimers();
+    try {
+      const agents = [makeRecord({ id: "a1", description: "late one", session: undefined })];
+      const h = harness(agents);
+      expect(h.render()).toEqual([]); // no session yet → nothing drawable
+
+      agents[0].session = FAKE_SESSION as any; // the session lands a beat after the spawn
+      vi.advanceTimersByTime(250);             // a tick re-reads the roster
+
+      expect(h.render().some(l => l.includes("late one"))).toBe(true);
+      h.fleet.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("draws a single agent's row with no key ever pressed", () => {
+    const h = harness([makeRecord({ description: "the only one" })]);
+    const lines = h.render();
+    expect(lines.some(l => l.includes("the only one"))).toBe(true);
+    expect(lines[0]).toContain("← for agents"); // the inactive hint: no key activated it
+  });
+
+  it("keeps no timer at all while no agent is live (an idle session stays quiet)", () => {
+    vi.useFakeTimers();
+    try {
+      const listAgents = vi.fn(() => [] as AgentRecord[]);
+      const fleet = new FleetList({ listAgents, abort: () => true } as unknown as AgentManager, new Map());
+      fleet.setUICtx({
+        setWidget: () => {}, onTerminalInput: () => () => {}, getEditorText: () => "",
+        notify: () => {}, custom: (() => new Promise<undefined>(() => {})) as FleetUICtx["custom"],
+      });
+      fleet.update();
+      const before = listAgents.mock.calls.length;
+      vi.advanceTimersByTime(1000); // five ticks' worth
+      expect(listAgents.mock.calls.length).toBe(before);
+      fleet.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("FleetList vs other focused components (#123)", () => {
   // pi dispatches terminal input to extension listeners BEFORE the focused
   // component (pi-tui TUI.handleInput), and ctx.ui.select/confirm/input swap

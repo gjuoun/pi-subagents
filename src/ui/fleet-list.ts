@@ -205,9 +205,18 @@ export class FleetList {
         this.widgetRegistered = false;
         this.tui = undefined;
       }
-      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
       this.active = false;
       this.selectedIndex = 0;
+      // A live agent that has not attached its session yet draws no row — and that is the state
+      // every spawn passes through, because `onSessionCreated` lands a beat after the spawn and
+      // after the refresh that follows it. Nothing else re-checks this list on that path, so
+      // clearing the clock here left the agent invisible for its whole run (measured: two
+      // running agents, zero rows, five `update()` calls, all inside 20 ms). The clock is armed
+      // only while such an agent exists, so an idle session keeps it off — an always-on tick
+      // would put 5 renders/s back on the terminal and the browser, the pulse this list was
+      // already criticised for.
+      if (this.enabled && this.hasLiveAgent()) { this.ensureTimer(); return; }
+      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
       return;
     }
 
@@ -263,6 +272,16 @@ export class FleetList {
   ): void {
     this.workflowSource = source;
     this.openWorkflow = open;
+  }
+
+  /**
+   * Whether a top-level agent is running or queued — i.e. whether a row is one session-attach
+   * away. Read from the manager rather than the roster: the whole point is the window in which
+   * the roster is still empty because the sessions have not landed yet.
+   */
+  private hasLiveAgent(): boolean {
+    return this.manager.listAgents()
+      .some(a => isTopLevelAgent(a) && (a.status === "running" || a.status === "queued"));
   }
 
   /** Live runs, plus recently settled ones — the same linger the agents get. */
