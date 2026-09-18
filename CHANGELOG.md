@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The toggleable `jev` agent-selector tool — an opt-in way to decide which agent type should execute a task.** Enable it via `/agents → Settings → Jev agent selector` (default off, since it costs an API call per decision); when on, the orchestrator session gains a `jev` tool that sends the task, optional context, and the routing rules to TypeSafe Jev (a System One decision model) and returns the recommended agent type with its probability distribution, confidence, cost, and latency. The choice criteria are the enabled agent types' own descriptions, and the tool fails open — missing key, network failure, or classifier error returns a visible message instead of blocking a dispatch. Configuration is environment variables (`JEV_API_KEY` / `VERCEL_AI_GATEWAY_API_KEY`, `JEV_BASE_URL`, `JEV_MODEL_ID`, `JEV_ROUTING_RULES`, `JEV_TIMEOUT_MS`); the default transport is the Vercel AI Gateway. See `docs/jev.md` for the decision semantics.
+
 ### Fixed
 - **Opening the conversation viewer from the FleetView now uses the same full-screen frame as opening it from `/agents`.** The FleetView's row kept a centered, 90%-wide, 70%-tall overlay after the frame was reworked elsewhere; pi sizes an overlay from `maxHeight` and slices the remainder off the bottom, so that copy lost the viewer's own footer row and bottom border — the frame arrived with no bottom, on the route reached by pressing `↓` and `Enter`. Both entries now spread one shared `VIEWER_OVERLAY` definition, and two harness checks plus a unit test fail if a second options block reappears.
 

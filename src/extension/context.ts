@@ -102,6 +102,11 @@ export class ActivationContext {
   isSchedulingEnabled(): boolean { return this.schedulingEnabled; }
   setSchedulingEnabled(b: boolean): void { this.schedulingEnabled = b; }
 
+  /** Master switch for the `jev` agent-selector tool. Default OFF — API cost per call. */
+  jevEnabled = false;
+  isJevEnabled(): boolean { return this.jevEnabled; }
+  setJevEnabled(b: boolean): void { this.jevEnabled = b; }
+
   /** Master switch for the `SubagentWorkflow` tool and everything behind it. */
   workflowsEnabled = true;
   /** Whether `workflowsEnabled` came from the user rather than from its default. */

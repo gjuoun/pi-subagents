@@ -61,6 +61,7 @@ export function snapshotSettings(deps: AgentsUiDeps) {
     // JSON.stringify, so unset stays unset — same reasoning as
     // `fallbackSubagent` below.
     workflowsEnabled: deps.context.isWorkflowsPinned() ? deps.context.isWorkflowsEnabled() : undefined,
+    jevEnabled: deps.context.isJevEnabled(),
     maxSubagentDepth: getMaxSubagentDepth(),
     // Deliberately NOT `?? "general-purpose"`: every settings change writes the
     // whole snapshot, and materializing the implicit default would turn it into
@@ -172,6 +173,13 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         label: "Scheduling",
         description: "Schedule subagent feature (off removes `schedule` param from Agent tool spec on next pi session)",
         currentValue: deps.context.isSchedulingEnabled() ? "on" : "off",
+        values: ["on", "off"],
+      },
+      {
+        id: "jevEnabled",
+        label: "Jev agent selector",
+        description: "Jev decision tool (off = `jev` tool absent from the session on next pi session)",
+        currentValue: deps.context.isJevEnabled() ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -374,6 +382,17 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         notifyApplied(
           ctx,
           `Workflows ${enabled ? "enabled" : "disabled"}. Tool spec change takes effect on next pi session.`,
+        );
+      }
+    } else if (id === "jevEnabled") {
+      const enabled = value === "on";
+      if (enabled === deps.context.isJevEnabled()) {
+        ctx.ui.notify(`Jev already ${enabled ? "enabled" : "disabled"}.`, "info");
+      } else {
+        deps.context.setJevEnabled(enabled);
+        notifyApplied(
+          ctx,
+          `Jev agent selector ${enabled ? "enabled" : "disabled"}. Tool appears on next pi session.`,
         );
       }
     } else if (id === "scopeModels") {

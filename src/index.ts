@@ -40,6 +40,7 @@ import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
 import { createGetSubagentResultTool } from "./tools/get-subagent-result.js";
+import { createJevTool } from "./tools/jev.js";
 import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
 import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/workflow.js";
@@ -948,6 +949,13 @@ export default function (pi: ExtensionAPI) {
   // extension load (next pi session). Documented in CHANGELOG/README.
   context.schedulingEnabled = true;
 
+  // Master switch for the `jev` agent-selector tool. Defaults to OFF: the
+  // tool costs an API call per use, so it is opt-in. Read once at extension
+  // init (before tool registration) so the `jev` tool's presence reflects the
+  // persisted setting; runtime toggles via /agents → Settings take effect on
+  // the next pi session, like schedulingEnabled.
+  context.jevEnabled = false;
+
   // Master switch for scripted workflows. Defaults to ON. Off means the
   // `SubagentWorkflow` tool is never registered: the model is not told the
   // feature exists (zero context cost) and has nothing to call. The
@@ -1150,6 +1158,7 @@ export default function (pi: ExtensionAPI) {
       setOutputTranscript: setOutputTranscriptDefault,
       setWorktreeIsolation: setWorktreeIsolationEnabled,
       setWorkflowsEnabled: (b) => context.setWorkflowsEnabled(b),
+      setJevEnabled: (b) => context.setJevEnabled(b),
       setMaxSubagentDepth: setMaxSubagentDepth,
       setFallbackSubagent: setFallbackSubagent,
       setReportUsage: (b) => context.setReportUsage(b),
@@ -1195,6 +1204,10 @@ export default function (pi: ExtensionAPI) {
 
   const workflowTool = createWorkflowTool(toolsDeps);
   if (context.isWorkflowsEnabled()) pi.registerTool(workflowTool);
+
+  // ---- Jev agent-selector tool (opt-in; default off) ----
+  const jevTool = createJevTool(toolsDeps);
+  if (context.isJevEnabled()) pi.registerTool(jevTool);
 
   /**
    * Act on {@link decideWorkflowCollision} — the half that needs the host.

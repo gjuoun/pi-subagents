@@ -219,6 +219,13 @@ export interface SubagentsSettings {
    */
   workflowsEnabled?: boolean;
   /**
+   * Master switch for the `jev` agent-selector tool. Defaults to `false` —
+   * the tool costs an API call every time it is used, so it is opt-in. When
+   * `true`, the `jev` tool is registered for the orchestrator session on the
+   * next pi load (registration happens at extension init).
+   */
+  jevEnabled?: boolean;
+  /**
    * Hard ceiling on nested subagent delegation, counted from the main session:
    * main = 0, its subagents = 1, their children = 2. Defaults to `2`; `0` or `1`
    * disables nesting project-wide. Read when a subagent session is built, so a
@@ -326,6 +333,7 @@ export interface SettingsAppliers {
   setOutputTranscript: (b: boolean) => void;
   setWorktreeIsolation: (b: boolean) => void;
   setWorkflowsEnabled: (b: boolean) => void;
+  setJevEnabled: (b: boolean) => void;
   setMaxSubagentDepth: (n: number) => void;
   setFallbackSubagent: (v: string | undefined) => void;
   setReportUsage: (b: boolean) => void;
@@ -451,6 +459,9 @@ function sanitize(raw: unknown): SubagentsSettings {
   if (typeof r.workflowsEnabled === "boolean") {
     out.workflowsEnabled = r.workflowsEnabled;
   }
+  if (typeof r.jevEnabled === "boolean") {
+    out.jevEnabled = r.jevEnabled;
+  }
   if (r.fallbackSubagent === false) {
     // The only non-string spelling worth accepting: a boolean would otherwise be
     // dropped, silently leaving the PERMISSIVE default in place. Every string is
@@ -537,6 +548,7 @@ export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers):
   if (typeof s.showModel === "boolean") appliers.setShowModel(s.showModel);
   if (s.viewerMarkdown) appliers.setViewerMarkdown(s.viewerMarkdown);
   if (typeof s.workflowsEnabled === "boolean") appliers.setWorkflowsEnabled(s.workflowsEnabled);
+  if (typeof s.jevEnabled === "boolean") appliers.setJevEnabled(s.jevEnabled);
 }
 
 /**
