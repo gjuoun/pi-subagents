@@ -13,7 +13,7 @@
  * tested: they are single-line guards whose failure is immediately visible in
  * the tool's own reply.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/agent/agent-runner.js", async () => {
   const actual = await vi.importActual<typeof import("../src/agent/agent-runner.js")>("../src/agent/agent-runner.js");
@@ -22,7 +22,15 @@ vi.mock("../src/agent/agent-runner.js", async () => {
 
 import { runAgent, steerAgent } from "../src/agent/agent-runner.js";
 import subagentsExtension from "../src/index.js";
-import { ctx, flush, makePi, textOf } from "./helpers/boot-extension.js";
+import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
+
+// These cases boot the real extension, which reads pi's settings and agent files
+// at activation. Without this the developer's own ~/.pi — and this repo's
+// .pi/subagents.json, which disables the built-in agents — decide whether
+// general-purpose exists, so the suite would pass or fail by machine.
+let hermetic: Hermetic;
+beforeEach(() => { hermetic = hermeticDir(); });
+afterEach(() => { hermetic.restore(); });
 
 // steerAgent and runAgent are module-level mocks shared by every case here, so
 // call history has to be reset or a "was never called" assertion depends on the
