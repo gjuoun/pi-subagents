@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../lib/types.js";
-import { NO_FALLBACK } from "./registry/agent-types.js";
+import { NO_FALLBACK } from "./registry/fallback.js";
 
 export interface SubagentsSettings {
   maxConcurrent?: number;

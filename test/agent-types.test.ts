@@ -10,16 +10,14 @@ import {
   getUserAgentNames,
   isDefaultsDisabled,
   isValidType,
-  NO_FALLBACK,
   registerAgents,
-  resolveEnabledTypeIn,
   resolveSpawnType,
-  resolveSpawnTypeIn,
   resolveType,
   setDefaultsDisabled,
-  setFallbackSubagent,
 } from "../src/config/registry/agent-types.js";
 import { DEFAULT_AGENTS } from "../src/config/registry/default-agents.js";
+import { NO_FALLBACK, setFallbackSubagent } from "../src/config/registry/fallback.js";
+import { resolveEnabledTypeIn, resolveSpawnTypeIn } from "../src/config/registry/type-resolution.js";
 import type { AgentConfig } from "../src/lib/types.js";
 
 function makeAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {

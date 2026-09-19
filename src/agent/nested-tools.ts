@@ -9,12 +9,9 @@ import {
 import { Type } from "@sinclair/typebox";
 import {
   buildAgentRegistry,
-  getAgentConfigIn,
-  getAvailableTypesIn,
-  resolveEnabledTypeIn,
-  resolveTypeIn,
 } from "../config/registry/agent-types.js";
 import { loadCustomAgents } from "../config/registry/custom-agents.js";
+import { getAgentConfigIn, getAvailableTypesIn, resolveEnabledTypeIn, resolveTypeIn } from "../config/registry/type-resolution.js";
 import { abortable } from "../lib/abortable.js";
 import type {
   AgentConfig,

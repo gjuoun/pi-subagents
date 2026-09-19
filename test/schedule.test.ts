@@ -14,7 +14,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NO_FALLBACK, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
+import { registerAgents } from "../src/config/registry/agent-types.js";
+import { NO_FALLBACK, setFallbackSubagent } from "../src/config/registry/fallback.js";
 import { SubagentScheduler } from "../src/schedule/schedule.js";
 import { ScheduleStore } from "../src/schedule/schedule-store.js";
 
