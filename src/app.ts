@@ -10,19 +10,17 @@
  * Layering: part of the wiring layer, like index and bootstrap — see test/layout-fence.test.ts.
  */
 
-import { existsSync, readFileSync, } from "node:fs";
+import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { isTopLevelAgent, type OnAgentCompact, type OnAgentComplete, type OnAgentStart, type OnAgentUsage } from "./agent/agent-manager.js";
-import type { DeliveryCallback } from "./agent/group-join.js";
+import { isTopLevelAgent } from "./agent/agent-manager.js";
 import { resolveJoinMode } from "./agent/invocation.js";
-import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./agent/mention/mention.js";
-import { runMentionClone } from "./agent/mention/mention-clone.js";
+import { createManagerCallbacks } from "./agent/manager-callbacks.js";
+import { createMentionDispatcher } from "./agent/mention/dispatch.js";
 import { setMaxSubagentDepth } from "./agent/nested-tools.js";
 import { registerRpcHandlers } from "./agent/rpc.js";
-import { getDefaultMaxTurns, normalizeMaxTurns, resolveEffectiveMaxTurns, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
-import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, setOutputTranscriptDefault, streamToOutputFile, } from "./agent/session/output-file.js";
+import { resolveEffectiveMaxTurns, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
+import { createOutputFilePath, ensureOutputFile, setOutputTranscriptDefault, streamToOutputFile } from "./agent/session/output-file.js";
 import { setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
 import { createServices } from "./bootstrap.js";
 import { getAgentConfig, getAvailableTypes, getConfig, registerAgents, resolveSpawnType, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
@@ -30,10 +28,8 @@ import { loadCustomAgents } from "./config/registry/custom-agents.js";
 import { applyAndEmitLoaded, loadSettings } from "./config/settings.js";
 import { ActivationContext } from "./extension/context.js";
 import { SUBAGENT_TOOL_NAMES } from "./lib/tool-names.js";
-import { type AgentRecord, type NotificationDetails, } from "./lib/types.js";
-import { formatCost, formatMs, formatTokens, formatTurns } from "./lib/ui/format.js";
+import type { AgentRecord } from "./lib/types.js";
 import type { UICtx } from "./lib/ui/theme.js";
-import { getLifetimeTotal, toReportedUsage } from "./lib/usage.js";
 import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
@@ -47,8 +43,8 @@ import { createActivityTracker } from "./ui/agent-status.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
+import { createCompletionNudge } from "./ui/completion-nudge.js";
 import type { FleetUICtx } from "./ui/fleet-list.js";
-import { buildNotificationDetails, formatTaskNotification, } from "./ui/notifications.js";
 import { renderWorkflowEntryCard } from "./ui/workflow/workflow-card.js";
 import { openWorkflowFromFleet, type WorkflowMenuDeps } from "./ui/workflow/workflow-menu.js";
 import { decideWorkflowCollision } from "./workflow/collisions.js";
@@ -60,69 +56,6 @@ export function createExtension(pi: ExtensionAPI): void {
   // The activation's own state — every cluster below reads and writes through this.
   const context = new ActivationContext();
 
-  pi.registerMessageRenderer<NotificationDetails>(
-    "subagent-notification",
-    (message, { expanded }, theme) => {
-      const d = message.details;
-      if (!d) return undefined;
-
-      function renderOne(d: NotificationDetails): string {
-        const isError = d.status === "error" || d.status === "stopped" || d.status === "aborted";
-        const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-        const statusText = isError ? d.status
-          : d.status === "steered" ? "completed (steered)"
-          : "completed";
-
-        // Line 1: icon + agent description + status
-        let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
-
-        // Line 2: stats
-        const parts: string[] = [];
-        if (d.turnCount > 0) parts.push(formatTurns(d.turnCount, d.maxTurns));
-        if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? "" : "s"}`);
-        if (d.totalTokens > 0) parts.push(formatTokens(d.totalTokens));
-        if (context.showCost) {
-          const costText = formatCost(d.totalCost ?? 0);
-          if (costText) parts.push(costText);
-        }
-        if (d.durationMs > 0) parts.push(formatMs(d.durationMs));
-        if (parts.length) {
-          line += "\n  " + parts.map(p => theme.fg("dim", p)).join(" " + theme.fg("dim", "·") + " ");
-        }
-
-        // Line 3: result preview (collapsed) or full (expanded)
-        if (expanded) {
-          const lines = d.resultPreview.split("\n").slice(0, 30);
-          for (const l of lines) line += "\n" + theme.fg("dim", `  ${l}`);
-        } else {
-          const preview = d.resultPreview.split("\n")[0]?.slice(0, 80) ?? "";
-          line += "\n  " + theme.fg("dim", `⎿  ${preview}`);
-        }
-
-        // Line 4: output file link (if present)
-        if (d.outputFile) {
-          line += "\n  " + theme.fg("muted", `transcript: ${d.outputFile}`);
-        }
-
-        return line;
-      }
-
-      const all = [d, ...(d.others ?? [])];
-      const rendered = all.map(renderOne);
-      // A group of agents lands as one notification, and the number a user wants
-      // from it is what the batch cost — not four figures to add up by hand.
-      // Derived from the per-agent details rather than carried alongside them:
-      // one source, so the total can never disagree with the rows above it.
-      if (context.showCost && all.length > 1) {
-        const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
-        if (total) {
-          const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-          rendered.unshift(theme.fg("dim", `${all.length} agents · ${formatTokens(tokens)} · ${total}`));
-        }
-      }
-      return new Text(rendered.join("\n"), 0, 0);
-    }
-  );
 
   // A workflow launched from the CLI flag has no tool call to hang its result
   // card on, so it renders here instead — through the SAME layout the tool
@@ -156,223 +89,39 @@ export function createExtension(pi: ExtensionAPI): void {
   // session on the next unrelated spawn, so every later reload keeps warning.
   reloadCustomAgents(context.strictAgentFiles);
 
-  const NUDGE_HOLD_MS = 200;
-  // A queued result wait must observe completion before its held notification
-  // can fire, so successful waits can still suppress that redundant nudge.
-  const QUEUE_WAIT_POLL_MS = Math.floor(NUDGE_HOLD_MS / 4);
 
-  function scheduleNudge(key: string, send: () => void, delay = NUDGE_HOLD_MS) {
-    cancelNudge(key);
-    services.pendingNudges.set(key, setTimeout(() => {
-      services.pendingNudges.delete(key);
-      try { send(); } catch { /* ignore stale completion side-effect errors */ }
-    }, delay));
-  }
 
-  function cancelNudge(key: string) {
-    const timer = services.pendingNudges.get(key);
-    if (timer != null) {
-      clearTimeout(timer);
-      services.pendingNudges.delete(key);
-    }
-  }
-
-  function emitIndividualNudge(record: AgentRecord) {
-    if (record.resultConsumed) return;  // re-check at send time
-
-    const notification = formatTaskNotification(record, 500, context.showCost);
-    const footer = record.outputFile ? `\nFull transcript available at: ${record.outputFile}` : '';
-
-    pi.sendMessage<NotificationDetails>({
-      customType: "subagent-notification",
-      content: notification + footer,
-      display: true,
-      details: buildNotificationDetails(record, 500, services.agentActivity.get(record.id)),
-    }, { deliverAs: "followUp", triggerTurn: true });
-  }
-
-  function sendIndividualNudge(record: AgentRecord) {
-    services.agentActivity.delete(record.id);
-    services.status.markFinished(record.id);
-    services.fleet.onAgentFinished(record.id);
-    scheduleNudge(record.id, () => emitIndividualNudge(record));
-    services.status.update();
-  }
-
-  /**
-   * The group-join delivery policy: what happens when a joined group of agents settles.
-   * Injected into the joiner that src/bootstrap.ts builds.
-   */
-  const onGroupComplete: DeliveryCallback = (records, partial) => {
-      for (const r of records) { services.agentActivity.delete(r.id); services.status.markFinished(r.id); services.fleet.onAgentFinished(r.id); }
-
-      const groupKey = `group:${records.map(r => r.id).join(",")}`;
-      scheduleNudge(groupKey, () => {
-        // Re-check at send time
-        const unconsumed = records.filter(r => !r.resultConsumed);
-        if (unconsumed.length === 0) { services.status.update(); return; }
-
-        const notifications = unconsumed.map(r => formatTaskNotification(r, 300, context.showCost)).join('\n\n');
-        const label = partial
-          ? `${unconsumed.length} agent(s) finished (partial — others still running)`
-          : `${unconsumed.length} agent(s) finished`;
-
-        const [first, ...rest] = unconsumed;
-        const details = buildNotificationDetails(first, 300, services.agentActivity.get(first.id));
-        if (rest.length > 0) {
-          details.others = rest.map(r => buildNotificationDetails(r, 300, services.agentActivity.get(r.id)));
-        }
-
-        pi.sendMessage<NotificationDetails>({
-          customType: "subagent-notification",
-          content: `Background agent group completed: ${label}\n\n${notifications}\n\nUse get_subagent_result for full output.`,
-          display: true,
-          details,
-        }, { deliverAs: "followUp", triggerTurn: true });
-      });
-      services.status.update();
-  };
-
-  /** Helper: build event data for lifecycle events from an AgentRecord. */
-  function buildEventData(record: AgentRecord) {
-    const durationMs = record.completedAt ? record.completedAt - record.startedAt : Date.now() - record.startedAt;
-    // All three fields are lifetime-accumulated (Σ over every assistant message_end),
-    // so they survive compaction together — input + output ≤ total always.
-    // tokens is omitted when nothing was ever produced (e.g. agent errored before
-    // any message_end fired), preserving prior payload shape.
-    const u = record.lifetimeUsage;
-    const total = getLifetimeTotal(u);
-    const tokens = total > 0
-      ? { input: u.input, output: u.output, total }
-      : undefined;
-    // The whole run's spend as a pi `Usage` — pi's convention for handing spend
-    // to a consumer, so `usage.cost.total` and `usage.cacheRead` are where a
-    // listener already expects them and anything pi adds to `Usage` arrives
-    // without a change here. Omitted when nothing was spent, so "spent nothing"
-    // and "never ran" stay distinguishable. Ungated by `showCost`: that setting
-    // governs what a human is shown, not what the event carries.
-    //
-    // `tokens` above is the other convention, kept as it shipped: a flat view
-    // model like pi's own `SessionStats`, carrying the DISPLAY total, which
-    // excludes cacheRead (#38). The two answer different questions and neither
-    // derives from the other.
-    const usage = toReportedUsage(u);
-    return {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-      result: record.result,
-      error: record.error,
-      status: record.status,
-      toolUses: record.toolUses,
-      durationMs,
-      tokens,
-      usage,
-    };
-  }
-
-  /**
-   * The manager's completion policy: the lifecycle events, the record entry, and the route
-   * through group join or an individual nudge. Injected into the manager that
-   * src/bootstrap.ts builds.
-   */
-  const onAgentComplete: OnAgentComplete = (record) => {
-    // Owned children — nested, or a workflow's — report only through their
-    // owner: the parent's scoped tools, or the workflow's card, notification
-    // and dialog. Keep them out of top-level lifecycle, transcript,
-    // notification, and UI channels.
-    if (!isTopLevelAgent(record)) return;
-
-    const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
-    const eventData = buildEventData(record);
-    if (isError) {
-      pi.events.emit("subagents:failed", eventData);
-    } else {
-      pi.events.emit("subagents:completed", eventData);
-    }
-
-    // Persist final record for cross-extension history reconstruction
-    pi.appendEntry("subagents:record", {
-      id: record.id, type: record.type, description: record.description,
-      status: record.status, result: record.result, error: record.error,
-      startedAt: record.startedAt, completedAt: record.completedAt,
-    });
-
-    // Skip notification if result was already consumed via get_subagent_result
-    if (record.resultConsumed) {
-      services.agentActivity.delete(record.id);
-      services.status.markFinished(record.id);
-      services.fleet.onAgentFinished(record.id);
-      services.status.update();
-      return;
-    }
-
-    // If this agent is pending batch finalization (debounce window still open),
-    // don't send an individual nudge — finalizeBatch will pick it up retroactively.
-    if (context.currentBatchAgents.some(a => a.id === record.id)) {
-      services.status.update();
-      return;
-    }
-
-    const result = services.groupJoin.onAgentComplete(record);
-    if (result === 'pass') {
-      sendIndividualNudge(record);
-    }
-    // 'held' → do nothing, group will fire later
-    // 'delivered' → group callback already fired
-    services.status.update();
-  };
-
-  const onAgentStart: OnAgentStart = (record) => {
-    if (!isTopLevelAgent(record)) return;
-    // Agent-tool spawns refresh these surfaces in their tool handler, but RPC
-    // and scheduler spawns enter through the manager directly.
-    if (context.currentCtx?.hasUI) {
-      services.status.ensureTimer();
-      services.status.update();
-      services.fleet.ensureTimer();
-      services.fleet.update();
-    }
-    // Emit started event when agent transitions to running (including from queue)
-    pi.events.emit("subagents:started", {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-    });
-  };
-
-  const onAgentCompact: OnAgentCompact = (record, info) => {
-    if (!isTopLevelAgent(record)) return;
-    // Emit compacted event when agent's session compacts (preserves count on record).
-    pi.events.emit("subagents:compacted", {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-      reason: info.reason,
-      tokensBefore: info.tokensBefore,
-      compactionCount: record.compactionCount,
-    });
-  };
-
-  const onAgentUsage: OnAgentUsage = (_record, usage) => {
-    // Every assistant message from every agent — nested included, exactly once.
-    // Parked here until a tool result can carry it back to the parent session;
-    // see `PendingUsagePool`. Skipped entirely when the feature is off, so no
-    // pool grows in a session that will never drain it.
-    if (context.reportUsage) services.pendingUsage.add(usage);
-  };
 
   // Every shared handle — the manager, the group joiner, the status row, the fleet list,
   // the scheduler and the four collections they share — is built in one ordered place and
   // frozen. This call supplies the completion policy (the nudge/notification logic above)
   // and is the only place any of them is constructed. See src/bootstrap.ts.
+  // The manager is constructed with the completion policy, and the policy reads the handles the
+  // manager is part of. The hooks it receives are therefore thin bindings, resolved when a run
+  // settles — long after the two lines below — and the policy itself is built immediately after.
   const services = createServices({
     showCost: () => context.showCost,
     viewerMarkdown: () => context.viewerMarkdown,
-    hooks: { onAgentComplete, onAgentStart, onAgentCompact, onAgentUsage, onGroupComplete },
+    hooks: {
+      onAgentComplete: (record) => policy.onAgentComplete(record),
+      onAgentStart: (record) => policy.onAgentStart(record),
+      onAgentCompact: (record, info) => policy.onAgentCompact(record, info),
+      onAgentUsage: (record, usage) => policy.onAgentUsage(record, usage),
+      onGroupComplete: (records, partial) => policy.onGroupComplete(records, partial),
+    },
   });
   // The one handle reference the state class keeps: the surfaces a settings write repaints.
   context.repaint = services;
+
+  /**
+   * The completion policy, owned by the domains it belongs to: the notification surface (which
+   * registers its own message renderer) and the manager's lifecycle callbacks.
+   */
+  const notify = createCompletionNudge({ pi, services, showCost: () => context.showCost });
+  const policy = {
+    ...createManagerCallbacks({ pi, services, context, notify }),
+    onGroupComplete: notify.onGroupComplete,
+  };
 
 
   // Expose manager via Symbol.for() global registry for cross-package access.
@@ -553,7 +302,7 @@ export function createExtension(pi: ExtensionAPI): void {
             if (!record || record.parentAgentId) return false;
             if (record.status === "running" || record.status === "queued") return false;
             record.resultConsumed = true;
-            cancelNudge(record.id);
+            notify.cancelNudge(record.id);
             return true;
           },
         },
@@ -603,227 +352,6 @@ export function createExtension(pi: ExtensionAPI): void {
    * main-model turn; the answer arrives through the ordinary completion
    * notification either way.
    */
-  pi.on("input", async (event, ctx) => {
-    // Never hijack text the extension layer itself submitted (pi.sendMessage,
-    // scheduled prompts) — only something a person typed can be a mention.
-    if (event.source === "extension" || !context.isAgentMentionsEnabled()) return { action: "continue" };
-    // Claiming the turn is TUI only, matching the `@` completion that teaches
-    // the syntax. Pi defaults `session.prompt()` to source "interactive", so a
-    // headless `pi -p "@explore …"` reaches here too — and claiming it would
-    // answer with silence, which the background hold cannot fix: `handled`
-    // returns from prompt() before any turn starts, so the loop that patch wraps
-    // never runs (it holds subagents spawned by the Agent tool MID-turn, a
-    // different path). The agent would detach, `ctx.ui.notify` is a no-op
-    // outside the TUI, and print mode would exit having printed nothing.
-    //
-    // `model` mode has none of that problem: it queues a reminder and lets the
-    // turn run, so the answer is the model's own, printed as usual. It is the
-    // only branch allowed to act headlessly; everything else falls through to
-    // the main model exactly as it did before mentions existed.
-    const canDispatchDirectly = ctx.mode === "tui";
-    if (!canDispatchDirectly && context.agentMentionMode !== "model") return { action: "continue" };
-
-    const mention = parseMention(event.text);
-    if (!mention) return { action: "continue" };
-
-    // `@main` addresses the main conversation, never a subagent — the one name
-    // `assignHandle` refuses to allocate. An explicit escape hatch for text
-    // that would otherwise read as a mention, so the prefix is dropped and the
-    // rest goes to the model with its attachments intact.
-    if (isReservedHandle(mention.handle)) {
-      return { action: "transform", text: mention.message, ...(event.images && { images: event.images }) };
-    }
-
-    // As typed first, so an agent actually called `agent-foo` wins over Claude
-    // Code's `@agent-` + `foo` spelling rather than being shadowed by it.
-    const alias = stripAgentPrefix(mention.handle);
-    const resolved = services.manager.resolveMention(mention.handle)
-      ?? (alias ? services.manager.resolveMention(alias) : undefined);
-
-    // Steering and resuming are direct in every mode, so headless they are not
-    // available at all. Falling through here rather than dropping to the start
-    // path below matters: the handle names an agent that already exists, and
-    // asking the model to start another one is not what was typed.
-    if (resolved && !canDispatchDirectly) return { action: "continue" };
-
-    if (resolved?.kind === "live") {
-      const record = resolved.record;
-      const target = `@${record.alias ?? record.handle ?? mention.handle}`;
-
-      if (record.status === "running" || record.status === "queued") {
-        // Steering interrupts after the current tool call, exactly like the
-        // steer_subagent tool. Un-consume the result so the agent's reply to
-        // this message is still relayed even if the LLM read its last answer.
-        record.resultConsumed = false;
-        services.manager.steer(record.id, mention.message);
-        pi.events.emit("subagents:steered", { id: record.id, message: mention.message });
-        ctx.ui.notify(`Sent to ${target}`, "info");
-        return { action: "handled" };
-      }
-
-      if (record.session) {
-        // Both derived from the record's OWN type: a mention names an existing
-        // agent, so its frontmatter is what governs — `output_transcript: false`
-        // must keep holding, since record.outputFile is the sole gate every
-        // downstream consumer keys off and a resume must not re-open it.
-        const config = getAgentConfig(record.type);
-        const resumedRecord = await startBackgroundResume(ctx, record, mention.message, {
-          outputTranscript: config?.outputTranscript ?? getOutputTranscriptDefault(),
-          maxTurns: normalizeMaxTurns(config?.maxTurns ?? getDefaultMaxTurns()),
-        });
-        ctx.ui.notify(
-          resumedRecord ? `Resuming ${target}` : `Could not resume ${target} — it is still running.`,
-          resumedRecord ? "info" : "warning",
-        );
-        return { action: "handled" };
-      }
-      // A live record with no session never got far enough to continue, so it
-      // falls through to the start-fresh path below, like Claude's
-      // `no_transcript`.
-    }
-
-    // Evicted, but its conversation is still on disk: reopen it. This is an
-    // ordinary spawn carrying a session file, so the new record picks up the
-    // widget, fleet row, transcript and completion notification unchanged —
-    // and `reclaim` hands it back the names the tombstone was holding.
-    if (resolved?.kind === "tombstone") {
-      const entry = resolved.entry;
-      const target = `@${entry.alias ?? entry.handle}`;
-
-      // Checked here rather than left to SessionManager.open: that runs inside
-      // runAgent, whose rejection lands on the record as an agent error, not in
-      // the catch below. A `/new` in another pi window or a manual delete makes
-      // the conversation unrecoverable (Claude Code's `not_reachable`), so drop
-      // the entry — a row that can only ever fail is worse than none — and say
-      // so rather than quietly sending this message to an unrelated agent.
-      if (!existsSync(entry.sessionFile)) {
-        services.manager.dropTombstone(entry.handle);
-        ctx.ui.notify(`Could not resume ${target} — its session is gone.`, "warning");
-        return { action: "handled" };
-      }
-
-      // The Agent tool deliberately falls back to general-purpose for a type it
-      // cannot resolve (#183), which covers a deleted file AND a merely
-      // disabled one. A resume must not inherit that: reopening this
-      // conversation under a different agent's prompt and tools is not
-      // continuing it, and the new record would re-tombstone under the
-      // substitute, so the handle would never find its way back.
-      reloadCustomAgents();
-      const dispatch = resolveSpawnType(entry.type);
-      if (!dispatch.ok || dispatch.fellBackFrom !== undefined) {
-        // The tombstone stays: re-enabling the agent makes the handle work
-        // again, which a drop would foreclose.
-        ctx.ui.notify(`Could not resume ${target} — the ${entry.type} agent is no longer available.`, "warning");
-        return { action: "handled" };
-      }
-
-      try {
-        // spawnResolved, not spawnTopLevel: the latter strips
-        // `resumeSessionFile` and `reclaim` as untrusted. This path is the
-        // exception — both come from a tombstone this extension wrote.
-        const id = spawnResolved(pi, ctx, dispatch.type, mention.message, {
-          description: entry.description,
-          reclaim: { handle: entry.handle, alias: entry.alias },
-          resumeSessionFile: entry.sessionFile,
-          isBackground: true,
-        });
-        // The agent may still be starting — wait, so a startup failure lands in
-        // the catch below instead of being announced as a resume.
-        await services.manager.awaitStartup(id);
-        // The tombstone deliberately stays. `resolveMention` prefers the live
-        // record holding these same names, so it cannot shadow the resume — and
-        // if this run dies before establishing its own session, the original
-        // transcript is still the right thing for the next mention to reopen.
-        // Once the resumed record is evicted it overwrites this entry in place,
-        // keyed by the same handle, so nothing accumulates.
-        ctx.ui.notify(`Resuming ${target}`, "info");
-      } catch (err) {
-        // The type is already settled above, so what is left is a spawn-time
-        // failure: a strict worktree-isolation error, an unusable cwd.
-        ctx.ui.notify(
-          `Could not resume ${target}: ${err instanceof Error ? err.message : String(err)}`,
-          "warning",
-        );
-      }
-      return { action: "handled" };
-    }
-
-    // No agent under that handle — but the name may still be an agent type, in
-    // which case the mention starts one.
-    const typeHandle = mention.handle;
-    const type = resolveHandleToType(typeHandle, getAvailableTypes())
-      ?? (alias ? resolveHandleToType(alias, getAvailableTypes()) : undefined);
-    if (!type) return { action: "continue" };
-
-    // Claude Code never starts the agent itself: `@agent-<type>` becomes an
-    // attachment asking the main model to do it, and the model writes the
-    // agent's prompt from the conversation rather than forwarding the typed
-    // text. That buys a real `Agent` tool call — transcript, per-tool widget
-    // detail, tool-use-id correlation, join grouping — and a prompt with the
-    // context a cold spawn lacks.
-    //
-    // It also costs a visible turn, spent narrating a decision the user already
-    // made by typing the handle. So the turn is taken by a clone of this
-    // conversation instead (mention-clone.ts): same messages, same system
-    // prompt, off-screen, holding only the `Agent` tool. Nothing reaches the
-    // chat, and what it starts is an ordinary top-level agent.
-    if (context.agentMentionMode === "model") {
-      const label = `@${handleBase(type)}`;
-      // "Prompting", not "Starting": in this mode nothing starts until the
-      // off-screen clone has taken a whole model turn writing the agent's
-      // prompt, and that wait is the one thing the chat cannot show. `direct`
-      // says "Started" because by then it has. The distinction tells the user
-      // which of the two they are waiting on.
-      ctx.ui.notify(`Prompting ${label}…`, "info");
-      // Not awaited: the clone runs a full model turn, and prompt() is blocked
-      // until this hook returns. The user gets their prompt back immediately
-      // and the agent appears in the widget when it starts.
-      void runMentionClone({ ctx, type, message: mention.message, agentTool: registeredAgentTool })
-        .then(async (result) => {
-          if (result.spawned) return;
-          // A clone that could not run must not swallow the mention: start the
-          // agent the direct way rather than leaving the user with a toast and
-          // nothing running.
-          try {
-            const id = spawnTopLevel(pi, ctx, type, mention.message, {
-              description: describeMention(mention.message),
-              isBackground: true,
-            });
-            // Same reason as the direct path below: the agent may still be
-            // starting, and a failure there must reach this catch.
-            await services.manager.awaitStartup(id);
-            ctx.ui.notify(`Started ${label} directly — ${result.error}`, "warning");
-          } catch (err) {
-            ctx.ui.notify(
-              `Could not start ${label}: ${err instanceof Error ? err.message : String(err)}`,
-              "error",
-            );
-          }
-        });
-      return { action: "handled" };
-    }
-
-    try {
-      // Nothing else to pass: runAgent resolves model, thinking and max turns
-      // from the agent's own config when the spawn omits them, and the
-      // manager's onStart/onComplete callbacks own the widget, the fleet list
-      // and the completion notification — the same contract the scheduler and
-      // cross-extension RPC spawns run under.
-      const id = spawnTopLevel(pi, ctx, type, mention.message, {
-        description: describeMention(mention.message),
-        isBackground: true,
-      });
-      // The agent may still be starting (a worktree copy is an awaited git
-      // call) — report a failure that lands there as a failed start, not as a
-      // "Started" toast for an agent that never ran.
-      await services.manager.awaitStartup(id);
-      ctx.ui.notify(`Started @${handleBase(type)}`, "info");
-    } catch (err) {
-      ctx.ui.notify(`Could not start @${handleBase(type)}: ${err instanceof Error ? err.message : String(err)}`, "error");
-    }
-    return { action: "handled" };
-  });
-
   pi.on("session_before_switch", () => {
     services.manager.clearCompleted(true);
     services.scheduler.stop();
@@ -904,7 +432,7 @@ export function createExtension(pi: ExtensionAPI): void {
       for (const { id } of batchAgents) {
         const record = services.manager.getRecord(id);
         if (record?.completedAt != null && !record.resultConsumed) {
-          sendIndividualNudge(record);
+          notify.sendIndividualNudge(record);
         }
       }
     }
@@ -1046,9 +574,9 @@ export function createExtension(pi: ExtensionAPI): void {
     finalizeBatch,
     startBackgroundResume,
     resolveAgentRef,
-    cancelNudge,
-    scheduleNudge,
-    queueWaitPollMs: QUEUE_WAIT_POLL_MS,
+    cancelNudge: notify.cancelNudge,
+    scheduleNudge: notify.scheduleNudge,
+    queueWaitPollMs: notify.queueWaitPollMs,
   };
 
   // Held rather than registered inline: the mention clone reuses this exact object, so the
@@ -1056,6 +584,14 @@ export function createExtension(pi: ExtensionAPI): void {
   // has to be kept in step with this one.
   const registeredAgentTool = withUsageReporting(createAgentTool(toolsDeps), toolsDeps);
   pi.registerTool(registeredAgentTool);
+
+  // The `@handle` dispatcher: the mention grammar, the steer and resume paths, and the start
+  // path — its own domain, which installs the input hook on construction. Registered here
+  // because a clone reuses the Agent tool above.
+  createMentionDispatcher({
+    pi, services, context, spawnResolved, spawnTopLevel, reloadCustomAgents,
+    startBackgroundResume, agentTool: registeredAgentTool,
+  });
 
 
   const workflowTool = createWorkflowTool(toolsDeps);
