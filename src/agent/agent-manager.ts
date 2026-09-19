@@ -1197,9 +1197,17 @@ export class AgentManager {
   ) {
     if (!record.session) return;
 
+    // Resolved ONCE and carried to `settle` below, like `startRun`: the predicate
+    // reads the record, so re-reading it at settle time could release a slot this
+    // run never charged (counter underflow, limit silently lifted) or leak one it
+    // did — the failure `settleRun`'s doc names as the reason the pool is passed
+    // in rather than recomputed. The two agree on this path today, because
+    // `resume()` sets `isBackground` before calling here; that is precisely why
+    // it would go unnoticed if it ever drifted.
+    const pool = this.poolFor(record);
     record.status = "running";
     record.startedAt = Date.now();
-    if (occupiesPoolSlot(record)) this.pools.acquire("background");
+    this.pools.acquire(pool);
     this.onStart?.(record);
 
     // Fresh abort controller so /agents stop and steering target THIS run rather
@@ -1231,7 +1239,7 @@ export class AgentManager {
       }
       // Children spawned during the resumed turn must not outlive it.
       this.abortOwnedChildren(id);
-      if (occupiesPoolSlot(record)) this.pools.release("background");
+      this.pools.release(pool);
       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
       this.drainQueue();
     };
