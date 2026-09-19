@@ -1,23 +1,21 @@
 /**
  * progress.ts — the workflow progress model, ported from Claude Code.
  *
- * Progress is an **append-only event log**, not a tree. Agent entries are keyed
- * by `index` and last-write-wins, so a running agent is updated by appending a
- * fresh entry with the same index rather than mutating anything. Every view —
- * the inline card, the workflows dialog, the fleet widget — derives its shape
- * by collapsing that log. Keeping the log authoritative is what lets a batched
- * update carry several agents' changes in one message from the worker.
+ * Progress is an **append-only event log**, not a tree. Agent entries are keyed by `index`
+ * and last-write-wins, so a running agent is updated by appending a fresh entry with the
+ * same index rather than mutating anything. Every view — the inline card, the workflows
+ * dialog, the fleet widget — derives its shape by collapsing that log, which is what lets a
+ * batched update carry several agents' changes in one message from the worker.
  *
- * Two vocabularies, deliberately distinct:
- *   - entry `state` is only start | progress | done | error, with `skipped`,
- *     `blocked` and `cached` as separate booleans;
- *   - the display state adds queued, running, interrupted, skipped, blocked and
- *     failed, and is *derived* (see `displayState`).
- * Mixing them up is the easiest way to get the rendering wrong, which is why
- * the derivation lives here as one function rather than inline in each renderer.
+ * Two vocabularies, deliberately distinct: entry `state` is only
+ * start | progress | done | error, with `skipped`, `blocked` and `cached` as separate
+ * booleans; the display state adds queued, running, interrupted, skipped, blocked and
+ * failed, and is *derived* (`displayState`). Mixing them up is the easiest way to get the
+ * rendering wrong, which is why the derivation lives here as one function rather than
+ * inline in each renderer.
  *
- * Everything in this file is pure and framework-free so the whole model is
- * unit-testable without a terminal.
+ * Everything here is pure and framework-free, so the whole model is unit-testable without a
+ * terminal.
  */
 
 import type { WorkflowMeta, WorkflowPhaseMeta } from "../script/meta.js";
@@ -117,12 +115,6 @@ export type WorkflowEntry = WorkflowPhaseEntry | WorkflowLogEntry | WorkflowAgen
 /** Overall run status, mirroring the task record. */
 export type WorkflowRunStatus = "running" | "completed" | "failed" | "killed" | "paused";
 
-export interface CollapsedProgress {
-  agents: WorkflowAgentEntry[];
-  logs: string[];
-  phaseTitles: Map<number, string>;
-}
-
 export interface PhaseGroup {
   title: string;
   status: "not-started" | "running" | "done" | "failed";
@@ -148,7 +140,11 @@ export interface WorkflowStats {
  * Agent entries collapse by index (last write wins); logs accumulate in order;
  * phase titles are a lookup for grouping.
  */
-export function collapse(progress: readonly WorkflowEntry[]): CollapsedProgress {
+export function collapse(progress: readonly WorkflowEntry[]): {
+  agents: WorkflowAgentEntry[];
+  logs: string[];
+  phaseTitles: Map<number, string>;
+} {
   const agents = new Map<number, WorkflowAgentEntry>();
   const logs: string[] = [];
   const phaseTitles = new Map<number, string>();
@@ -524,7 +520,6 @@ export function gerund(word: string): string {
   return `${word}ing`;
 }
 
-/** Truncation width for a footer phase title. */
 const FOOTER_TITLE_WIDTH = 16;
 
 const truncate = (text: string, width: number) =>

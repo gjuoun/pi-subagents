@@ -4,7 +4,6 @@ import {
   getAgentConfig,
   getAvailableTypes,
   getConfig,
-  getDefaultAgentNames,
   getMemoryToolNames,
   getReadOnlyMemoryToolNames,
   getToolNamesForType,
@@ -118,12 +117,6 @@ describe("agent type registry", () => {
       }
     });
 
-    it("getDefaultAgentNames returns default agent names", () => {
-      const names = getDefaultAgentNames();
-      expect(names).toContain("general-purpose");
-      expect(names).toContain("Explore");
-      expect(names).toContain("Plan");
-    });
 
     it("BUILTIN_TOOL_NAMES includes all built-in tools", () => {
       expect(BUILTIN_TOOL_NAMES).toContain("read");
@@ -164,7 +157,6 @@ describe("agent type registry", () => {
 
       expect(getAvailableTypes()).toEqual(["auditor"]);
       expect(isValidType("auditor")).toBe(true);
-      expect(getDefaultAgentNames()).toEqual([]);
     });
 
     it("re-enabling restores defaults on next registerAgents", () => {

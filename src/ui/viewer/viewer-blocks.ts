@@ -16,7 +16,6 @@
 
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-// ---- Types ----
 
 /** Structural subset of a pi `ToolCall` — what this module needs from an assistant message. */
 export interface ViewerToolCall {
@@ -42,11 +41,6 @@ export interface BlockOptions {
   partial?: string;
 }
 
-// ---- Constants ----
-
-/** Tools with a hand-written shape. Everything else renders as parameters. */
-const BUILT_IN = new Set(["read", "edit", "write", "bash", "grep", "find", "ls"]);
-
 /** What a hidden parameter set collapses to. */
 export const PARAMS_FOLDED = "{ ... }";
 
@@ -66,7 +60,6 @@ export const FULL_BODY_LINES = 200;
 /** Indent applied to every body line, so a block's head reads as its title. */
 const BODY_INDENT = "  ";
 
-// ---- Message helpers ----
 
 /** The text of a tool result, or "" when it carries none (images, empty results). */
 export function resultText(result: ViewerToolResult | undefined): string {
@@ -117,7 +110,6 @@ function resultLineCount(result: ViewerToolResult | undefined): number {
   return text ? text.split("\n").length : 0;
 }
 
-// ---- Formatting ----
 
 /** `✔` ok · `✘` failed · `⟳` still running. */
 function mark(result: ViewerToolResult | undefined): string {
@@ -291,11 +283,6 @@ export function blockTint(head: string): "toolPendingBg" | "toolSuccessBg" | "to
   const mark = head.trimStart()[0];
   if (mark === "✘") return "toolErrorBg";
   return mark === "⟳" ? "toolPendingBg" : "toolSuccessBg";
-}
-
-/** Whether this tool has a hand-written shape (exported for the viewer's own tests). */
-export function isBuiltInTool(name: string): boolean {
-  return BUILT_IN.has(name);
 }
 
 /**
