@@ -87,6 +87,7 @@ src/                  # Layered by domain. A file may import only from the layer
       skill-loader.ts     # Preload skills (Pi-standard + Agent Skills spec layouts)
     mention/
       mention.ts          # `@handle message` grammar: suggestion triggers and send parsing
+      handle-registry.ts  # What a `@handle` is called: base slug, allocation, type lookup
       mention-clone.ts    # Run a mention's turn in a cloned conversation, off the main chat
 
   schedule/           # Timers plus their store

@@ -15,9 +15,10 @@ import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-w
 import { getAgentConfig, getAvailableTypes, resolveSpawnType } from "../../config/registry/agent-types.js";
 import type { AgentMentionMode, AgentRecord } from "../../lib/types.js";
 import type { AgentManager } from "../agent-manager.js";
+import { handleBase, isReservedHandle, resolveHandleToType } from "../handle-registry.js";
 import { getDefaultMaxTurns, normalizeMaxTurns } from "../run-limits.js";
 import { getOutputTranscriptDefault } from "../session/output-file.js";
-import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./mention.js";
+import { describeMention, parseMention, stripAgentPrefix } from "./mention.js";
 import { runMentionClone } from "./mention-clone.js";
 
 /** The handles the dispatcher reads. */

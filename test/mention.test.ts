@@ -9,7 +9,8 @@
  * file path, a bare handle, a mention mid-sentence.
  */
 import { describe, expect, it } from "vitest";
-import { agentMentionReminder, assignHandle, describeMention, handleBase, isReservedHandle, MENTION_TRIGGER, parseMention, resolveHandleToType, stripAgentPrefix } from "../src/agent/mention/mention.js";
+import { assignHandle, handleBase, isReservedHandle, resolveHandleToType } from "../src/agent/handle-registry.js";
+import { agentMentionReminder, describeMention, MENTION_TRIGGER, parseMention, stripAgentPrefix } from "../src/agent/mention/mention.js";
 
 describe("handleBase", () => {
   it("lowercases so the handle matches how it is typed", () => {
