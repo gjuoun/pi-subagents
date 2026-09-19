@@ -11,21 +11,22 @@
  */
 
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createManagerCallbacks } from "./agent/manager-callbacks.js";
 import { createMentionDispatcher } from "./agent/mention/dispatch.js";
 import { setMaxSubagentDepth } from "./agent/nested-tools.js";
 import { createManagerRegistry } from "./agent/registry.js";
-import { registerRpcHandlers } from "./agent/rpc.js";
+
 import { setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
 import { setOutputTranscriptDefault } from "./agent/session/output-file.js";
 import { type BackgroundResumeDeps, createBackgroundResume } from "./agent/session/resume.js";
 import { setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
 import { createServices } from "./bootstrap.js";
-import { getAgentConfig, getAvailableTypes, getConfig, registerAgents, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
+import { registerAgents, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
 import { loadCustomAgents } from "./config/registry/custom-agents.js";
 import { applyAndEmitLoaded, loadSettings } from "./config/settings.js";
 import { ActivationContext } from "./extension/context.js";
+import { registerSessionLifecycle } from "./extension/session-lifecycle.js";
 import type { UICtx } from "./lib/ui/theme.js";
 import { startScheduler } from "./schedule/start.js";
 import { createAgentTool } from "./tools/agent.js";
@@ -35,7 +36,7 @@ import { createJevTool } from "./tools/jev.js";
 import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
 import { createWorkflowTool, fleetWorkflows } from "./tools/workflow.js";
-import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
+
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
@@ -132,137 +133,6 @@ export function createExtension(pi: ExtensionAPI): void {
   // (currentCtx would stay undefined → spawn always "No active session"). Gating
   // here makes a filtered session behave like an absent one (#142).
 
-  // Capture ctx from session_start for RPC spawn handler + start the scheduler.
-  // This also wires the RPC handlers and broadcasts readiness — on the first
-  // bound session_start, so a filtered-out activation never advertises (#142).
-  pi.on("session_start", async (_event, ctx) => {
-    context.currentCtx = ctx;
-    // Publish this activation's entry under its own session id too (see MANAGERS_KEY).
-    const existingManagers = (globalThis as any)[MANAGERS_KEY] as Map<string, unknown> | undefined;
-    const sessionManagers = existingManagers ?? new Map<string, unknown>();
-    (globalThis as any)[MANAGERS_KEY] = sessionManagers;
-    const ownSessionId = ctx.sessionManager?.getSessionId?.();
-    if (ownSessionId) sessionManagers.set(ownSessionId, registryEntry);
-    if (ctx.hasUI) {
-      services.status.setUICtx(ctx.ui);
-      services.fleet.setUICtx(ctx.ui as any);
-    }
-    services.manager.clearCompleted(true);
-    // Guard mirrors the `!scheduler.isActive()` pattern below: session_start
-    // fires once per activation, but a double-bind must not leak listeners.
-    if (!context.rpcHandle) {
-      context.rpcHandle = registerRpcHandlers({
-        events: pi.events,
-        pi,
-        getCtx: () => context.currentCtx,
-        modelScope: services.modelScope,
-        manager: {
-          spawn: spawnTopLevel,
-          awaitStartup: (id) => services.manager.awaitStartup(id),
-          getRecord: (id) => services.manager.getRecord(id),
-          // Unguarded on purpose: the stop handler now runs the top-level check
-          // itself off `getRecord`, and reports the refusal instead of the
-          // "Agent not found" a false from here used to be read as.
-          abort: (id) => services.manager.abort(id),
-          consumeResult: (id) => {
-            const record = resolveAgentRef(id);
-            // Same guard as get_subagent_result: a running agent has no result
-            // to consume, and its notification is still the caller's only
-            // signal that it finished.
-            if (!record || record.parentAgentId) return false;
-            if (record.status === "running" || record.status === "queued") return false;
-            record.resultConsumed = true;
-            notify.cancelNudge(record.id);
-            return true;
-          },
-        },
-      });
-      // Broadcast readiness so extensions loaded alongside us can discover us.
-      // Emitting after all factories have run (rather than at factory time)
-      // also avoids the race where a consumer loaded after us misses the event.
-      pi.events.emit("subagents:ready", {});
-    }
-    if (context.schedulingEnabled && !services.scheduler.isActive()) startScheduler({ pi, scheduler: services.scheduler, manager: services.manager }, ctx);
-    // Stack `@handle` suggestions on pi's built-in autocomplete. Registered at
-    // most once per activation: pi appends wrappers to a list it never prunes,
-    // so a second call would layer a duplicate provider on the first. TUI only
-    // — print mode has no such method, and RPC mode's is a no-op.
-    if (ctx.mode === "tui" && !context.mentionProviderRegistered) {
-      context.mentionProviderRegistered = true;
-      ctx.ui.addAutocompleteProvider(current =>
-        createMentionProvider(
-          current,
-          // Plain text, not renderAgentName: the same label FleetView and the
-          // widget show, but the autocomplete description cannot carry ANSI.
-          () => mentionRoster(services.manager, mentionTypes(), type => getConfig(type).displayName),
-          () => context.isAgentMentionsEnabled(),
-        ),
-      );
-    }
-    // Last, and only here: CLI flag values are applied by the host AFTER every
-    // extension factory has run, so this is the earliest point the real value
-    // exists. Detached inside — a workflow must not hold up session startup.
-    resolveWorkflowCollisions(ctx);
-    runWorkflowFlag(ctx);
-  });
-
-  /** Agent types `@` can start, in the shape the roster wants. */
-  const mentionTypes = (): TypeInfo[] =>
-    getAvailableTypes().map(name => ({ name, description: getAgentConfig(name)?.description ?? name }));
-
-  /**
-   * `@handle message` typed at the prompt addresses that agent instead of the
-   * main model — Claude Code's prompt mention, same grammar (see mention.ts).
-   *
-   * The handle names the *agent*, not one process, so one syntax covers its
-   * whole lifecycle: message it while it runs, resume it once it has finished,
-   * start it if it never ran. Everything that isn't an agent mention falls
-   * through untouched, which is what keeps `@src/foo.ts summarize this`, a bare
-   * `@handle`, and ordinary prose working. A delivered mention costs no
-   * main-model turn; the answer arrives through the ordinary completion
-   * notification either way.
-   */
-  pi.on("session_before_switch", () => {
-    services.manager.clearCompleted(true);
-    services.scheduler.stop();
-  });
-
-  // On shutdown, abort all agents immediately and clean up.
-  // If the session is going down, there's nothing left to consume agent results.
-  pi.on("session_shutdown", async () => {
-    context.rpcHandle?.unsubSpawn();
-    context.rpcHandle?.unsubStop();
-    context.rpcHandle?.unsubPing();
-    context.rpcHandle?.unsubConsume();
-    context.rpcHandle = undefined;
-    context.currentCtx = undefined;
-    // Only release the global slot if this activation claimed it — a child
-    // session's shutdown must not delete the root session's registry entry.
-    if (ownsManagerRegistry && (globalThis as any)[MANAGER_KEY] === registryEntry) {
-      delete (globalThis as any)[MANAGER_KEY];
-    }
-    // Drop only this activation's per-session entries; every other session keeps its own.
-    const sessionManagers = (globalThis as any)[MANAGERS_KEY] as Map<string, unknown> | undefined;
-    if (sessionManagers) {
-      for (const [sessionId, entry] of sessionManagers) {
-        if (entry === registryEntry) sessionManagers.delete(sessionId);
-      }
-    }
-    services.scheduler.stop();
-    // Before abortAll, and not folded into it: a workflow owns a worker thread
-    // as well as its children, and only its own signal terminates that.
-    for (const task of services.workflowTasks.values()) task.abortController.abort();
-    services.workflowTasks.clear();
-    services.manager.abortAll();
-    for (const timer of services.pendingNudges.values()) clearTimeout(timer);
-    services.pendingNudges.clear();
-    services.fleet.dispose();
-    // Awaited: it emits `session_shutdown` into every retained child session so
-    // extensions bound there can release what they armed in `session_start` (#242).
-    // pi awaits this handler, and the process exits right after — unawaited, those
-    // handlers would never run. Internally bounded, so a hung one can't strand quit.
-    await services.manager.dispose(pi);
-  });
 
   // When enabled, the three hardcoded default agents (general-purpose, Explore,
   // Plan) are not registered. User-defined agents from project/global custom
@@ -366,6 +236,16 @@ export function createExtension(pi: ExtensionAPI): void {
   // that are not state (re-reading the agent dirs, and the defaults toggle that
   // re-registers after flipping it) plus the API the settings save emits on.
   // Everything else they reach is on the context object.
+
+  registerSessionLifecycle({
+    pi, context, services,
+    registry: { MANAGER_KEY, MANAGERS_KEY, registryEntry, ownsManagerRegistry, spawnTopLevel, resolveAgentRef },
+    notify: { cancelNudge: notify.cancelNudge },
+    startScheduler: (ctx: ExtensionContext) => startScheduler({ pi, scheduler: services.scheduler, manager: services.manager }, ctx),
+    resolveWorkflowCollisions,
+    runWorkflowFlag,
+  });
+
   const agentsUiDeps: AgentsUiDeps = { pi, services, context, reloadCustomAgents, setDisableDefaultAgents };
 
   /**
