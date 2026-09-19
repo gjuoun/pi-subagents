@@ -59,7 +59,6 @@ import { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG, type WorkflowEntryData, workfl
 import { createWorkflowTask, formatWorkflowNotification, type WorkflowTask, workflowRunId } from "./workflow/run/task.js";
 import { extractMeta, type WorkflowMeta, } from "./workflow/script/meta.js";
 
-// ---- Re-exports ----
 
 /**
  * Re-exported from where they now live, because this is where they were defined and both a
@@ -79,7 +78,6 @@ export default function (pi: ExtensionAPI) {
   // The activation's own state — every cluster below reads and writes through this.
   const context = new ActivationContext();
 
-  // ---- Register custom notification renderer ----
   pi.registerMessageRenderer<NotificationDetails>(
     "subagent-notification",
     (message, { expanded }, theme) => {
@@ -144,7 +142,6 @@ export default function (pi: ExtensionAPI) {
     }
   );
 
-  // ---- Workflow run rendered as a session entry ----
   // A workflow launched from the CLI flag has no tool call to hang its result
   // card on, so it renders here instead — through the SAME layout the tool
   // result uses, not a second one. Custom entries with no registered renderer
@@ -177,10 +174,8 @@ export default function (pi: ExtensionAPI) {
   // session on the next unrelated spawn, so every later reload keeps warning.
   reloadCustomAgents(context.strictAgentFiles);
 
-  // ---- Agent activity tracking + widget ----
   context.agentActivity = new Map<string, AgentActivity>();
 
-  // ---- Usage reporting (both off by default; see SubagentsSettings) ----
   /** Attach subagent spend to tool results, so the parent session counts it. */
   context.reportUsage = false;
   /** Show `~$X` next to token counts in the subagent surfaces. */
@@ -198,7 +193,6 @@ export default function (pi: ExtensionAPI) {
   // /agents toggle below both write it, and every spawn path reads it.
   context.modelScope = new ModelScope();
 
-  // ---- Cancellable pending notifications ----
   // Holds notifications briefly so get_subagent_result can cancel them
   // before they reach pi.sendMessage (fire-and-forget).
   context.pendingNudges = new Map<string, ReturnType<typeof setTimeout>>();
@@ -223,7 +217,6 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  // ---- Individual nudge helper (async join mode) ----
   function emitIndividualNudge(record: AgentRecord) {
     if (record.resultConsumed) return;  // re-check at send time
 
@@ -246,7 +239,6 @@ export default function (pi: ExtensionAPI) {
     context.status.update();
   }
 
-  // ---- Group join manager ----
   context.groupJoin = new GroupJoinManager(
     (records, partial) => {
       for (const r of records) { context.agentActivity.delete(r.id); context.status.markFinished(r.id); context.fleet.onAgentFinished(r.id); }
@@ -326,7 +318,6 @@ export default function (pi: ExtensionAPI) {
     // notification, and UI channels.
     if (!isTopLevelAgent(record)) return;
 
-    // Emit lifecycle event based on terminal status
     const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
     const eventData = buildEventData(record);
     if (isError) {
@@ -519,7 +510,6 @@ export default function (pi: ExtensionAPI) {
     (globalThis as any)[MANAGER_KEY] = registryEntry;
   }
 
-  // --- Cross-extension RPC via pi.events ---
   // RPC handlers + the `subagents:ready` broadcast are wired on `session_start`
   // (a bound lifecycle event), not at factory time. pi runs every extension
   // factory before the `extensions:` filter and only fires lifecycle events for
@@ -530,7 +520,6 @@ export default function (pi: ExtensionAPI) {
   /** Whether the `@handle` autocomplete wrapper has been stacked on pi's provider. */
   context.mentionProviderRegistered = false;
 
-  // ---- Subagent scheduler ----
   // Session-scoped: store is constructed inside session_start once sessionId
   // is available. Mirrors pi-chonky-tasks's session-scoped task store —
   // schedules reset on /new, restore on /resume.
@@ -601,7 +590,7 @@ export default function (pi: ExtensionAPI) {
       // also avoids the race where a consumer loaded after us misses the event.
       pi.events.emit("subagents:ready", {});
     }
-    if (context.isSchedulingEnabled() && !context.scheduler.isActive()) startScheduler(ctx);
+    if (context.schedulingEnabled && !context.scheduler.isActive()) startScheduler(ctx);
     // Stack `@handle` suggestions on pi's built-in autocomplete. Registered at
     // most once per activation: pi appends wrappers to a list it never prunes,
     // so a second call would layer a duplicate provider on the first. TUI only
@@ -659,7 +648,7 @@ export default function (pi: ExtensionAPI) {
     // only branch allowed to act headlessly; everything else falls through to
     // the main model exactly as it did before mentions existed.
     const canDispatchDirectly = ctx.mode === "tui";
-    if (!canDispatchDirectly && context.getAgentMentionMode() !== "model") return { action: "continue" };
+    if (!canDispatchDirectly && context.agentMentionMode !== "model") return { action: "continue" };
 
     const mention = parseMention(event.text);
     if (!mention) return { action: "continue" };
@@ -805,7 +794,7 @@ export default function (pi: ExtensionAPI) {
     // conversation instead (mention-clone.ts): same messages, same system
     // prompt, off-screen, holding only the `Agent` tool. Nothing reaches the
     // chat, and what it starts is an ordinary top-level agent.
-    if (context.getAgentMentionMode() === "model") {
+    if (context.agentMentionMode === "model") {
       const label = `@${handleBase(type)}`;
       // "Prompting", not "Starting": in this mode nothing starts until the
       // off-screen clone has taken a whole model turn writing the agent's
@@ -926,7 +915,7 @@ export default function (pi: ExtensionAPI) {
   // The setting is passed in so a conversation overlay opened here renders like one opened from
   // `/agents`; the two also share their overlay frame (VIEWER_OVERLAY).
   context.fleet = new FleetList(context.manager, context.agentActivity,
-    () => context.isShowCostEnabled(), () => context.getViewerMarkdown());
+    () => context.showCost, () => context.viewerMarkdown);
   context.fleetViewEnabled = true;
 
   // Claude Code-style `@handle message` prompt mentions. Read live by both the
@@ -940,7 +929,6 @@ export default function (pi: ExtensionAPI) {
   // `output_transcript` frontmatter overrides it per spawn; when the frontmatter
   // is silent, this default applies. Read live at spawn time.
 
-  // ---- Join mode configuration ----
   context.defaultJoinMode = 'smart';
 
   // What an unqualified top-level spawn means. Defaults to background,
@@ -977,7 +965,6 @@ export default function (pi: ExtensionAPI) {
   context.workflowsEnabled = true;
   context.workflowsPinned = false;
 
-  // ---- Disable default agents configuration ----
   // When enabled, the three hardcoded default agents (general-purpose, Explore,
   // Plan) are not registered. User-defined agents from project/global custom
   // agent dirs are completely unaffected — only DEFAULT_AGENTS are suppressed.
@@ -989,13 +976,11 @@ export default function (pi: ExtensionAPI) {
     reloadCustomAgents(); // re-register with new setting
   }
 
-  // ---- Agent tool description mode ----
   // "full" (default) keeps the rich Claude Code-style description; "compact"
   // swaps in a ~75% smaller one for small/local models (#91). Read once at
   // tool registration — flipping it applies on the next pi session.
   context.toolDescriptionMode = "full";
 
-  // ---- Batch tracking for smart join mode ----
   // Collects background agent IDs spawned in the current turn for smart grouping.
   // Uses a debounced timer: each new agent resets the 100ms window so that all
   // parallel tool calls (which may be dispatched across multiple microtasks by the
@@ -1147,37 +1132,20 @@ export default function (pi: ExtensionAPI) {
   // to stderr and falls back to defaults.
   applyAndEmitLoaded(
     {
-      setMaxConcurrent: (n) => context.manager.setMaxConcurrent(n),
-      setMaxConcurrentForeground: (n) => context.manager.setMaxConcurrentForeground(n),
+      context,
       setDefaultMaxTurns,
       setGraceTurns,
-      setDefaultJoinMode: (m) => context.setDefaultJoinMode(m),
-      setBackgroundByDefault: (b) => context.setBackgroundByDefault(b),
-      setSchedulingEnabled: (b) => context.setSchedulingEnabled(b),
-      setScopeModels: (enabled) => context.modelScope.setEnabled(enabled),
-      setStrictAgentFiles: (b) => { context.strictAgentFiles = b; },
-      setDisableDefaultAgents: setDisableDefaultAgents,
-      setToolDescriptionMode: (m) => context.setToolDescriptionMode(m),
-      setFleetView: (b) => context.setFleetViewEnabled(b),
-      setAgentMentions: (m) => context.setAgentMentionMode(m),
+      setMaxSubagentDepth,
+      setFallbackSubagent,
+      setDisableDefaultAgents,
       setRememberAgents,
-      setWidgetMode: (m) => context.setWidgetMode(m),
       setOutputTranscript: setOutputTranscriptDefault,
       setWorktreeIsolation: setWorktreeIsolationEnabled,
-      setWorkflowsEnabled: (b) => context.setWorkflowsEnabled(b),
-      setJevEnabled: (b) => context.setJevEnabled(b),
-      setMaxSubagentDepth: setMaxSubagentDepth,
-      setFallbackSubagent: setFallbackSubagent,
-      setReportUsage: (b) => context.setReportUsage(b),
-      setShowCost: (b) => context.setShowCost(b),
-      setShowModel: (b) => context.setShowModel(b),
-      setViewerMarkdown: (m) => context.setViewerMarkdown(m),
     },
     (event, payload) => pi.events.emit(event, payload),
   );
 
 
-  // ---- Tool definitions ----
   // The definitions live in src/tools/ — see each module's header. What stays here is the
   // registration (which has to happen inside the factory body — see the workflow-collision
   // note below) and what the tools need from this body: five closures and the extension API.
@@ -1199,7 +1167,6 @@ export default function (pi: ExtensionAPI) {
   const registeredAgentTool = withUsageReporting(createAgentTool(toolsDeps), toolsDeps);
   pi.registerTool(registeredAgentTool);
 
-  // ---- Workflow tool ----
 
   /**
    * Live runs, by task id. The tool returns before the run finishes, so its
@@ -1210,11 +1177,10 @@ export default function (pi: ExtensionAPI) {
   context.workflowTasks = new Map<string, WorkflowTask>();
 
   const workflowTool = createWorkflowTool(toolsDeps);
-  if (context.isWorkflowsEnabled()) pi.registerTool(workflowTool);
+  if (context.workflowsEnabled) pi.registerTool(workflowTool);
 
-  // ---- Jev agent-selector tool (opt-in; default off) ----
   const jevTool = createJevTool(toolsDeps);
-  if (context.isJevEnabled()) pi.registerTool(jevTool);
+  if (context.jevEnabled) pi.registerTool(jevTool);
 
   /**
    * Act on {@link decideWorkflowCollision} — the half that needs the host.
@@ -1250,14 +1216,14 @@ export default function (pi: ExtensionAPI) {
     };
 
     try {
-      if (!context.isWorkflowsEnabled()) return;
+      if (!context.workflowsEnabled) return;
 
       const verdict = decideWorkflowCollision({
         tools: pi.getAllTools(),
         // Identifies our own registration: this extension does not know its
         // install path, and the description is the one field certainly ours.
         ownDescription: workflowTool.description,
-        pinned: context.isWorkflowsPinned(),
+        pinned: context.workflowsPinned,
       });
       if (verdict.kind === "none") return;
       if (verdict.kind === "report") {
@@ -1306,7 +1272,7 @@ export default function (pi: ExtensionAPI) {
     // The flag is the same machinery by another door, so the master switch has
     // to close it too — silently ignoring a flag the user typed would be worse
     // than saying why nothing ran.
-    if (!context.isWorkflowsEnabled()) {
+    if (!context.workflowsEnabled) {
       report(
         `--${WORKFLOW_FILE_FLAG} ignored: workflows are off. Turn them on in /agents → Settings → Workflows, ` +
           'or set `"workflowsEnabled": true` in .pi/subagents.json.',
@@ -1362,7 +1328,6 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  // ---- get_subagent_result / steer_subagent tools ----
   registerToolReportingUsage(createGetSubagentResultTool(toolsDeps), toolsDeps);
   registerToolReportingUsage(createSteerSubagentTool(toolsDeps), toolsDeps);
 

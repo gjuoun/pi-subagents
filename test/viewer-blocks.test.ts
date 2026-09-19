@@ -4,7 +4,6 @@ import {
   COMPACT_BODY_LINES,
   FULL_BODY_LINES,
   indexToolResults,
-  isBuiltInTool,
   PARAMS_FOLDED,
   PARAMS_LINE_LIMIT,
   paramLineCount,
@@ -258,9 +257,3 @@ describe("blockTint", () => {
   });
 });
 
-describe("isBuiltInTool", () => {
-  it("knows the shaped tools from the unshaped ones", () => {
-    expect(isBuiltInTool("read")).toBe(true);
-    expect(isBuiltInTool("jun_code")).toBe(false);
-  });
-});

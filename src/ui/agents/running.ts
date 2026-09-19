@@ -52,7 +52,7 @@ export async function viewAgentConversation(ctx: ExtensionCommandContext, record
         if (deps.context.manager.abort(record.id)) {
           ctx.ui.notify(`Stopped "${record.description}".`, "info");
         }
-      }, keybindings, (message: string) => deps.context.manager.steer(record.id, message), () => deps.context.getViewerMarkdown());
+      }, keybindings, (message: string) => deps.context.manager.steer(record.id, message), () => deps.context.viewerMarkdown);
     },
     // One shared frame for every entry point — see VIEWER_OVERLAY.
     { ...VIEWER_OVERLAY },

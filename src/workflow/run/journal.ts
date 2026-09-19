@@ -1,47 +1,18 @@
 /**
  * journal.ts — the record a workflow run leaves so a later run can skip work.
  *
- * ## What resume actually buys
+ * Each entry is keyed by position *and* a hash of everything that decides what
+ * that agent does; a replay walks positions in order and stops reusing at the
+ * first mismatch, because a later match was produced under different upstream
+ * conditions. A failure is journaled as one and never replayed as one — resuming
+ * a run that died at agent 5 exists to retry agent 5. A journal carrying
+ * `agent({ resume })` declines the cache whole: a replayed agent is text from a
+ * file, not a live child, so there is nothing for a later `resume` to continue.
+ * Under `pipeline` the arrival order can differ, which is why the key is checked
+ * as well as the position — that costs cache hits, never correctness.
  *
- * The documented iteration loop is "edit the persisted script and re-run it".
- * Without a journal that re-pays every agent from scratch, which for a 40-agent
- * audit is the entire cost of the run — to change one line of the last stage.
- * With one, the unchanged prefix comes back from disk and only the edit runs.
- *
- * ## Why a *prefix*, and not a lookup table
- *
- * Each entry is keyed by both its position in the run and a hash of everything
- * that decides what that agent does. A replay walks positions in order and
- * stops reusing at the first entry that does not match — every call from there
- * on runs live. Reusing later matches out of order would be reusing a result
- * produced under different upstream conditions: the same prompt at position 12
- * of a *different* run is not the same work, because what fed it changed.
- *
- * A failed agent is journaled as a failure and never replayed as one. Resuming
- * a run that died at agent 5 exists to retry agent 5, so the prefix ends there
- * and 5 onwards run live — the alternative would make a failure permanent.
- *
- * ## Runs that use `agent({ resume })`
- *
- * Those are not replayed at all. A replayed agent is text from a file, not a
- * live child, so there is no conversation in this run for a later `resume` to
- * continue — and the id map that would find one belongs to the run that did
- * the spawning. Rather than replay a prefix that strands the first `resume`
- * call, a journal carrying one declines the whole cache and the run pays in
- * full. Coarse on purpose: the alternative is tracking which label each entry
- * ran under and capping the prefix below the earliest one that gets resumed,
- * which is a second key concept for a case that costs one run.
- *
- * ## Ordering under concurrency
- *
- * Positions are assigned as calls arrive, and with `pipeline` that order
- * depends on which agent finished first. A replay usually reproduces it, since
- * cached calls answer in journal order, but it is not guaranteed. That is why
- * the key is checked as well as the position: a run that interleaves
- * differently loses cache hits, it never returns another agent's answer.
- *
- * The file is JSON Lines, appended as each agent settles, so a run that is
- * killed mid-flight still leaves everything it had finished.
+ * JSON Lines, appended as each agent settles, so a run killed mid-flight keeps
+ * everything it had finished.
  */
 
 import { createHash } from "node:crypto";

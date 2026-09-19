@@ -1,34 +1,18 @@
 /**
- * workflow-card.ts — the inline transcript card for a running workflow.
+ * workflow-card.ts — the inline transcript card for a running workflow: a `▸ Workflow`
+ * head, the phase tree with one row per agent, and the script's `log()` output below.
  *
- * ```
- * ▸ Workflow  review-changes                       3/7 agents · 1m12s
- *   Review changed files across dimensions, verify each finding
- *   ╭─ Review
- *   │ ├─ ✔ review:bugs      · Explore · haiku · 18.4k · 12 tool calls · 42s
- *   │ ├─ ⟳ review:perf      · Explore · 8 tool calls · 21s
- *   │ └─ ⟳ review:security
- *   ╰─ Verify
- *     └─ ⟳ verify:auth.ts   · Plan · 3 tool calls · 9s
- *   ⎿  scanned 41 changed files
- * ```
+ * **The glyphs are not the dialog's glyphs.** The inline row keys off the *raw* entry
+ * `state` (start | progress | done | error), not the derived display state, so a
+ * skipped or blocked agent renders as a plain ✘ here while the workflows dialog
+ * distinguishes them. `displayState` is deliberately not consulted below.
  *
- * Two things about this file are easy to get wrong.
- *
- * **The glyphs are not the dialog's glyphs.** The inline row keys off the *raw*
- * entry `state` (start | progress | done | error), not the derived display
- * state, so a skipped or blocked agent renders as a plain ✘ here while the
- * workflows dialog distinguishes them. `displayState` is deliberately not
- * consulted below.
- *
- * **The layout is pure.** `layoutWorkflowCard` returns coloured segments and
- * never touches a theme or a terminal, so the same layout drives the `Workflow`
- * tool's `renderResult` and a standalone session entry (a workflow launched from
- * a CLI flag has no tool call to attach to). Theme application is the thin
- * `styleWorkflowCardLines` wrapper on top.
- *
- * All state derivation lives in `src/workflow/progress.ts`; this file only
- * arranges what that module returns.
+ * **The layout is pure.** `layoutWorkflowCard` returns coloured segments and never
+ * touches a theme or a terminal, so the same layout drives the `Workflow` tool's
+ * `renderResult` and a standalone session entry (a workflow launched from a CLI flag
+ * has no tool call to attach to). Theme application is the thin
+ * `styleWorkflowCardLines` wrapper on top. All state derivation lives in
+ * `src/workflow/run/progress.ts`; this file only arranges what it returns.
  */
 
 import { stripTerminalSequences, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
@@ -46,13 +30,6 @@ import {
   type WorkflowRunStatus,
 } from "../../workflow/run/progress.js";
 import type { WorkflowMeta } from "../../workflow/script/meta.js";
-
-/**
- * Header re-render cadence. Claude Code ticks the workflow clock once a second,
- * not at the 80ms spinner cadence — the running glyph is static, so there is
- * nothing to animate faster than the elapsed time changes.
- */
-export const WORKFLOW_TICK_MS = 1000;
 
 /** Widest label column before stats stop being aligned and just follow the label. */
 const LABEL_COLUMN_MAX = 28;
@@ -290,7 +267,8 @@ export function clampLine(line: WorkflowCardLine, width: number): WorkflowCardLi
   return clamped;
 }
 
-const lineWidth = (line: WorkflowCardLine) => line.reduce((sum, s) => sum + visibleWidth(s.text), 0);
+/** Visible width of a card line. The workflows dialog lays out the same segments. */
+export const lineWidth = (line: WorkflowCardLine) => line.reduce((sum, s) => sum + visibleWidth(s.text), 0);
 
 /**
  * Build the card.
@@ -310,7 +288,6 @@ export function layoutWorkflowCard(input: WorkflowCardInput): WorkflowCardLine[]
 
   const lines: WorkflowCardLine[] = [];
 
-  // ---- Header: `<name>` with the stats flush right ----
   // The tool name appears only when nothing above the card already carries it.
   // As a tool result there is a `▸ SubagentWorkflow …` call line directly above,
   // and repeating it put two near-identical pointer lines back to back.
@@ -329,7 +306,6 @@ export function layoutWorkflowCard(input: WorkflowCardInput): WorkflowCardLine[]
 
   if (head.subtext) lines.push(clampLine([{ text: `  ${head.subtext}`, color: "dim" }], width));
 
-  // ---- Phase tree ----
   // Stats line up in one column across the whole card, not per group, so the
   // eye can scan them; a label past the cap just pushes its own stats along.
   const labelColumn = Math.min(
@@ -387,7 +363,6 @@ export function layoutWorkflowCard(input: WorkflowCardInput): WorkflowCardLine[]
     });
   });
 
-  // ---- log() output, below the tree ----
   for (const message of logs) {
     const [first, ...rest] = message.split("\n");
     lines.push(clampLine([{ text: `  ${glyphs.log}  ${first}`, color: "dim" }], width));
@@ -396,7 +371,6 @@ export function layoutWorkflowCard(input: WorkflowCardInput): WorkflowCardLine[]
     }
   }
 
-  // ---- Size warning ----
   const totalTokens =
     input.totalTokens ?? agents.reduce((sum, entry) => sum + (entry.tokens ?? 0), 0);
   const warning = sizeWarning({

@@ -54,7 +54,6 @@ export function resolveDefaultModel(
       const provider = configModel.slice(0, slashIdx);
       const modelId = configModel.slice(slashIdx + 1);
 
-      // Build a set of available model keys for fast lookup
       const available = registry.getAvailable?.();
       const availableKeys = available
         ? new Set(available.map((m: any) => `${m.provider}/${m.id}`))
@@ -216,6 +215,23 @@ export interface RunResult {
 }
 
 /**
+ * Fold one assistant `message_end` event's usage into `onAssistantUsage`. The event message is
+ * read through a cast for the same reason the shims below are: pi's message type and its
+ * provider usage type are peer-versioned, and only these five fields are read.
+ */
+function reportAssistantUsage(message: unknown, onAssistantUsage?: (usage: LifetimeUsage) => void): void {
+  const u = (message as any).usage;
+  if (!u || !onAssistantUsage) return;
+  onAssistantUsage({
+    input: u.input ?? 0,
+    output: u.output ?? 0,
+    cacheWrite: u.cacheWrite ?? 0,
+    cacheRead: u.cacheRead ?? 0,
+    cost: u.cost?.total ?? 0,
+  });
+}
+
+/**
  * Subscribe to a session and collect the last assistant message text.
  * Returns an object with a `getText()` getter and an `unsubscribe` function.
  */
@@ -312,7 +328,6 @@ export async function runAgent(
   // appliers write, overridable per run.
   const limits = options.limits ?? defaultRunLimits;
 
-  // Resolve working directory: worktree override > parent cwd
   const effectiveCwd = options.cwd ?? ctx.cwd;
   // Filesystem work happens in effectiveCwd; config discovery in configCwd.
   // They differ only for SpawnOptions.cwd spawns (config stays with the parent).
@@ -320,7 +335,6 @@ export async function runAgent(
 
   const env = await detectEnv(options.pi, effectiveCwd);
 
-  // Get parent system prompt for append-mode agents
   const parentSystemPrompt = ctx.getSystemPrompt();
 
   // Build prompt extras (memory, skill preloading)
@@ -366,7 +380,6 @@ export async function runAgent(
     }
   }
 
-  // Build system prompt from agent config
   let systemPrompt: string;
   if (agentConfig) {
     systemPrompt = buildAgentPrompt(agentConfig, effectiveCwd, env, parentSystemPrompt, extras);
@@ -524,12 +537,10 @@ export async function runAgent(
     }
   }
 
-  // Resolve model: explicit option > config.model > parent model
   const model = options.model ?? resolveDefaultModel(
     ctx.model, ctx.modelRegistry, agentConfig?.model,
   );
 
-  // Resolve thinking level: explicit option > agent config > undefined (inherit)
   const thinkingLevel = options.thinkingLevel ?? agentConfig?.thinking;
 
   const disallowedSet = agentConfig?.disallowedTools
@@ -776,14 +787,7 @@ export async function runAgent(
       options.onToolActivity?.({ type: "end", toolName: event.toolName });
     }
     if (event.type === "message_end" && event.message.role === "assistant") {
-      const u = (event.message as any).usage;
-      if (u) options.onAssistantUsage?.({
-        input: u.input ?? 0,
-        output: u.output ?? 0,
-        cacheWrite: u.cacheWrite ?? 0,
-        cacheRead: u.cacheRead ?? 0,
-        cost: u.cost?.total ?? 0,
-      });
+      reportAssistantUsage(event.message, options.onAssistantUsage);
     }
     if (event.type === "compaction_end" && !event.aborted && event.result) {
       options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
@@ -793,7 +797,6 @@ export async function runAgent(
   const collector = collectResponseText(session);
   const cleanupAbort = forwardAbortSignal(session, options.signal);
 
-  // Build the effective prompt: optionally prepend parent context
   let effectivePrompt = prompt;
   if (options.inheritContext) {
     const parentContext = buildParentContext(ctx);
@@ -870,14 +873,7 @@ export async function resumeAgent(
         if (event.type === "tool_execution_start") options.onToolActivity?.({ type: "start", toolName: event.toolName });
         if (event.type === "tool_execution_end") options.onToolActivity?.({ type: "end", toolName: event.toolName });
         if (event.type === "message_end" && event.message.role === "assistant") {
-          const u = (event.message as any).usage;
-          if (u) options.onAssistantUsage?.({
-            input: u.input ?? 0,
-            output: u.output ?? 0,
-            cacheWrite: u.cacheWrite ?? 0,
-            cacheRead: u.cacheRead ?? 0,
-            cost: u.cost?.total ?? 0,
-          });
+          reportAssistantUsage(event.message, options.onAssistantUsage);
         }
         if (event.type === "compaction_end" && !event.aborted && event.result) {
           options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });

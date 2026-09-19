@@ -1,42 +1,24 @@
 /**
- * collisions.ts — deciding what to do when another extension already offers a
- * workflow tool.
+ * collisions.ts — deciding what to do when another extension already offers a workflow
+ * tool.
  *
- * Workflows are on by default, so this extension can be the *second*
- * orchestrator in a session rather than the only one. Two workflow tools in one
- * spec is worse than either alone: the model has to guess which to call, and
- * pays for both descriptions to find out. The other extension was installed
- * deliberately; a default of ours should not compete with it.
+ * Workflows are on by default, so this extension can be the *second* orchestrator in a
+ * session. Two workflow tools in one spec is worse than either alone: the model has to
+ * guess which to call and pays for both descriptions to find out. The other extension
+ * was installed deliberately; a default of ours should not compete with it.
  *
- * ## What counts as a conflict
+ * A conflict is an exact name match against {@link FOREIGN_WORKFLOW_TOOL_NAMES} from a
+ * tool that is not ours — exact and not a substring on purpose, since `Workflow` is a
+ * common word in names that have nothing to do with orchestration
+ * (`github_workflow_run`, `list_workflows`). Two shapes: a foreign tool took our name
+ * (registration is first-wins, so ours never reached the registry and the rest of the
+ * feature comes down with it), or one sits beside ours under a different name, which
+ * the caller can withdraw. The "ours registered first" direction of the first shape is
+ * undetectable: pi's registry keeps winners only.
  *
- * An exact name match against {@link FOREIGN_WORKFLOW_TOOL_NAMES}, from a tool
- * that is not ours. Exact and not a substring on purpose: `Workflow` is a
- * common word in tool names that have nothing to do with orchestration
- * (`github_workflow_run`, `list_workflows`), and silently disabling the feature
- * against one of those would be a bug nobody could see.
- *
- * Two shapes, both decided here:
- *
- * 1. **A foreign tool took our name.** Registration is first-wins across
- *    extensions (`getAllRegisteredTools` skips a name it already has), and the
- *    winner also overwrites a built-in of the same name. Nothing throws, and
- *    there is no tool-conflict diagnostic the way there is for shortcuts. Ours
- *    never reached the registry, so there is nothing to withdraw — but the rest
- *    of the feature (the menu, the CLI flag) is still live and would drive a
- *    tool the model cannot call. It comes down with it.
- * 2. **A foreign tool sits beside ours** under a different name, typically
- *    Claude Code's bare `Workflow`. Both are registered and both are offered.
- *    That one the caller can actually withdraw — `withdraw` says so.
- *
- * Only one direction of case 1 is detectable. If ours registered first, the
- * other extension's tool is the one dropped, and pi exposes no way to see a
- * tool that lost — the registry keeps winners only.
- *
- * Split from the acting half deliberately: everything here is a pure function
- * of the tool list, so the policy can be tested without a host that can be made
- * to register a competing extension. The caller owns `getAllTools`, the notify
- * and the `setActiveTools` — see `resolveWorkflowCollisions` in index.ts.
+ * Split from the acting half deliberately — everything here is a pure function of the
+ * tool list, so the policy is testable without a host that registers a competing
+ * extension. The caller owns `getAllTools`, the notify and the `setActiveTools`.
  */
 
 import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";

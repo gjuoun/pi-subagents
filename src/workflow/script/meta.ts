@@ -193,7 +193,7 @@ function assertPhases(value: unknown): WorkflowPhaseMeta[] | undefined {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       fail(`\`meta.phases[${index}]\` must be an object with a \`title\`.`);
     }
-    const { title, detail, model } = entry as Record<string, unknown>;
+    const { title, detail, model } = entry;
     if (typeof title !== "string" || title.trim() === "") {
       fail(`\`meta.phases[${index}].title\` must be a non-empty string.`);
     }
@@ -279,7 +279,7 @@ export function extractMeta(source: string): MetaExtraction {
   const meta: WorkflowMeta = {
     name: raw.name,
     description: raw.description,
-    ...(raw.whenToUse !== undefined ? { whenToUse: raw.whenToUse as string } : {}),
+    ...(raw.whenToUse !== undefined ? { whenToUse: raw.whenToUse } : {}),
     ...(phases !== undefined ? { phases } : {}),
   };
 

@@ -313,33 +313,59 @@ export interface SubagentsSettings {
 
 export type ToolDescriptionMode = "full" | "compact" | "custom";
 
-/** Setter hooks used by applySettings to wire persisted values into in-memory state. */
-export interface SettingsAppliers {
-  setMaxConcurrent: (n: number) => void;
-  setMaxConcurrentForeground: (n: number) => void;
-  setDefaultMaxTurns: (n: number) => void;
-  setGraceTurns: (n: number) => void;
-  setDefaultJoinMode: (mode: JoinMode) => void;
-  setBackgroundByDefault: (b: boolean) => void;
-  setSchedulingEnabled: (b: boolean) => void;
-  setScopeModels: (enabled: boolean) => void;
-  setStrictAgentFiles: (b: boolean) => void;
-  setDisableDefaultAgents: (b: boolean) => void;
-  setToolDescriptionMode: (mode: ToolDescriptionMode) => void;
-  setFleetView: (b: boolean) => void;
-  setAgentMentions: (mode: AgentMentionMode) => void;
-  setRememberAgents: (b: boolean) => void;
-  setWidgetMode: (mode: WidgetMode) => void;
-  setOutputTranscript: (b: boolean) => void;
-  setWorktreeIsolation: (b: boolean) => void;
-  setWorkflowsEnabled: (b: boolean) => void;
-  setJevEnabled: (b: boolean) => void;
-  setMaxSubagentDepth: (n: number) => void;
-  setFallbackSubagent: (v: string | undefined) => void;
-  setReportUsage: (b: boolean) => void;
-  setShowCost: (b: boolean) => void;
-  setShowModel: (b: boolean) => void;
-  setViewerMarkdown: (mode: ViewerMarkdownMode) => void;
+/**
+ * The activation state a setting lands in. Declared structurally rather than imported —
+ * `config/` may not import `extension/` — and every member is one `ActivationContext` has;
+ * the {@link FIELDS} table below is what keeps the two in step, since each entry's `apply`
+ * names the member it writes.
+ */
+export interface SettingsSurface {
+  /** The two concurrency pools: the only manager state a setting drives. */
+  manager: { setMaxConcurrent(n: number): void; setMaxConcurrentForeground(n: number): void };
+  /** The `scopeModels` policy. */
+  modelScope: { setEnabled(enabled: boolean): void };
+
+  strictAgentFiles: boolean;
+  defaultJoinMode: JoinMode;
+  backgroundByDefault: boolean;
+  schedulingEnabled: boolean;
+  toolDescriptionMode: ToolDescriptionMode;
+  fleetViewEnabled: boolean;
+  agentMentionMode: AgentMentionMode;
+  widgetMode: WidgetMode;
+  reportUsage: boolean;
+  showCost: boolean;
+  showModel: boolean;
+  viewerMarkdown: ViewerMarkdownMode;
+  workflowsEnabled: boolean;
+  jevEnabled: boolean;
+
+  // The setters whose assignment does more than store the value: a repaint, the usage
+  // drain, or latching the user's own answer.
+  setReportUsage(b: boolean): void;
+  setShowCost(b: boolean): void;
+  setShowModel(b: boolean): void;
+  setWidgetMode(m: WidgetMode): void;
+  setFleetViewEnabled(b: boolean): void;
+  setWorkflowsEnabled(b: boolean): void;
+}
+
+/**
+ * Where a sanitized setting lands: the activation surface above, plus the settings owned by
+ * modules that read them directly rather than through the context. Those arrive as plain
+ * callbacks because they are module-level state — the runner's turn budgets, the registry's
+ * depth and fallback flags, the transcript and worktree switches.
+ */
+export interface SettingsTarget {
+  context: SettingsSurface;
+  setDefaultMaxTurns(n: number): void;
+  setGraceTurns(n: number): void;
+  setMaxSubagentDepth(n: number): void;
+  setFallbackSubagent(v: string | undefined): void;
+  setDisableDefaultAgents(b: boolean): void;
+  setRememberAgents(b: boolean): void;
+  setOutputTranscript(b: boolean): void;
+  setWorktreeIsolation(b: boolean): void;
 }
 
 /** Emit callback — a subset of `pi.events.emit` to keep helpers testable. */
@@ -359,118 +385,211 @@ const MAX_TURNS_CEILING = 10_000;
 const GRACE_TURNS_CEILING = 1_000;
 const SUBAGENT_DEPTH_CEILING = 16;
 
+/** Both halves of one persisted setting: how it is sanitized, and where the value lands. */
+interface SettingsField {
+  /** Accept the raw JSON value, or return `undefined` to drop the field. */
+  parse: (raw: unknown) => unknown;
+  /** Apply this field's own sanitized value — read off `s`, so the two halves stay typed. */
+  apply: (target: SettingsTarget, s: SubagentsSettings) => void;
+}
+
+/** Run `apply` only when the setting is present: absence keeps the runtime default. */
+function when<T>(value: T | undefined, apply: (value: T) => void): void {
+  if (value !== undefined) apply(value);
+}
+
+/** Accept a boolean, or `undefined` to drop the field. */
+function bool(raw: unknown): boolean | undefined {
+  return typeof raw === "boolean" ? raw : undefined;
+}
+
+/** Accept an integer inside `[min, max]`, or `undefined` to drop the field. */
+function intInRange(min: number, max: number): (raw: unknown) => number | undefined {
+  return (raw) => (typeof raw === "number" && Number.isInteger(raw) && raw >= min && raw <= max ? raw : undefined);
+}
+
+/** Accept one of a known set of spellings, or `undefined` to drop the field. */
+function oneOf<T extends string>(valid: ReadonlySet<string>): (raw: unknown) => T | undefined {
+  return (raw) => (typeof raw === "string" && valid.has(raw) ? (raw as T) : undefined);
+}
+
+/**
+ * `fallbackSubagent`'s one non-string spelling: a boolean would otherwise be dropped,
+ * silently leaving the PERMISSIVE default in place. Every string is an agent name except the
+ * `none` sentinel, which the resolver recognizes — so a mistaken "off" fails loudly at
+ * dispatch instead of meaning something different here than it does there.
+ */
+function parseFallbackSubagent(raw: unknown): string | undefined {
+  if (raw === false) return NO_FALLBACK;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+}
+
+/**
+ * Every persisted setting, once: how it is sanitized out of raw JSON, and where the sanitized
+ * value lands. The shape check, the applier interface and the `typeof` re-checks it used to
+ * take are all this table; the `Record` type makes a field with no writer a compile error.
+ */
+const FIELDS: Record<keyof SubagentsSettings, SettingsField> = {
+  maxConcurrent: {
+    parse: intInRange(1, MAX_CONCURRENT_CEILING),
+    apply: (t, s) => when(s.maxConcurrent, (v) => t.context.manager.setMaxConcurrent(v)),
+  },
+  // Floor 0, not 1 like maxConcurrent above: 0 is the documented "unlimited" value and the
+  // default, so dropping it would silently be unrepresentable.
+  maxConcurrentForeground: {
+    parse: intInRange(0, MAX_CONCURRENT_CEILING),
+    apply: (t, s) => when(s.maxConcurrentForeground, (v) => t.context.manager.setMaxConcurrentForeground(v)),
+  },
+  defaultMaxTurns: {
+    parse: intInRange(0, MAX_TURNS_CEILING),
+    apply: (t, s) => when(s.defaultMaxTurns, (v) => t.setDefaultMaxTurns(v)),
+  },
+  graceTurns: {
+    parse: intInRange(1, GRACE_TURNS_CEILING),
+    apply: (t, s) => when(s.graceTurns, (v) => t.setGraceTurns(v)),
+  },
+  maxSubagentDepth: {
+    parse: intInRange(0, SUBAGENT_DEPTH_CEILING),
+    apply: (t, s) => when(s.maxSubagentDepth, (v) => t.setMaxSubagentDepth(v)),
+  },
+  fallbackSubagent: {
+    parse: parseFallbackSubagent,
+    apply: (t, s) => when(s.fallbackSubagent, (v) => t.setFallbackSubagent(v)),
+  },
+  defaultJoinMode: {
+    parse: oneOf<JoinMode>(VALID_JOIN_MODES),
+    apply: (t, s) =>
+      when(s.defaultJoinMode, (v) => {
+        t.context.defaultJoinMode = v;
+      }),
+  },
+  backgroundByDefault: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.backgroundByDefault, (v) => {
+        t.context.backgroundByDefault = v;
+      }),
+  },
+  schedulingEnabled: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.schedulingEnabled, (v) => {
+        t.context.schedulingEnabled = v;
+      }),
+  },
+  scopeModels: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.scopeModels, (v) => {
+        t.context.modelScope.setEnabled(v);
+      }),
+  },
+  strictAgentFiles: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.strictAgentFiles, (v) => {
+        t.context.strictAgentFiles = v;
+      }),
+  },
+  disableDefaultAgents: {
+    parse: bool,
+    apply: (t, s) => when(s.disableDefaultAgents, (v) => t.setDisableDefaultAgents(v)),
+  },
+  toolDescriptionMode: {
+    parse: oneOf<ToolDescriptionMode>(VALID_TOOL_DESCRIPTION_MODES),
+    apply: (t, s) =>
+      when(s.toolDescriptionMode, (v) => {
+        t.context.toolDescriptionMode = v;
+      }),
+  },
+  fleetView: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.fleetView, (v) => {
+        t.context.setFleetViewEnabled(v);
+      }),
+  },
+  // Was a boolean before the `model` mode existed. A hand-written or previously-written
+  // `true` means "on", which is now the default `model`.
+  agentMentions: {
+    parse: (raw) =>
+      typeof raw === "boolean" ? (raw ? "model" : "off") : oneOf<AgentMentionMode>(VALID_AGENT_MENTION_MODES)(raw),
+    apply: (t, s) =>
+      when(s.agentMentions, (v) => {
+        t.context.agentMentionMode = v;
+      }),
+  },
+  rememberAgents: {
+    parse: bool,
+    apply: (t, s) => when(s.rememberAgents, (v) => t.setRememberAgents(v)),
+  },
+  widgetMode: {
+    parse: oneOf<WidgetMode>(VALID_WIDGET_MODES),
+    apply: (t, s) =>
+      when(s.widgetMode, (v) => {
+        t.context.setWidgetMode(v);
+      }),
+  },
+  outputTranscript: {
+    parse: bool,
+    apply: (t, s) => when(s.outputTranscript, (v) => t.setOutputTranscript(v)),
+  },
+  worktreeIsolation: {
+    parse: bool,
+    apply: (t, s) => when(s.worktreeIsolation, (v) => t.setWorktreeIsolation(v)),
+  },
+  reportUsage: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.reportUsage, (v) => {
+        t.context.setReportUsage(v);
+      }),
+  },
+  showCost: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.showCost, (v) => {
+        t.context.setShowCost(v);
+      }),
+  },
+  showModel: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.showModel, (v) => {
+        t.context.setShowModel(v);
+      }),
+  },
+  viewerMarkdown: {
+    parse: oneOf<ViewerMarkdownMode>(VALID_VIEWER_MARKDOWN_MODES),
+    apply: (t, s) =>
+      when(s.viewerMarkdown, (v) => {
+        t.context.viewerMarkdown = v;
+      }),
+  },
+  workflowsEnabled: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.workflowsEnabled, (v) => {
+        t.context.setWorkflowsEnabled(v);
+      }),
+  },
+  jevEnabled: {
+    parse: bool,
+    apply: (t, s) =>
+      when(s.jevEnabled, (v) => {
+        t.context.jevEnabled = v;
+      }),
+  },
+};
+
 /** Drop fields that don't match the expected shape. Silent — garbage becomes absent. */
 function sanitize(raw: unknown): SubagentsSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
   const out: SubagentsSettings = {};
-  if (
-    Number.isInteger(r.maxConcurrent) &&
-    (r.maxConcurrent as number) >= 1 &&
-    (r.maxConcurrent as number) <= MAX_CONCURRENT_CEILING
-  ) {
-    out.maxConcurrent = r.maxConcurrent as number;
-  }
-  // Floor 0, not 1 like maxConcurrent above: 0 is the documented "unlimited"
-  // value and the default, so dropping it would silently be unrepresentable.
-  if (
-    Number.isInteger(r.maxConcurrentForeground) &&
-    (r.maxConcurrentForeground as number) >= 0 &&
-    (r.maxConcurrentForeground as number) <= MAX_CONCURRENT_CEILING
-  ) {
-    out.maxConcurrentForeground = r.maxConcurrentForeground as number;
-  }
-  if (
-    Number.isInteger(r.defaultMaxTurns) &&
-    (r.defaultMaxTurns as number) >= 0 &&
-    (r.defaultMaxTurns as number) <= MAX_TURNS_CEILING
-  ) {
-    out.defaultMaxTurns = r.defaultMaxTurns as number;
-  }
-  if (
-    Number.isInteger(r.graceTurns) &&
-    (r.graceTurns as number) >= 1 &&
-    (r.graceTurns as number) <= GRACE_TURNS_CEILING
-  ) {
-    out.graceTurns = r.graceTurns as number;
-  }
-  if (
-    Number.isInteger(r.maxSubagentDepth) &&
-    (r.maxSubagentDepth as number) >= 0 &&
-    (r.maxSubagentDepth as number) <= SUBAGENT_DEPTH_CEILING
-  ) {
-    out.maxSubagentDepth = r.maxSubagentDepth as number;
-  }
-  if (typeof r.defaultJoinMode === "string" && VALID_JOIN_MODES.has(r.defaultJoinMode)) {
-    out.defaultJoinMode = r.defaultJoinMode as JoinMode;
-  }
-  if (typeof r.backgroundByDefault === "boolean") {
-    out.backgroundByDefault = r.backgroundByDefault;
-  }
-  if (typeof r.schedulingEnabled === "boolean") {
-    out.schedulingEnabled = r.schedulingEnabled;
-  }
-  if (typeof r.scopeModels === "boolean") {
-    out.scopeModels = r.scopeModels;
-  }
-  if (typeof r.strictAgentFiles === "boolean") {
-    out.strictAgentFiles = r.strictAgentFiles;
-  }
-  if (typeof r.disableDefaultAgents === "boolean") {
-    out.disableDefaultAgents = r.disableDefaultAgents;
-  }
-  if (typeof r.toolDescriptionMode === "string" && VALID_TOOL_DESCRIPTION_MODES.has(r.toolDescriptionMode)) {
-    out.toolDescriptionMode = r.toolDescriptionMode as ToolDescriptionMode;
-  }
-  if (typeof r.fleetView === "boolean") {
-    out.fleetView = r.fleetView;
-  }
-  // Was a boolean before the `model` mode existed. A hand-written or
-  // previously-written `true` means "on", which is now the default `model`.
-  if (typeof r.agentMentions === "boolean") {
-    out.agentMentions = r.agentMentions ? "model" : "off";
-  } else if (typeof r.agentMentions === "string" && VALID_AGENT_MENTION_MODES.has(r.agentMentions)) {
-    out.agentMentions = r.agentMentions as AgentMentionMode;
-  }
-  if (typeof r.rememberAgents === "boolean") {
-    out.rememberAgents = r.rememberAgents;
-  }
-  if (typeof r.widgetMode === "string" && VALID_WIDGET_MODES.has(r.widgetMode)) {
-    out.widgetMode = r.widgetMode as WidgetMode;
-  }
-  if (typeof r.outputTranscript === "boolean") {
-    out.outputTranscript = r.outputTranscript;
-  }
-  if (typeof r.worktreeIsolation === "boolean") {
-    out.worktreeIsolation = r.worktreeIsolation;
-  }
-  if (typeof r.reportUsage === "boolean") {
-    out.reportUsage = r.reportUsage;
-  }
-  if (typeof r.showCost === "boolean") {
-    out.showCost = r.showCost;
-  }
-  if (typeof r.showModel === "boolean") {
-    out.showModel = r.showModel;
-  }
-  if (typeof r.viewerMarkdown === "string" && VALID_VIEWER_MARKDOWN_MODES.has(r.viewerMarkdown)) {
-    out.viewerMarkdown = r.viewerMarkdown as ViewerMarkdownMode;
-  }
-  if (typeof r.workflowsEnabled === "boolean") {
-    out.workflowsEnabled = r.workflowsEnabled;
-  }
-  if (typeof r.jevEnabled === "boolean") {
-    out.jevEnabled = r.jevEnabled;
-  }
-  if (r.fallbackSubagent === false) {
-    // The only non-string spelling worth accepting: a boolean would otherwise be
-    // dropped, silently leaving the PERMISSIVE default in place. Every string is
-    // an agent name except the `none` sentinel, which the resolver recognizes —
-    // so a mistaken "off" fails loudly at dispatch instead of meaning something
-    // different here than it does there.
-    out.fallbackSubagent = NO_FALLBACK;
-  } else if (typeof r.fallbackSubagent === "string" && r.fallbackSubagent.trim()) {
-    out.fallbackSubagent = r.fallbackSubagent.trim();
+  for (const key of Object.keys(FIELDS) as (keyof SubagentsSettings)[]) {
+    const value = FIELDS[key].parse(r[key]);
+    if (value !== undefined) Object.assign(out, { [key]: value });
   }
   return out;
 }
@@ -520,35 +639,11 @@ export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()):
   }
 }
 
-/** Apply persisted settings to the in-memory state via caller-supplied setters. */
-export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers): void {
-  if (typeof s.maxConcurrent === "number") appliers.setMaxConcurrent(s.maxConcurrent);
-  if (typeof s.maxConcurrentForeground === "number") {
-    appliers.setMaxConcurrentForeground(s.maxConcurrentForeground);
+/** Apply persisted settings to the in-memory state the {@link FIELDS} table names. */
+export function applySettings(s: SubagentsSettings, target: SettingsTarget): void {
+  for (const key of Object.keys(FIELDS) as (keyof SubagentsSettings)[]) {
+    FIELDS[key].apply(target, s);
   }
-  if (typeof s.defaultMaxTurns === "number") appliers.setDefaultMaxTurns(s.defaultMaxTurns);
-  if (typeof s.graceTurns === "number") appliers.setGraceTurns(s.graceTurns);
-  if (typeof s.maxSubagentDepth === "number") appliers.setMaxSubagentDepth(s.maxSubagentDepth);
-  if (typeof s.fallbackSubagent === "string") appliers.setFallbackSubagent(s.fallbackSubagent);
-  if (s.defaultJoinMode) appliers.setDefaultJoinMode(s.defaultJoinMode);
-  if (typeof s.backgroundByDefault === "boolean") appliers.setBackgroundByDefault(s.backgroundByDefault);
-  if (typeof s.schedulingEnabled === "boolean") appliers.setSchedulingEnabled(s.schedulingEnabled);
-  if (typeof s.scopeModels === "boolean") appliers.setScopeModels(s.scopeModels);
-  if (typeof s.strictAgentFiles === "boolean") appliers.setStrictAgentFiles(s.strictAgentFiles);
-  if (typeof s.disableDefaultAgents === "boolean") appliers.setDisableDefaultAgents(s.disableDefaultAgents);
-  if (s.toolDescriptionMode) appliers.setToolDescriptionMode(s.toolDescriptionMode);
-  if (typeof s.fleetView === "boolean") appliers.setFleetView(s.fleetView);
-  if (s.agentMentions) appliers.setAgentMentions(s.agentMentions);
-  if (typeof s.rememberAgents === "boolean") appliers.setRememberAgents(s.rememberAgents);
-  if (s.widgetMode) appliers.setWidgetMode(s.widgetMode);
-  if (typeof s.outputTranscript === "boolean") appliers.setOutputTranscript(s.outputTranscript);
-  if (typeof s.worktreeIsolation === "boolean") appliers.setWorktreeIsolation(s.worktreeIsolation);
-  if (typeof s.reportUsage === "boolean") appliers.setReportUsage(s.reportUsage);
-  if (typeof s.showCost === "boolean") appliers.setShowCost(s.showCost);
-  if (typeof s.showModel === "boolean") appliers.setShowModel(s.showModel);
-  if (s.viewerMarkdown) appliers.setViewerMarkdown(s.viewerMarkdown);
-  if (typeof s.workflowsEnabled === "boolean") appliers.setWorkflowsEnabled(s.workflowsEnabled);
-  if (typeof s.jevEnabled === "boolean") appliers.setJevEnabled(s.jevEnabled);
 }
 
 /**
@@ -571,12 +666,12 @@ export function persistToastFor(
  * callers can log/inspect. Extension init wires this once.
  */
 export function applyAndEmitLoaded(
-  appliers: SettingsAppliers,
+  target: SettingsTarget,
   emit: SettingsEmit,
   cwd: string = process.cwd(),
 ): SubagentsSettings {
   const settings = loadSettings(cwd);
-  applySettings(settings, appliers);
+  applySettings(settings, target);
   emit("subagents:settings_loaded", { settings });
   return settings;
 }

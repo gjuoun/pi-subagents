@@ -39,17 +39,17 @@ export function snapshotSettings(deps: AgentsUiDeps) {
     // normalizeMaxTurns() in agent-runner.ts (which maps 0 → undefined).
     defaultMaxTurns: getDefaultMaxTurns() ?? 0,
     graceTurns: getGraceTurns(),
-    defaultJoinMode: deps.context.getDefaultJoinMode(),
-    backgroundByDefault: deps.context.getBackgroundByDefault(),
-    schedulingEnabled: deps.context.isSchedulingEnabled(),
+    defaultJoinMode: deps.context.defaultJoinMode,
+    backgroundByDefault: deps.context.backgroundByDefault,
+    schedulingEnabled: deps.context.schedulingEnabled,
     scopeModels: deps.context.modelScope.isEnabled(),
     strictAgentFiles: deps.context.strictAgentFiles,
     disableDefaultAgents: isDefaultsDisabled(),
-    toolDescriptionMode: deps.context.getToolDescriptionMode(),
-    fleetView: deps.context.isFleetViewEnabled(),
-    agentMentions: deps.context.getAgentMentionMode(),
+    toolDescriptionMode: deps.context.toolDescriptionMode,
+    fleetView: deps.context.fleetViewEnabled,
+    agentMentions: deps.context.agentMentionMode,
     rememberAgents: getRememberAgents(),
-    widgetMode: deps.context.getWidgetMode(),
+    widgetMode: deps.context.widgetMode,
     outputTranscript: getOutputTranscriptDefault(),
     worktreeIsolation: isWorktreeIsolationEnabled(),
     // The user's answer, not the effective one. A stand-down for another
@@ -59,18 +59,18 @@ export function snapshotSettings(deps: AgentsUiDeps) {
     // uninstalling the extension it was deferring to. undefined is dropped by
     // JSON.stringify, so unset stays unset — same reasoning as
     // `fallbackSubagent` below.
-    workflowsEnabled: deps.context.isWorkflowsPinned() ? deps.context.isWorkflowsEnabled() : undefined,
-    jevEnabled: deps.context.isJevEnabled(),
+    workflowsEnabled: deps.context.workflowsPinned ? deps.context.workflowsEnabled : undefined,
+    jevEnabled: deps.context.jevEnabled,
     maxSubagentDepth: getMaxSubagentDepth(),
     // Deliberately NOT `?? "general-purpose"`: every settings change writes the
     // whole snapshot, and materializing the implicit default would turn it into
     // explicit configuration — which then fails loudly if general-purpose later
     // goes away. undefined is dropped by JSON.stringify.
     fallbackSubagent: getFallbackSubagent(),
-    reportUsage: deps.context.isReportUsageEnabled(),
-    showCost: deps.context.isShowCostEnabled(),
-    showModel: deps.context.isShowModelEnabled(),
-    viewerMarkdown: deps.context.getViewerMarkdown(),
+    reportUsage: deps.context.reportUsage,
+    showCost: deps.context.showCost,
+    showModel: deps.context.showModel,
+    viewerMarkdown: deps.context.viewerMarkdown,
   } satisfies SubagentsSettings;
 }
 
@@ -157,28 +157,28 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         id: "joinMode",
         label: "Join mode",
         description: "Default join mode for background agents",
-        currentValue: deps.context.getDefaultJoinMode(),
+        currentValue: deps.context.defaultJoinMode,
         values: ["smart", "async", "group"],
       },
       {
         id: "backgroundByDefault",
         label: "Background by default",
         description: "An Agent call that doesn't say runs detached (off = blocks the turn and returns inline)",
-        currentValue: deps.context.getBackgroundByDefault() ? "on" : "off",
+        currentValue: deps.context.backgroundByDefault ? "on" : "off",
         values: ["on", "off"],
       },
       {
         id: "schedulingEnabled",
         label: "Scheduling",
         description: "Schedule subagent feature (off removes `schedule` param from Agent tool spec on next pi session)",
-        currentValue: deps.context.isSchedulingEnabled() ? "on" : "off",
+        currentValue: deps.context.schedulingEnabled ? "on" : "off",
         values: ["on", "off"],
       },
       {
         id: "jevEnabled",
         label: "Jev agent selector",
         description: "Jev decision tool (off = `jev` tool absent from the session on next pi session)",
-        currentValue: deps.context.isJevEnabled() ? "on" : "off",
+        currentValue: deps.context.jevEnabled ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -187,7 +187,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         description:
           "Scripted workflows, on unless another extension provides a workflow tool "
           + "(off keeps the SubagentWorkflow tool out of the tool spec; applies on next pi session)",
-        currentValue: deps.context.isWorkflowsEnabled() ? "on" : "off",
+        currentValue: deps.context.workflowsEnabled ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -238,7 +238,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         label: "Report usage to session",
         description:
           "Add subagent tokens and cost to this session's own totals, so pi's footer and /cost stop reading a delegating session as nearly free. Reported on the next tool result (agents that finish in the background are counted on the one after). Context-window % is unaffected.",
-        currentValue: deps.context.isReportUsageEnabled() ? "on" : "off",
+        currentValue: deps.context.reportUsage ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -246,7 +246,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         label: "Show cost",
         description:
           "Show an estimated `~$0.0042` beside subagent token counts in the widget, fleet view, results and notifications. Priced by pi from the model's rates — omitted entirely for a model it has no rates for.",
-        currentValue: deps.context.isShowCostEnabled() ? "on" : "off",
+        currentValue: deps.context.showCost ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -254,7 +254,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         label: "Show model",
         description:
           "Name the model driving each agent, and the thinking level it is running at, on the widget's running rows. The Agent tool result and the conversation viewer show the pair either way — this adds it to the widget, where the row is already dense.",
-        currentValue: deps.context.isShowModelEnabled() ? "on" : "off",
+        currentValue: deps.context.showModel ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -262,21 +262,21 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         label: "Viewer markdown",
         description:
           "How much of the conversation viewer renders as Markdown. assistant = assistant text only (default); all = tool results too, for tools that emit Markdown — accepting that a Markdown pass over a diff or a log eats `#` comments, swallows a `---` line and re-fences indented output; off = everything verbatim. `m` in the viewer cycles the same setting (footer: raw / md / md+).",
-        currentValue: deps.context.getViewerMarkdown(),
+        currentValue: deps.context.viewerMarkdown,
         values: ["off", "assistant", "all"],
       },
       {
         id: "fleetView",
         label: "Fleet view",
         description: "Claude Code-style main+subagents list below the editor (↓/← to navigate, Enter to view)",
-        currentValue: deps.context.isFleetViewEnabled() ? "on" : "off",
+        currentValue: deps.context.fleetViewEnabled ? "on" : "off",
         values: ["on", "off"],
       },
       {
         id: "agentMentions",
         label: "Agent mentions",
         description: "Route `@handle message` at the prompt to that agent. model = an off-screen clone of this conversation calls the Agent tool, so the agent gets a context-written prompt, a transcript and per-tool detail, and the chat stays clean; direct = started here from your text, no model call. Messaging and resuming are direct either way.",
-        currentValue: deps.context.getAgentMentionMode(),
+        currentValue: deps.context.agentMentionMode,
         values: ["model", "direct", "off"],
       },
       {
@@ -290,14 +290,14 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         id: "widgetMode",
         label: "Widget (legacy)",
         description: "The above-editor widget is gone — the Agent view below the editor is the only agent list. Kept so an older subagents.json keeps its value; no surface reads the mode any more.",
-        currentValue: deps.context.getWidgetMode(),
+        currentValue: deps.context.widgetMode,
         values: ["all", "background", "off"],
       },
       {
         id: "toolDescriptionMode",
         label: "Tool description",
         description: "Agent tool description sent to the LLM: full (rich, default), compact (~75% fewer tokens, for small/local models), or custom (.pi/agent-tool-description.md with {{placeholders}})",
-        currentValue: deps.context.getToolDescriptionMode(),
+        currentValue: deps.context.toolDescriptionMode,
         values: ["full", "compact", "custom"],
       },
     ];
@@ -346,11 +346,11 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         );
       }
     } else if (id === "joinMode") {
-      deps.context.setDefaultJoinMode(value as JoinMode);
+      deps.context.defaultJoinMode = value as JoinMode;
       notifyApplied(ctx, `Default join mode set to ${value}`);
     } else if (id === "backgroundByDefault") {
       const enabled = value === "on";
-      deps.context.setBackgroundByDefault(enabled);
+      deps.context.backgroundByDefault = enabled;
       notifyApplied(
         ctx,
         enabled
@@ -359,10 +359,10 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       );
     } else if (id === "schedulingEnabled") {
       const enabled = value === "on";
-      if (enabled === deps.context.isSchedulingEnabled()) {
+      if (enabled === deps.context.schedulingEnabled) {
         ctx.ui.notify(`Scheduling already ${enabled ? "enabled" : "disabled"}.`, "info");
       } else {
-        deps.context.setSchedulingEnabled(enabled);
+        deps.context.schedulingEnabled = enabled;
         if (!enabled) deps.context.scheduler.stop();  // immediate kill — outstanding fires stop ticking
         notifyApplied(
           ctx,
@@ -371,7 +371,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       }
     } else if (id === "workflowsEnabled") {
       const enabled = value === "on";
-      if (enabled === deps.context.isWorkflowsEnabled()) {
+      if (enabled === deps.context.workflowsEnabled) {
         ctx.ui.notify(`Workflows already ${enabled ? "enabled" : "disabled"}.`, "info");
       } else {
         deps.context.setWorkflowsEnabled(enabled);
@@ -385,10 +385,10 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       }
     } else if (id === "jevEnabled") {
       const enabled = value === "on";
-      if (enabled === deps.context.isJevEnabled()) {
+      if (enabled === deps.context.jevEnabled) {
         ctx.ui.notify(`Jev already ${enabled ? "enabled" : "disabled"}.`, "info");
       } else {
-        deps.context.setJevEnabled(enabled);
+        deps.context.jevEnabled = enabled;
         notifyApplied(
           ctx,
           `Jev agent selector ${enabled ? "enabled" : "disabled"}. Tool appears on next pi session.`,
@@ -428,7 +428,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         `Worktree isolation ${enabled ? "enabled" : "disabled"}. Tool parameter updates on next pi session.`,
       );
     } else if (id === "toolDescriptionMode") {
-      deps.context.setToolDescriptionMode(value as ToolDescriptionMode);
+      deps.context.toolDescriptionMode = value as ToolDescriptionMode;
       notifyApplied(ctx, `Tool description set to ${value}. Takes effect on next pi session.`);
     } else if (id === "reportUsage") {
       const enabled = value === "on";
@@ -448,7 +448,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       deps.context.setShowModel(enabled);
       notifyApplied(ctx, `Model display ${enabled ? "enabled" : "disabled"}`);
     } else if (id === "viewerMarkdown") {
-      deps.context.setViewerMarkdown(value as ViewerMarkdownMode);
+      deps.context.viewerMarkdown = value as ViewerMarkdownMode;
       notifyApplied(ctx, `Viewer markdown set to ${value}`);
     } else if (id === "fleetView") {
       const enabled = value === "on";
@@ -456,7 +456,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       notifyApplied(ctx, `Fleet view ${enabled ? "enabled" : "disabled"}`);
     } else if (id === "agentMentions") {
       const mode = value as AgentMentionMode;
-      deps.context.setAgentMentionMode(mode);
+      deps.context.agentMentionMode = mode;
       notifyApplied(
         ctx,
         mode === "off"

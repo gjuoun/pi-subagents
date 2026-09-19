@@ -102,7 +102,6 @@ export interface PopWindow {
   get(id: string): number | undefined;
 }
 
-/** No agent is popping. */
 const NOT_POPPING: PopWindow = { get: () => undefined };
 
 /**

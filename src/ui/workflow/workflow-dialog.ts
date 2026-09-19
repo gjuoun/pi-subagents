@@ -1,43 +1,20 @@
 /**
- * workflow-dialog.ts — the `/agents → Workflows` two-pane inspector.
+ * workflow-dialog.ts — the `/agents → Workflows` two-pane inspector: phases and their
+ * agents on the left, the selected agent's Prompt / Activity / Outcome detail on the
+ * right, with `↑↓ select · ⏎ open · f filter · x stop · esc close · c convo`. A phase
+ * that has not finished shows *its number* rather than a glyph — recovered behaviour,
+ * and the single-pane layout it replaced had no room for "Not started yet".
  *
- * ```
- *  review-changes
- *  Review changed files across dimensions              3/7 agents · 1m12s
- *
- *  ╭ Phases ──────────┬ Verify · 1 agent ──────────────────────────────╮
- *  │ ❯ ✔ Review   3/3 │ ❯ ◌ verify:auth.ts · attempt 2 · waiting 8s    │
- *  │   2 Verify   1/2 │                                                │
- *  │   3 Report       │                                                │
- *  ╰──────────────────┴────────────────────────────────────────────────╯
- *  ↑↓ select · ⏎ open · f filter · x stop · esc close · c convo
- * ```
- *
- * Opening an agent swaps the panes: that phase's agents move left and the
- * right becomes the agent's Prompt / Activity / Outcome detail.
- *
- * A phase with no agents yet shows its number and nothing else. The single-pane
- * layout this replaced spelled that out as "Not started yet"; the left pane is
- * too narrow to hold the words, and a numbered row with no count says it.
- *
- * **The glyphs are not the card's glyphs.** `workflow-card.ts` keys off the raw
- * entry `state`; this file keys off the *derived* `displayState(entry, active)`
- * and splits cases the card cannot see — skipped, blocked, queued and
- * interrupted all render as a plain ✘ or ⟳ inline but are distinct here. `◌`
- * (U+25CC) appears only in this file, and a running row animates a spinner where
- * the card draws a static `⟳`.
- *
- * **The phases pane is stranger still**: a phase that has not finished shows
- * *its number*, not a glyph. That is deliberate, recovered behaviour.
+ * **The glyphs are not the card's glyphs.** `workflow-card.ts` keys off the raw entry
+ * `state`; this file keys off the derived `displayState(entry, active)` and splits
+ * cases the card cannot see — skipped, blocked, queued and interrupted all render as a
+ * plain ✘ or ⟳ inline but are distinct here. `◌` (U+25CC) appears only in this file,
+ * and a running row animates a spinner where the card draws a static `⟳`.
  *
  * **The layout is pure.** `layoutWorkflowDialog` returns coloured segments and
- * `handleWorkflowDialogKey` maps a keypress to the next state plus an optional
- * action; neither touches a theme, a terminal, or the workflow runtime. The
- * `WorkflowDialog` component is the thin shell that wires those to `ctx.ui`, and
- * the runtime side arrives as an injected `WorkflowDialogActions`.
- *
- * All state derivation lives in `src/workflow/progress.ts`; this file only
- * arranges what that module returns.
+ * `handleWorkflowDialogKey` maps a keypress to the next state plus an optional action;
+ * neither touches a theme, a terminal or the workflow runtime. All state derivation
+ * lives in `src/workflow/run/progress.ts`.
  */
 
 import {
@@ -69,6 +46,7 @@ import {
   formatCompactTokens,
   formatModel,
   formatThinking,
+  lineWidth,
   REPLAYED_ANNOTATION,
   styleWorkflowCardLines,
   UNICODE_GLYPHS,
@@ -418,8 +396,6 @@ export function subStatusAnnotations(
   }
   return parts;
 }
-
-const lineWidth = (line: WorkflowCardLine) => line.reduce((sum, s) => sum + visibleWidth(s.text), 0);
 
 /** Place `right` flush to `width`, cutting `left` first so the stats survive. */
 function rightAlign(left: WorkflowCardLine, right: WorkflowCardLine, width: number): WorkflowCardLine {
@@ -866,7 +842,6 @@ export function layoutWorkflowDialog(input: WorkflowDialogInput): WorkflowCardLi
     }).map(line => [{ text: " " }, ...line]),
   );
 
-  // ---- Key hints ----
   // Only the actions the run can currently take, so the footer never advertises
   // a key that does nothing. Gated on `available` as well as run state: a caller
   // that wires only some of the actions must not get a footer advertising keys

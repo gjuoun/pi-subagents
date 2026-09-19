@@ -22,7 +22,7 @@ import { isWorktreeIsolationEnabled } from "../agent/session/worktree.js";
 import { getAgentConfig, getAvailableTypes, resolveSpawnType, resolveType } from "../config/registry/agent-types.js";
 import { THINKING_LEVELS } from "../lib/agent-meta.js";
 import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
-import { type AgentInvocation, type AgentRecord, type SubagentType } from "../lib/types.js";
+import type { AgentInvocation, AgentRecord } from "../lib/types.js";
 import { describeActivity, fgPreservingNestedStyles, formatCost, formatMs, formatTurns } from "../lib/ui/format.js";
 import { type AgentDetails, type UICtx } from "../lib/ui/theme.js";
 import { getLifetimeCost } from "../lib/usage.js";
@@ -39,12 +39,12 @@ export function createAgentTool(deps: ToolsDeps) {
     name: SUBAGENT_TOOL_NAMES.AGENT,
     label: "Agent",
     description: buildAgentToolDescription(deps.context.toolDescriptionMode, {
-      schedulingEnabled: deps.context.isSchedulingEnabled(),
+      schedulingEnabled: deps.context.schedulingEnabled,
       worktreeIsolation: isWorktreeIsolationEnabled(),
     }),
     promptSnippet: "Launch autonomous sub-agents for complex multi-step tasks",
     promptGuidelines: [
-      ...(deps.context.isJevEnabled()
+      ...(deps.context.jevEnabled
         ? [
             "When enabled, consult the `jev` tool for dispatch decisions before spawning an Agent — it classifies the task under the routing rules and recommends the best agent type.",
           ]
@@ -108,10 +108,9 @@ export function createAgentTool(deps: ToolsDeps) {
         }),
       ),
       ...isolationParam(isWorktreeIsolationEnabled()),
-      ...buildScheduleParam(deps.context.isSchedulingEnabled()),
+      ...buildScheduleParam(deps.context.schedulingEnabled),
     }),
 
-    // ---- Custom rendering: Claude Code style ----
 
     renderCall(args, theme, context) {
       // A badge closes its own background, which would clear the tool block's row tint
@@ -180,19 +179,16 @@ export function createAgentTool(deps: ToolsDeps) {
         return parts.map(p => fgPreservingNestedStyles(theme, "dim", p)).join(" " + theme.fg("dim", "·") + " ");
       };
 
-      // ---- While running (streaming) ----
       if (isPartial || details.status === "running") {
         const frame = SPINNER[details.spinnerFrame ?? 0];
         const s = stats(details);
         return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme, "toolPendingBg");
       }
 
-      // ---- Background agent launched ----
       if (details.status === "background") {
         return row(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`));
       }
 
-      // ---- Completed / Steered ----
       if (details.status === "completed" || details.status === "steered") {
         const duration = formatMs(details.durationMs);
         const isSteered = details.status === "steered";
@@ -219,7 +215,6 @@ export function createAgentTool(deps: ToolsDeps) {
         return row(line);
       }
 
-      // ---- Stopped (user-initiated abort) ----
       if (details.status === "stopped") {
         const s = stats(details);
         let line = theme.fg("dim", "■") + (s ? " " + s : "");
@@ -233,7 +228,6 @@ export function createAgentTool(deps: ToolsDeps) {
         return row(text);
       }
 
-      // ---- Error / Aborted (hard max_turns) ----
       const s = stats(details);
       let line = theme.fg("error", "✗") + (s ? " " + s : "");
 
@@ -246,7 +240,6 @@ export function createAgentTool(deps: ToolsDeps) {
       return row(line);
     },
 
-    // ---- Execute ----
 
     execute: async (toolCallId, params, signal, onUpdate, ctx) => {
       // Ensure we have UI context for widget rendering
@@ -255,7 +248,7 @@ export function createAgentTool(deps: ToolsDeps) {
       // Reload custom agents so new project/global .md files are picked up without restart
       deps.reloadCustomAgents();
 
-      const rawType = params.subagent_type as SubagentType;
+      const rawType = params.subagent_type;
       // Single decision point for dispatch (#183): unknown, disabled and
       // case-ambiguous types are refused here, BEFORE anything spawns, so a
       // background or scheduled call can't start running the wrong agent while
@@ -283,12 +276,11 @@ export function createAgentTool(deps: ToolsDeps) {
 
       const displayName = getDisplayName(subagentType);
 
-      // Get agent config (if any)
       const customConfig = getAgentConfig(subagentType);
 
       const resolvedConfig = resolveAgentInvocationConfig(customConfig, params, {
         worktreeAllowed: isWorktreeIsolationEnabled(),
-        defaultRunInBackground: deps.context.getBackgroundByDefault(),
+        defaultRunInBackground: deps.context.backgroundByDefault,
       });
 
       // Resolve model from agent config first; tool-call params only fill gaps.
@@ -411,9 +403,8 @@ export function createAgentTool(deps: ToolsDeps) {
         };
       };
 
-      // ---- Schedule: register a job, don't spawn now ----
       if (params.schedule) {
-        if (!deps.context.isSchedulingEnabled()) {
+        if (!deps.context.schedulingEnabled) {
           return textResult("Scheduling is disabled in this project. Enable via /agents → Settings → Scheduling.");
         }
         if (params.resume) {
@@ -430,14 +421,14 @@ export function createAgentTool(deps: ToolsDeps) {
         }
         try {
           const job = deps.context.scheduler.addJob({
-            name: params.description as string,
-            description: params.description as string,
+            name: params.description,
+            description: params.description,
             schedule: params.schedule as string,
             // The caller's own name, not the substitute — the scheduler re-resolves
             // at fire time, and the original is what a user edits.
             subagent_type: requestedType,
-            prompt: params.prompt as string,
-            model: params.model as string | undefined,
+            prompt: params.prompt,
+            model: params.model,
             thinking: thinking,
             max_turns: effectiveMaxTurns,
             isolated: isolated,
@@ -595,7 +586,6 @@ export function createAgentTool(deps: ToolsDeps) {
         deps.context.fleet.ensureTimer();
         deps.context.fleet.update();
 
-        // Emit created event
         deps.pi.events.emit("subagents:created", {
           id,
           type: subagentType,

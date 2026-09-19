@@ -1,28 +1,15 @@
 /**
  * structured-output.ts — the synthetic tool behind `agent(prompt, { schema })`.
  *
- * A workflow script that passes a `schema` wants an *object* back, not prose it
- * has to parse. Claude Code does this by giving the child a `StructuredOutput`
- * tool whose input schema is the caller's schema, so the provider fills the
- * fields, and returning the validated payload as the agent's result.
- *
- * We do the same, with one gap named up front: Claude Code *forces* the call,
- * and we cannot. `toolChoice` exists in pi-ai's provider layer but is not
- * plumbed through `AgentSession`, so an extension has no way to require a
- * particular tool. What we have instead is three softer pressures —
- *
- *   1. `constrainedSampling`, so providers that support it hold the payload to
- *      the schema at sampling time;
- *   2. the tool's description, snippet and guideline, which say the answer must
- *      come through this call;
- *   3. validation here, answering a bad payload with `isError` so the model
- *      sees what was wrong and calls again inside the same run.
- *
- * — and, when all three fail, one more prompt from `runAgent`. See
- * {@link structuredRetryPrompt}.
- *
- * The name matches Claude Code's exactly, so a ported prompt that mentions
- * `StructuredOutput` is still telling the truth.
+ * A script passing a `schema` wants an *object* back, not prose it has to parse, so the
+ * child gets a `StructuredOutput` tool whose input schema is the caller's. Claude Code
+ * *forces* that call; we cannot — `toolChoice` exists in pi-ai's provider layer but is not
+ * plumbed through `AgentSession`, so an extension has no way to require a tool. Three
+ * softer pressures instead: `constrainedSampling`, where the provider supports it; the
+ * tool's description, snippet and guideline; and validation here, answering a bad payload
+ * with `isError` so the model sees what was wrong and calls again inside the same run.
+ * When all three fail, `runAgent` prompts once more — see {@link structuredRetryPrompt}.
+ * The name matches Claude Code's exactly, so a ported prompt still tells the truth.
  */
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";

@@ -1,40 +1,27 @@
 /**
  * saved.ts — resolve `SubagentWorkflow({ name })` to a script on disk.
  *
- * A saved workflow is a plain `.js` file whose contents are exactly what
- * `script` would have carried. Nothing is parsed here: `extractMeta` still runs
- * over the source at the call site, so a saved file and an inline one fail the
- * same way on a bad `meta` block.
- *
- * Roots mirror `loadCustomAgents` rather than inventing a fourth convention —
- * project `.pi` is the authority, the shared `.agents` workspace is an extra
- * read location, and the user's agent dir is the fallback:
+ * A saved workflow is a plain `.js` file whose contents are exactly what `script`
+ * would have carried; nothing is parsed here, so a saved file and an inline one fail
+ * the same way on a bad `meta` block. Roots mirror `loadCustomAgents` rather than
+ * inventing a fourth convention, first-hit-wins because a name resolves to one file:
  *
  *   1. <cwd>/.pi/workflows/<name>.js
  *   2. <cwd>/.agents/workflows/<name>.js
  *   3. getAgentDir()/workflows/<name>.js   (default ~/.pi/agent/workflows)
  *
- * Precedence is expressed as first-hit-wins here, not last-write-wins as in the
- * agent loader, because a name resolves to one file — there is no map to
- * overwrite.
+ * Symlinks are rejected through `safeReadFile`, and the name is whitelisted before it
+ * is ever joined to a path: `name` arrives from a model, and `../../etc/passwd` must
+ * not become a readable workflow.
  *
- * Symlinks are rejected through `safeReadFile`, and the name is whitelisted
- * before it is ever joined to a path: `name` arrives from a model, and
- * `../../etc/passwd` must not become a readable workflow.
- *
- * ## Not every `.js` in the folder is a workflow
- *
- * These are ordinary directories. `.agents/workflows/` is shared across tools
- * and the user's agent dir is theirs to fill; either may hold a build artifact,
- * a config, or a scratch script. A file is only treated as a workflow if it
- * carries the `export const meta =` declaration every workflow opens with.
- *
- * Nothing is ever executed to decide this — the check is a regex over the
- * source, and even the real parse only evaluates the `meta` object literal in
- * an empty vm. What the filter buys is honesty: a listing that offers `utils.js`
- * as a runnable workflow invites the model to try it, and naming it should say
- * "that is not a workflow" rather than produce a parser error about a block the
- * author never intended to write.
+ * Not every `.js` in the folder is a workflow — these are ordinary directories that
+ * may hold a build artifact or a scratch script, so a file counts only if it carries
+ * the `export const meta =` declaration every workflow opens with. Nothing is ever
+ * executed to decide this: the check is a regex over the source, and even the real
+ * parse only evaluates the `meta` literal in an empty vm. The filter buys honesty — a
+ * listing that offers `utils.js` invites the model to try it, and naming a
+ * non-workflow should say so rather than emit a parser error about a block the author
+ * never intended to write.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -44,7 +31,6 @@ import { isSymlink, isUnsafeName, safeReadFile } from "../../lib/fs-safe.js";
 import { MAX_SCRIPT_LENGTH } from "../run/runtime.js";
 import { hasMetaDeclaration } from "./meta.js";
 
-/** Extension a saved workflow file carries. */
 const WORKFLOW_EXTENSION = ".js";
 
 /** The roots a `name` is looked up in, highest priority first. */

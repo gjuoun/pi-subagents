@@ -1,22 +1,16 @@
 /**
  * mention.ts — the `@handle` grammar for messaging a subagent from the prompt.
  *
- * Claude Code lets you type `@code-review take another look` at the prompt and
- * routes the message to that agent instead of the main model. Its grammar is
- * reproduced here so the two behave identically:
+ * Claude Code's grammar, reproduced so the two behave identically: suggestions fire on `@`
+ * at the start of the input or after whitespace followed by `[\w-]*` (so `@src/foo.ts` is a
+ * file, never an agent), and a send is recognized only at the START of the input and only
+ * with a non-empty message after the handle — which is why a bare `@code-review` goes to
+ * the main model rather than anywhere near the agent.
  *
- *   - suggestions fire on `@` at the start of the input or after whitespace,
- *     followed by `[\w-]*` (so `@src/foo.ts` is a file, never an agent);
- *   - a send is recognized only at the START of the input, and only with a
- *     non-empty message after the handle. That is why a bare `@code-review`
- *     goes to the main model rather than anywhere near the agent.
- *
- * A record's own identity is a UUID plus a deliberately non-unique description,
- * neither of which is typeable, so the handle is derived from the agent type.
- * Colliding handles are numbered (`explore`, `explore-2`), which is also what
- * Claude Code's `allocateName` does — it recycles a name only once the task
- * behind it is gone. Its SendMessage prompt describes the *registry* as
- * latest-wins, which is a different thing and not how names are allocated.
+ * A record's identity is a UUID plus a deliberately non-unique description, neither
+ * typeable, so the handle is derived from the agent type and collisions are numbered
+ * (`explore`, `explore-2`) — as Claude Code's `allocateName` does, recycling a name only
+ * once the task behind it is gone.
  */
 
 /**

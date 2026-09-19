@@ -10,19 +10,14 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { isWorktreeIsolationEnabled } from "../../agent/session/worktree.js";
-import { buildNewAgentFile, personalAgentsDir, projectAgentsDir } from "../../config/registry/agent-file-toggle.js";
+import { buildNewAgentFile, chooseAgentDir } from "../../config/registry/agent-file-toggle.js";
 import { BUILTIN_TOOL_NAMES } from "../../config/registry/agent-types.js";
 import { THINKING_LEVELS } from "../../lib/agent-meta.js";
 import type { AgentsUiDeps } from "./deps.js";
 
 export async function showCreateWizard(ctx: ExtensionCommandContext, deps: AgentsUiDeps): Promise<void> {
-  const location = await ctx.ui.select("Choose location", [
-    "Project (.pi/agents/)",
-    `Personal (${personalAgentsDir()})`,
-  ]);
-  if (!location) return;
-
-  const targetDir = location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
+  const targetDir = await chooseAgentDir(ctx.ui);
+  if (!targetDir) return;
 
   const method = await ctx.ui.select("Creation method", [
     "Generate with Claude (recommended)",

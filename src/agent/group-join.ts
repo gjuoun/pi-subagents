@@ -22,7 +22,6 @@ interface AgentGroup {
 
 /** Default timeout: 30s after first completion in a group. */
 const DEFAULT_TIMEOUT = 30_000;
-/** Straggler re-batch timeout: 15s. */
 const STRAGGLER_TIMEOUT = 15_000;
 
 export class GroupJoinManager {

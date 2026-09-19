@@ -1,35 +1,26 @@
 /**
  * host.ts — binds a workflow run to the real `AgentManager`.
  *
- * `runtime.ts` deliberately knows nothing about this extension: its only seam is
- * the injected {@link WorkflowHost}, which is what keeps the runtime's tests
- * free of sessions, models and git. This file is the other half of that seam —
- * everything the script can reach through `agent()`, `resume` and `gate` ends up
- * here, and nowhere else.
+ * `runtime.ts` deliberately knows nothing about this extension: its only seam is the
+ * injected {@link WorkflowHost}, which is what keeps the runtime's tests free of
+ * sessions, models and git. This file is the other half of that seam — everything the
+ * script can reach through `agent()`, `resume` and `gate` ends up here, nowhere else.
  *
- * Four mappings carry most of the weight:
- *
- *   - **ids.** The runtime hands out its own `wf-agent-N` handles before
- *     anything spawns, because it needs a stable progress-entry identity. The
- *     manager issues a different id when the child actually starts. `records`
- *     is the translation, and it is kept for the whole run rather than cleared
- *     on completion: `resume` reaches back to a child that has already
- *     finished.
- *   - **agent type and model.** Resolved through `resolveSpawnType` and
- *     `getAgentConfig` — the same dispatch the `Agent` tool uses — so a
- *     workflow and a tool call disagree about nothing.
- *   - **failure.** A strict worktree-isolation failure throws out of
- *     `spawnAndWait`; the script must see that as an agent that failed
- *     (`{ok: false}` → `null`), not as an unhandled rejection that takes the
- *     run down.
- *   - **when a `gate` runs.** For an isolated child it cannot wait until the
- *     spawn resolves: the manager commits the worktree to a branch and deletes
- *     the copy inside the child's own settle, so by then the only tree left to
- *     run `npm test` in is the main one — which would report on code the child
- *     never wrote. So the gate runs from `onBeforeWorktreeCleanup`, inside that
- *     settle, and the verdict travels back on the spawn result. `runGate` still
- *     exists for a child that had no worktree; the runtime uses whichever of
- *     the two happened, never both.
+ * Four mappings carry most of the weight: **ids**, where the runtime's own `wf-agent-N`
+ * handles (stable progress-entry identity, handed out before anything spawns) are
+ * translated to the manager's real ids through `records`, kept for the whole run because
+ * `resume` reaches back to a child that has already finished; **agent type and model**,
+ * resolved through `resolveSpawnType` and `getAgentConfig` — the same dispatch the
+ * `Agent` tool uses, so a workflow and a tool call disagree about nothing; **failure**,
+ * where a strict worktree-isolation failure throws out of `spawnAndWait` and the script
+ * must see an agent that failed (`{ok: false}` → `null`) rather than an unhandled
+ * rejection that takes the run down; and **when a `gate` runs**, which for an isolated
+ * child cannot be after the spawn resolves — the manager commits the worktree to a branch
+ * and deletes the copy inside the child's own settle, so the only tree left by then is
+ * the main one, which would report on code the child never wrote. The gate therefore runs
+ * from `onBeforeWorktreeCleanup`, inside that settle, and its verdict travels back on the
+ * spawn result. `runGate` still exists for a child that had no worktree; the runtime uses
+ * whichever of the two happened, never both.
  */
 
 import { existsSync } from "node:fs";

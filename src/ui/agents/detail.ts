@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { disableInContent, enableInContent, isEmptyStub, locateAgentFile, personalAgentsDir, projectAgentsDir, serializeAgentFile } from "../../config/registry/agent-file-toggle.js";
+import { chooseAgentDir, disableInContent, enableInContent, isEmptyStub, locateAgentFile, serializeAgentFile } from "../../config/registry/agent-file-toggle.js";
 import { getAgentConfig } from "../../config/registry/agent-types.js";
 import type { AgentConfig } from "../../lib/types.js";
 import type { AgentsUiDeps } from "./deps.js";
@@ -80,13 +80,8 @@ export async function showAgentDetail(ctx: ExtensionCommandContext, name: string
 }
 /** Eject a default agent: write its embedded config as a .md file. */
 export async function ejectAgent(ctx: ExtensionCommandContext, name: string, cfg: AgentConfig, deps: AgentsUiDeps): Promise<void> {
-  const location = await ctx.ui.select("Choose location", [
-    "Project (.pi/agents/)",
-    `Personal (${personalAgentsDir()})`,
-  ]);
-  if (!location) return;
-
-  const targetDir = location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
+  const targetDir = await chooseAgentDir(ctx.ui);
+  if (!targetDir) return;
   mkdirSync(targetDir, { recursive: true });
 
   const targetPath = join(targetDir, `${name}.md`);
@@ -127,13 +122,8 @@ export async function disableAgent(ctx: ExtensionCommandContext, name: string, d
   }
 
   // No file (built-in default) — create a stub
-  const location = await ctx.ui.select("Choose location", [
-    "Project (.pi/agents/)",
-    `Personal (${personalAgentsDir()})`,
-  ]);
-  if (!location) return;
-
-  const targetDir = location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
+  const targetDir = await chooseAgentDir(ctx.ui);
+  if (!targetDir) return;
   mkdirSync(targetDir, { recursive: true });
 
   const targetPath = join(targetDir, `${name}.md`);

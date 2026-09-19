@@ -1,31 +1,23 @@
 /**
- * agent-manager.ts — Tracks agents, background execution, resume support.
+ * agent-manager.ts — tracks agents, background execution, resume support.
  *
- * There are two independent concurrency pools, never one:
+ * Two independent concurrency pools, never one: background (`maxConcurrent`, default
+ * 10) for detached agents, foreground (`maxConcurrentForeground`, default 0 =
+ * unlimited) for agents a caller blocks on inline (`spawnAndWait`). Independent because
+ * a foreground agent blocks the parent anyway, so charging it to the background pool
+ * would let a saturated pool starve the main session; excess agents queue and auto-start
+ * as slots free up, and nested children take no slot in either (`occupiesPoolSlot` /
+ * `occupiesForegroundSlot`).
  *
- * - Background (`maxConcurrent`, default 10) bounds detached agents.
- * - Foreground (`maxConcurrentForeground`, default 0 = unlimited) bounds
- *   agents a caller is blocking on inline — `spawnAndWait`.
- *
- * Independent by design: a foreground agent blocks the parent anyway, so
- * charging it to the background pool would let a saturated pool starve the main
- * session of work it could have done itself. Excess agents in either pool are
- * queued and auto-started as slots free up. Nested children take no slot in
- * either — see `occupiesPoolSlot` / `occupiesForegroundSlot`.
- *
- * **Why the rest of this file is not split further.** It is long, and 22 clusters
- * is what a 1,500-line file looks like from outside, but the clusters are not
- * separable. Five of them mutate the same three collections (`agents`,
- * `startups`, `tombstones`), and the queue invariant — "removing an entry from
- * `queue` MUST release it", or the caller blocked in `spawnAndWait` hangs
- * forever — spans five more: it is stated on the field, enforced in `remove`
- * (`concurrency-pools.ts`), and relied on by `abort`, `abortAll` and `dispose`.
- * The two running counters were incremented in two places and decremented in
- * exactly one, and the pool a run is charged to is resolved once and carried
- * into `settleRun` because recomputing it would underflow or leak. Moving
- * `settleRun` away from `startAgent`/`startResume` — the obvious next cut — is
- * what would invite a double-free. The one clean seam, pool admission, is
- * already out: see `concurrency-pools.ts`.
+ * **Why the rest of the file is not split further.** The 22 clusters are not separable:
+ * five mutate the same three collections (`agents`, `startups`, `tombstones`), and the
+ * queue invariant — "removing an entry from `queue` MUST release it", or a caller
+ * blocked in `spawnAndWait` hangs forever — spans five more, stated on the field,
+ * enforced in `remove`, relied on by `abort`/`abortAll`/`dispose`. The obvious next
+ * cut, moving `settleRun` away from `startAgent`, invites a double-free: the counters
+ * increment in two places and decrement in one, and the pool a run is charged to is
+ * resolved once and carried into `settleRun`, because recomputing it would underflow or
+ * leak. Pool admission, the one clean seam, is already out in `concurrency-pools.ts`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -433,6 +425,13 @@ export class AgentManager {
     this.cleanupInterval.unref();
   }
 
+/** Fold a usage delta onto the record, tell the session, and forward it to the caller. */
+  private trackUsage(record: AgentRecord, usage: LifetimeUsage, forward?: (usage: LifetimeUsage) => void): void {
+    addUsage(record.lifetimeUsage, usage);
+    this.onUsage?.(record, usage);
+    forward?.(usage);
+  }
+
   /** Update the max concurrent background agents limit. */
   setMaxConcurrent(n: number) {
     this.pools.maxBackground = Math.max(1, n);
@@ -781,11 +780,7 @@ export class AgentManager {
       },
       onTurnEnd: options.onTurnEnd,
       onTextDelta: options.onTextDelta,
-      onAssistantUsage: (usage) => {
-        addUsage(record.lifetimeUsage, usage);
-        this.onUsage?.(record, usage);
-        options.onAssistantUsage?.(usage);
-      },
+      onAssistantUsage: (usage) => this.trackUsage(record, usage, options.onAssistantUsage),
       onCompaction: (info) => {
         record.compactionCount++;
         this.onCompact?.(record, info);
@@ -1159,11 +1154,7 @@ export class AgentManager {
           if (activity.type === "end") record.toolUses++;
           options?.onToolActivity?.(activity);
         },
-        onAssistantUsage: (usage) => {
-          addUsage(record.lifetimeUsage, usage);
-          this.onUsage?.(record, usage);
-          options?.onAssistantUsage?.(usage);
-        },
+        onAssistantUsage: (usage) => this.trackUsage(record, usage, options?.onAssistantUsage),
         onCompaction: (info) => {
           record.compactionCount++;
           this.onCompact?.(record, info);
@@ -1250,11 +1241,7 @@ export class AgentManager {
         if (activity.type === "end") record.toolUses++;
         options.onToolActivity?.(activity);
       },
-      onAssistantUsage: (usage) => {
-        addUsage(record.lifetimeUsage, usage);
-        this.onUsage?.(record, usage);
-        options.onAssistantUsage?.(usage);
-      },
+      onAssistantUsage: (usage) => this.trackUsage(record, usage, options.onAssistantUsage),
       onCompaction: (info) => {
         record.compactionCount++;
         this.onCompact?.(record, info);

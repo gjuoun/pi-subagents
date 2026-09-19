@@ -15,10 +15,6 @@
  * between building and resolving cannot desync them.
  */
 
-/** Minimal shape of the `ctx.ui` surface this needs. */
-export interface SelectUI {
-  select(title: string, options: string[]): Promise<string | undefined>;
-}
 
 /**
  * Show a numbered picker and return the chosen item (not its label).
@@ -27,7 +23,8 @@ export interface SelectUI {
  * one we offered.
  */
 export async function selectItem<T>(
-  ui: SelectUI,
+  /** The one method this needs off \`ctx.ui\`. */
+  ui: { select(title: string, options: string[]): Promise<string | undefined> },
   title: string,
   items: readonly T[],
   format: (item: T, index: number) => string,

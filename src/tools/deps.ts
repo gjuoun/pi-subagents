@@ -46,11 +46,11 @@ export interface ToolsContext {
   /** The debounce timer that closes the current batch. */
   batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether the schedule param is offered. */
-  isSchedulingEnabled(): boolean;
+  schedulingEnabled: boolean;
   /** Whether the toggleable `jev` agent-selector tool is registered. */
-  isJevEnabled(): boolean;
+  jevEnabled: boolean;
   /** Whether an unqualified top-level spawn detaches. */
-  getBackgroundByDefault(): boolean;
+  backgroundByDefault: boolean;
   /** Attach subagent spend to tool results, so the parent session counts it. */
   reportUsage: boolean;
   /** Spend accumulated since the parent was last told about it. */

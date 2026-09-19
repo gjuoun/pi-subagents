@@ -1,23 +1,17 @@
 /**
- * agent-status-bar.ts — owns the extension status row.
+ * agent-status-bar.ts — owns the extension status row: the status text, the turn-based
+ * aging of finished marks, and the clock.
  *
- * What survives of `AgentWidget` once the above-editor widget is gone: the status text, the
- * turn-based aging of finished marks, and the clock. The widget's 80 ms timer existed to animate a
- * spinner; here the clock has exactly two jobs — cycling the running marks' glyph, and playing out a
- * finishing mark's pop — so:
+ * The clock has exactly two jobs — cycling the running marks' glyph and playing out a
+ * finishing mark's pop — so it runs only while there is something to animate (a RUNNING or
+ * QUEUED mark, or a finish pop still owed, which has to outlive its run), a frame identical
+ * to the last one is not written so an idle row costs nothing, and finished marks stay
+ * solid until `onTurnStart()` ages them out, with errors lingering an extra turn so a
+ * failure is not missed. Those guards are load-bearing rather than nice to have: in pi-web
+ * every `setStatus` is an event that re-renders the chat.
  *
- *   - the clock runs only while there is something to animate: a RUNNING or QUEUED mark, or a
- *     finish pop still owed (a pop armed by the last agent to finish has to outlive its run),
- *   - a frame identical to the last one is not written, so an idle row costs nothing,
- *   - finished marks stay solid until `onTurnStart()` ages them out — the same 'one turn' rule the
- *     widget used, with errors lingering an extra turn so a failure is not missed.
- *
- * None of that is the look. What a cycling mark looks like is `RUN_PHASE_GLYPHS` in
- * `agent-status-line.ts` — one exported table, swappable without touching this file, the clock rule
- * or the tests. This file only decides when the phase advances and how many beats a pop burns for.
- *
- * In pi-web every `setStatus` is an event that re-renders the chat, which is exactly why the two
- * guards above are load-bearing rather than nice to have.
+ * What a cycling mark looks like is `RUN_PHASE_GLYPHS` in `agent-status-line.ts` — one
+ * exported table, swappable without touching this file, the clock rule or the tests.
  */
 import {
   type ColorResolver,
