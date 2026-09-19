@@ -10,36 +10,35 @@
  * Layering: part of the wiring layer, like index and bootstrap — see test/layout-fence.test.ts.
  */
 
-import { readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+
 import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, } from "@earendil-works/pi-coding-agent";
-import { isTopLevelAgent } from "./agent/agent-manager.js";
+import { createActivityTracker } from "./agent/activity.js";
 import { resolveJoinMode } from "./agent/invocation.js";
 import { createManagerCallbacks } from "./agent/manager-callbacks.js";
 import { createMentionDispatcher } from "./agent/mention/dispatch.js";
 import { setMaxSubagentDepth } from "./agent/nested-tools.js";
+import { createManagerRegistry } from "./agent/registry.js";
 import { registerRpcHandlers } from "./agent/rpc.js";
-import { resolveEffectiveMaxTurns, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
+import { setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "./agent/run-limits.js";
 import { createOutputFilePath, ensureOutputFile, setOutputTranscriptDefault, streamToOutputFile } from "./agent/session/output-file.js";
 import { setWorktreeIsolationEnabled } from "./agent/session/worktree.js";
 import { createServices } from "./bootstrap.js";
-import { getAgentConfig, getAvailableTypes, getConfig, registerAgents, resolveSpawnType, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
+import { getAgentConfig, getAvailableTypes, getConfig, registerAgents, setDefaultsDisabled, setFallbackSubagent } from "./config/registry/agent-types.js";
 import { loadCustomAgents } from "./config/registry/custom-agents.js";
 import { applyAndEmitLoaded, loadSettings } from "./config/settings.js";
 import { ActivationContext } from "./extension/context.js";
-import { SUBAGENT_TOOL_NAMES } from "./lib/tool-names.js";
+
 import type { AgentRecord } from "./lib/types.js";
 import type { UICtx } from "./lib/ui/theme.js";
-import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
+import { startScheduler } from "./schedule/start.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
 import { createGetSubagentResultTool } from "./tools/get-subagent-result.js";
 import { createJevTool } from "./tools/jev.js";
 import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
-import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/workflow.js";
+import { createWorkflowTool, fleetWorkflows } from "./tools/workflow.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
-import { createActivityTracker } from "./ui/agent-status.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
@@ -47,10 +46,12 @@ import { createCompletionNudge } from "./ui/completion-nudge.js";
 import type { FleetUICtx } from "./ui/fleet-list.js";
 import { renderWorkflowEntryCard } from "./ui/workflow/workflow-card.js";
 import { openWorkflowFromFleet, type WorkflowMenuDeps } from "./ui/workflow/workflow-menu.js";
-import { decideWorkflowCollision } from "./workflow/collisions.js";
-import { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG, type WorkflowEntryData, workflowEntryData } from "./workflow/run/entry.js";
-import { createWorkflowTask, formatWorkflowNotification, workflowRunId } from "./workflow/run/task.js";
-import { extractMeta, type WorkflowMeta, } from "./workflow/script/meta.js";
+
+import { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG, type WorkflowEntryData } from "./workflow/run/entry.js";
+import { createWorkflowHosts } from "./workflow/run/session-hosts.js";
+
+
+
 
 export function createExtension(pi: ExtensionAPI): void {
   // The activation's own state — every cluster below reads and writes through this.
@@ -124,121 +125,8 @@ export function createExtension(pi: ExtensionAPI): void {
   };
 
 
-  // Expose manager via Symbol.for() global registry for cross-package access.
-  // Standard Node.js pattern for cross-package singletons (used by OpenTelemetry, etc.).
-  // Documented for callers in docs/rpc.md ("The manager registry").
-  //
-  // Claim the slot only if it's free: subagent sessions re-activate this
-  // extension in the same process (session.bindExtensions in agent-runner.ts),
-  // and unconditionally overwriting would point the registry at a short-lived
-  // child manager — and the child's shutdown would then delete the root
-  // session's entry. The first activation (the root session) wins; child
-  // activations leave it alone.
-  const MANAGER_KEY = Symbol.for("pi-subagents:manager");
-  /**
-   * Per-session view of the same entry, keyed by session id.
-   *
-   * The single slot above is claimed by the FIRST activation in the process and released only when
-   * that one shuts down, which is exactly right for the case it was written for — a child session
-   * re-activating this extension must not point cross-package consumers at a short-lived child
-   * manager. But a host that keeps MANY sessions in one process (a web UI, a daemon) then resolves
-   * `undefined` for its own agent ids in every session but the first: `getRecord(id)` walks the
-   * owner's manager. Publishing each activation under its own session id is additive — the legacy
-   * slot keeps its exact semantics — and lets such a host resolve the ids it spawned, including
-   * `record.sessionFile` and the live `record.session`. Documented in docs/rpc.md.
-   */
-  const MANAGERS_KEY = Symbol.for("pi-subagents:managers");
-  // Process-external callers may supply arbitrary options. Nested ownership and
-  // config-root metadata are internal capabilities issued only by scoped tools.
-  /**
-   * Resolve the agent type and spawn. Trusts its options — every caller must
-   * either be in-process or have gone through `spawnTopLevel` first.
-   */
-  const spawnResolved = (piRef: any, ctxRef: any, type: string, prompt: string, options: any) => {
-    // Cross-extension callers get the same dispatch contract as the LLM (#183).
-    // The RPC layer already throws for an unresolvable model rather than falling
-    // back silently; a bad agent type should not be quieter. Throws become error
-    // envelopes at the RPC boundary. Reload first so an agent file added mid
-    // session is spawnable here too, not only through the Agent tool.
-    reloadCustomAgents();
-    const dispatch = resolveSpawnType(type);
-    if (!dispatch.ok) throw new Error(dispatch.message);
-    // Every programmatic spawn lands here — cross-extension RPC, both `@handle`
-    // mention paths, and the `Symbol.for("pi-subagents:manager")` registry — and
-    // none came through the Agent tool, which is where the UI activity tracker is
-    // otherwise created. Without one the widget and FleetView have no tool name
-    // and no turn count, so the row reads `thinking…` for the agent's whole life
-    // while the header's tool-use count climbs beside it (#181). Double-tracking
-    // is not possible: the Agent tool calls `manager.spawn` directly. The tracker
-    // callbacks are the funnel's own — a caller's are not honoured, since a
-    // half-wired tracker renders worse than none.
-    //
-    // The turn limit is resolved rather than read off `options`, which a mention
-    // spawn deliberately omits so the agent's own config can decide: a tracker
-    // built with `undefined` renders `↻3` where the Agent tool renders `↻3≤20`.
-    // Like the tool's own, it is a prediction — editing the agent file mid-run
-    // leaves the displayed ceiling stale.
-    const { state, callbacks } = createActivityTracker(resolveEffectiveMaxTurns(dispatch.type, options?.maxTurns));
-    // Repaints are left to the manager's `onStart` callback, which already starts
-    // the widget/fleet timers for agents that enter this way.
-    const id = services.manager.spawn(piRef, ctxRef, dispatch.type, prompt, { ...options, ...callbacks });
-    services.agentActivity.set(id, state);
-    return id;
-  };
-
-  const spawnTopLevel = (piRef: any, ctxRef: any, type: string, prompt: string, options: any) => {
-    const safeOptions = { ...(options ?? {}) };
-    delete safeOptions.parentAgentId;
-    // Internal too: a forged value would hide an RPC-spawned agent inside
-    // someone else's workflow, and take it out of the concurrency pool with it.
-    delete safeOptions.workflowId;
-    delete safeOptions.depth;
-    delete safeOptions.maxSubagentDepth;
-    delete safeOptions.configCwd;
-    // Also internal: it names a transcript directory, so a forged value would
-    // be a path-traversal primitive.
-    delete safeOptions.rootSessionId;
-    // Worse than rootSessionId: this one names a file to OPEN and replay as a
-    // conversation. Only the mention dispatcher may set it, and only from a
-    // path this extension itself recorded — never from anything a caller sent.
-    delete safeOptions.resumeSessionFile;
-    // Bypasses handle allocation, so a forged value would duplicate a live
-    // agent's name and make `@handle` ambiguous. Same rule: dispatcher only.
-    delete safeOptions.reclaim;
-    // Every spawn through here is DETACHED — the caller gets an id back and
-    // awaits nothing. A forged `blocking` would charge it to the foreground
-    // pool and could defer it behind a queue whose gate nobody is holding.
-    delete safeOptions.blocking;
-    return spawnResolved(piRef, ctxRef, type, prompt, safeOptions);
-  };
-
-  /**
-   * Resolve a tool's `agent_id` as an id OR a handle, so the model addresses
-   * agents by the same names the user types. Ids are tried first, keeping the
-   * existing behaviour exact — a handle is only consulted when the string is
-   * not an id at all. Only live records: a tombstone has nothing to steer and
-   * no result to read. Callers still enforce the nested-ownership rejection.
-   */
-  const resolveAgentRef = (ref: string): AgentRecord | undefined => {
-    const byId = services.manager.getRecord(ref);
-    if (byId) return byId;
-    const resolved = services.manager.resolveMention(ref);
-    return resolved?.kind === "live" ? resolved.record : undefined;
-  };
-
-  const registryEntry = {
-    waitForAll: () => services.manager.waitForAll(),
-    hasRunning: () => services.manager.hasRunning(),
-    spawn: spawnTopLevel,
-    getRecord: (id: string) => {
-      const record = services.manager.getRecord(id);
-      return record !== undefined && isTopLevelAgent(record) ? record : undefined;
-    },
-  };
-  const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
-  if (ownsManagerRegistry) {
-    (globalThis as any)[MANAGER_KEY] = registryEntry;
-  }
+  const { MANAGER_KEY, MANAGERS_KEY, spawnResolved, spawnTopLevel, resolveAgentRef, registryEntry, ownsManagerRegistry } =
+    createManagerRegistry({ services, reloadAgents: () => reloadCustomAgents() });
 
   // RPC handlers + the `subagents:ready` broadcast are wired on `session_start`
   // (a bound lifecycle event), not at factory time. pi runs every extension
@@ -247,20 +135,6 @@ export function createExtension(pi: ExtensionAPI): void {
   // session_start — and must not advertise or answer RPC it can't service
   // (currentCtx would stay undefined → spawn always "No active session"). Gating
   // here makes a filtered session behave like an absent one (#142).
-  function startScheduler(ctx: ExtensionContext) {
-    try {
-      const sessionId = ctx.sessionManager?.getSessionId?.();
-      if (!sessionId) return;  // sessionId not yet available — try again on next event
-      const path = resolveStorePath(ctx.cwd, sessionId);
-      const store = new ScheduleStore(path);
-      services.scheduler.start(pi, ctx, services.manager, store);
-      pi.events.emit("subagents:scheduler_ready", { sessionId, jobCount: store.list().length });
-    } catch (err) {
-      // Scheduling is non-essential — log and move on so the rest of the
-      // extension keeps working if e.g. .pi/ is unwritable.
-      console.warn("[pi-subagents] Failed to start scheduler:", err);
-    }
-  }
 
   // Capture ctx from session_start for RPC spawn handler + start the scheduler.
   // This also wires the RPC handlers and broadcasts readiness — on the first
@@ -312,7 +186,7 @@ export function createExtension(pi: ExtensionAPI): void {
       // also avoids the race where a consumer loaded after us misses the event.
       pi.events.emit("subagents:ready", {});
     }
-    if (context.schedulingEnabled && !services.scheduler.isActive()) startScheduler(ctx);
+    if (context.schedulingEnabled && !services.scheduler.isActive()) startScheduler({ pi, scheduler: services.scheduler, manager: services.manager }, ctx);
     // Stack `@handle` suggestions on pi's built-in autocomplete. Registered at
     // most once per activation: pi appends wrappers to a list it never prunes,
     // so a second call would layer a duplicate provider on the first. TUI only
@@ -600,149 +474,9 @@ export function createExtension(pi: ExtensionAPI): void {
   const jevTool = createJevTool(toolsDeps);
   if (context.jevEnabled) pi.registerTool(jevTool);
 
-  /**
-   * Act on {@link decideWorkflowCollision} — the half that needs the host.
-   *
-   * The policy (what counts as a conflict, what a pin changes, whether there is
-   * anything left to withdraw) lives in `workflow/collisions.ts`; this is the
-   * host-facing shell around it: read the registry, warn, and take our tool out
-   * of the active set.
-   *
-   * ## Why this can only happen at session_start
-   *
-   * `getAllTools` throws during extension loading ("Action methods cannot be
-   * called during extension loading"), and load order means a check at
-   * registration time could not see an extension that has not loaded yet. So
-   * the decision cannot gate `registerTool`; it has to undo it. `setActiveTools`
-   * is what makes that real rather than cosmetic — pi rebuilds the system
-   * prompt from the new set, and `session_start` runs before any turn, so the
-   * model never sees a spec we withdrew. A later `_refreshToolRegistry` keeps
-   * the active set it had and only adds names new to the registry, so ours does
-   * not creep back.
-   *
-   * Best-effort and swallowed. A diagnostic that took the session down would be
-   * worse than the collision it reports.
-   */
-  function resolveWorkflowCollisions(ctx: ExtensionContext): void {
-    if (context.collisionsChecked) return;
-    context.collisionsChecked = true;
-
-    const warn = (message: string) => {
-      if (ctx.hasUI) ctx.ui.notify(message, "warning");
-      else console.warn(`[pi-subagents] ${message}`);
-    };
-
-    try {
-      if (!context.workflowsEnabled) return;
-
-      const verdict = decideWorkflowCollision({
-        tools: pi.getAllTools(),
-        // Identifies our own registration: this extension does not know its
-        // install path, and the description is the one field certainly ours.
-        ownDescription: workflowTool.description,
-        pinned: context.workflowsPinned,
-      });
-      if (verdict.kind === "none") return;
-      if (verdict.kind === "report") {
-        warn(verdict.message);
-        return;
-      }
-
-      context.workflowsEnabled = false; // not setWorkflowsEnabled: this is not the user pinning it
-      services.status.update();
-      services.fleet.update();
-      warn(verdict.message);
-
-      if (!verdict.withdraw) return;
-      const active = pi.getActiveTools();
-      if (active.includes(SUBAGENT_TOOL_NAMES.WORKFLOW)) {
-        pi.setActiveTools(active.filter(name => name !== SUBAGENT_TOOL_NAMES.WORKFLOW));
-      }
-    } catch {
-      // getAllTools/setActiveTools are unavailable in some hosts (print mode,
-      // RPC). Not being able to check is not a reason to fail the session.
-    }
-  }
-
-  /**
-   * `--subagents-workflow-file=<path>` — run a script at startup, with no LLM
-   * round-trip deciding whether to call the tool.
-   *
-   * Read here rather than at activation because that is the only place the real
-   * value exists: the host activates extensions first and applies collected CLI
-   * flags second, so `getFlag` during activation returns the registered default
-   * and nothing else. `examples/extensions/ssh.ts` reads its flag from
-   * session_start for exactly this reason.
-   */
-  function runWorkflowFlag(ctx: ExtensionContext): void {
-    if (context.workflowFlagHandled) return;
-    const flag = pi.getFlag(WORKFLOW_FILE_FLAG);
-    if (flag === undefined || flag === false) return;
-    context.workflowFlagHandled = true;
-
-    const report = (message: string, level: "info" | "warning") => {
-      if (ctx.hasUI) ctx.ui.notify(message, level);
-      else console.warn(`[pi-subagents] ${message}`);
-    };
-
-    // The flag is the same machinery by another door, so the master switch has
-    // to close it too — silently ignoring a flag the user typed would be worse
-    // than saying why nothing ran.
-    if (!context.workflowsEnabled) {
-      report(
-        `--${WORKFLOW_FILE_FLAG} ignored: workflows are off. Turn them on in /agents → Settings → Workflows, ` +
-          'or set `"workflowsEnabled": true` in .pi/subagents.json.',
-        "warning",
-      );
-      return;
-    }
-
-    // A bare `--subagents-workflow-file` parses to boolean `true`. Say what was
-    // missing rather than reading a file called "true".
-    if (typeof flag !== "string" || flag.trim() === "") {
-      report(`--${WORKFLOW_FILE_FLAG} needs a path: --${WORKFLOW_FILE_FLAG}=<path>`, "warning");
-      return;
-    }
-
-    const path = isAbsolute(flag.trim()) ? flag.trim() : join(ctx.cwd, flag.trim());
-    let script: string;
-    try {
-      script = readFileSync(path, "utf-8");
-    } catch (err) {
-      report(`Could not read ${path}: ${err instanceof Error ? err.message : String(err)}`, "warning");
-      return;
-    }
-
-    let meta: WorkflowMeta | undefined;
-    try {
-      meta = extractMeta(script).meta;
-    } catch (err) {
-      report(err instanceof Error ? err.message : String(err), "warning");
-      return;
-    }
-
-    const task = createWorkflowTask({ id: workflowRunId(), script, scriptPath: path, meta });
-    services.workflowTasks.set(task.id, task);
-    services.status.update();
-    services.fleet.update();
-    report(`Running workflow ${meta.name}…`, "info");
-
-    // Detached: session_start is awaited by the host, and a workflow can run for
-    // minutes — blocking here would hold the whole session's startup.
-    void runWorkflowTask(toolsDeps, ctx, task).then(() => {
-      // No tool call to attach a result card to, so the card becomes a session
-      // entry (same layout), and the outcome is handed to the model as context
-      // for its next turn rather than forcing one.
-      pi.appendEntry<WorkflowEntryData>(WORKFLOW_ENTRY_TYPE, workflowEntryData(task));
-      pi.sendMessage({
-        customType: "workflow-result",
-        content: formatWorkflowNotification(task),
-        display: false,
-      }, { deliverAs: "nextTurn" });
-      services.status.update();
-      services.fleet.update();
-    });
-  }
+  const { resolveWorkflowCollisions, runWorkflowFlag } = createWorkflowHosts({
+    pi, services, context, runDeps: toolsDeps, toolDescription: workflowTool.description,
+  });
 
   registerToolReportingUsage(createGetSubagentResultTool(toolsDeps), toolsDeps);
   registerToolReportingUsage(createSteerSubagentTool(toolsDeps), toolsDeps);

@@ -1,15 +1,15 @@
 /**
  * agent-status.ts — how a running agent reports itself on the transcript row.
  *
- * Moved out of `index.ts` as-is: the status container the Agent tool's call line draws, the
- * activity tracker that feeds it, and the completion labels. Pure presentation — no `pi.*` call,
- * no activation-scope state. (`THINKING_LEVELS` left with the status split and now lives in
- * `lib/agent-meta.ts`: the description builder needs it and `agent/` may not import `ui/`.)
+ * The status container the Agent tool's call line draws, its spinner, and the completion labels.
+ * Pure presentation — no `pi.*` call, no activation-scope state. The activity *state* it renders
+ * lives in `agent/activity.ts`: the spawn paths that create it may not import `ui/`, the same
+ * way `THINKING_LEVELS` left for `lib/agent-meta.ts`.
  */
 
 import { Container, Text } from "@earendil-works/pi-tui";
 import { formatTokens } from "../lib/ui/format.js";
-import type { AgentActivity, Theme } from "../lib/ui/theme.js";
+import type { Theme } from "../lib/ui/theme.js";
 import { getLifetimeTotal, type LifetimeUsage } from "../lib/usage.js";
 
 /**
@@ -39,53 +39,6 @@ export function renderRunningAgentStatus(
 export function formatLifetimeTokens(o: { lifetimeUsage: LifetimeUsage }): string {
   const t = getLifetimeTotal(o.lifetimeUsage);
   return t > 0 ? formatTokens(t) : "";
-}
-
-/**
- * Create an AgentActivity state and spawn callbacks for tracking tool usage.
- * Used by both foreground and background paths to avoid duplication.
- */
-export function createActivityTracker(maxTurns?: number, onStreamUpdate?: () => void) {
-  const state: AgentActivity = {
-    activeTools: new Map(),
-    toolUses: 0,
-    turnCount: 1,
-    maxTurns,
-    responseText: "",
-    session: undefined,
-  };
-
-  const callbacks = {
-    onToolActivity: (activity: { type: "start" | "end"; toolName: string }) => {
-      if (activity.type === "start") {
-        state.activeTools.set(activity.toolName + "_" + Date.now(), activity.toolName);
-      } else {
-        for (const [key, name] of state.activeTools) {
-          if (name === activity.toolName) { state.activeTools.delete(key); break; }
-        }
-        state.toolUses++;
-      }
-      onStreamUpdate?.();
-    },
-    onTextDelta: (_delta: string, fullText: string) => {
-      state.responseText = fullText;
-      onStreamUpdate?.();
-    },
-    onTurnEnd: (turnCount: number) => {
-      state.turnCount = turnCount;
-      onStreamUpdate?.();
-    },
-    onSessionCreated: (session: any) => {
-      state.session = session;
-    },
-    // Spend is accumulated on the AgentRecord (agent-manager), which is what
-    // every surface reads; this callback exists here only to repaint on it.
-    onAssistantUsage: (_usage: LifetimeUsage) => {
-      onStreamUpdate?.();
-    },
-  };
-
-  return { state, callbacks };
 }
 
 /** Human-readable status label for agent completion. */
