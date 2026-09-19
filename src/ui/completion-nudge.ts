@@ -13,7 +13,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import type { DeliveryCallback } from "../agent/group-join.js";
-import type { AgentRecord, NotificationDetails } from "../lib/types.js";
+import type { AgentRecord, JoinMode, NotificationDetails } from "../lib/types.js";
 import { formatCost, formatMs, formatTokens, formatTurns } from "../lib/ui/format.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
 import { buildNotificationDetails, formatTaskNotification } from "./notifications.js";
@@ -28,6 +28,25 @@ export interface NudgeServices {
   fleet: { onAgentFinished(id: string): void };
   /** Notifications held briefly, so a result fetched in time can cancel them. */
   pendingNudges: Map<string, ReturnType<typeof setTimeout>>;
+  /** The records behind an id — the batch window closes over what is on them. */
+  manager: { getRecord(id: string): AgentRecord | undefined };
+  /** Where a batch that reached 2+ smart-mode agents is registered. */
+  groupJoin: {
+    registerGroup(groupId: string, ids: string[]): void;
+    onAgentComplete(record: AgentRecord): void;
+  };
+}
+
+/**
+ * The debounce window a spawn batch accumulates on.
+ *
+ * Mutable and shared with the callers that push into it — the Agent tool and the mention paths —
+ * which is why the activation's own object arrives rather than a copy.
+ */
+export interface BatchWindow {
+  currentBatchAgents: { id: string; joinMode: JoinMode }[];
+  batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
+  batchCounter: number;
 }
 
 export interface CompletionNudgeDeps {
@@ -35,9 +54,10 @@ export interface CompletionNudgeDeps {
   services: NudgeServices;
   /** Live read of the showCost setting: the figure shows only when the user asked for it. */
   showCost(): boolean;
+  batch: BatchWindow;
 }
 
-export function createCompletionNudge({ pi, services, showCost }: CompletionNudgeDeps) {
+export function createCompletionNudge({ pi, services, showCost, batch }: CompletionNudgeDeps) {
   const NUDGE_HOLD_MS = 200;
   // A queued result wait must observe completion before its held notification
   // can fire, so successful waits can still suppress that redundant nudge.
@@ -179,7 +199,47 @@ export function createCompletionNudge({ pi, services, showCost }: CompletionNudg
     }
   );
 
-  return { scheduleNudge, cancelNudge, sendIndividualNudge, onGroupComplete, queueWaitPollMs: QUEUE_WAIT_POLL_MS };
+  /**
+   * Close the batch window.
+   *
+   * 2+ smart-mode agents arriving together are announced as one group rather than N nudges; an
+   * agent that completed while the window was open had its delivery deferred, so it is fed into
+   * the group retroactively. Anything else is announced individually.
+   */
+  function finalizeBatch() {
+    batch.batchFinalizeTimer = undefined;
+    const batchAgents = [...batch.currentBatchAgents];
+    batch.currentBatchAgents = [];
+
+    const smartAgents = batchAgents.filter(a => a.joinMode === 'smart' || a.joinMode === 'group');
+    if (smartAgents.length >= 2) {
+      const groupId = `batch-${++batch.batchCounter}`;
+      const ids = smartAgents.map(a => a.id);
+      services.groupJoin.registerGroup(groupId, ids);
+      // Retroactively process agents that already completed during the debounce window.
+      // Their onComplete fired but was deferred (agent was in currentBatchAgents),
+      // so we feed them into the group now.
+      for (const id of ids) {
+        const record = services.manager.getRecord(id);
+        if (!record) continue;
+        record.groupId = groupId;
+        if (record.completedAt != null && !record.resultConsumed) {
+          services.groupJoin.onAgentComplete(record);
+        }
+      }
+    } else {
+      // No group formed — send individual nudges for any agents that completed
+      // during the debounce window and had their notification deferred.
+      for (const { id } of batchAgents) {
+        const record = services.manager.getRecord(id);
+        if (record?.completedAt != null && !record.resultConsumed) {
+          sendIndividualNudge(record);
+        }
+      }
+    }
+  }
+
+  return { scheduleNudge, cancelNudge, sendIndividualNudge, finalizeBatch, onGroupComplete, queueWaitPollMs: QUEUE_WAIT_POLL_MS };
 }
 
 /** What the wiring layer keeps a handle on. */
