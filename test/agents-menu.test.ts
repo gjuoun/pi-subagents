@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModelScope } from "../src/model/model-scope.js";
 import { showAgentsMenu } from "../src/ui/agents/menu.js";
 
 /** The whole context slice `snapshotSettings` reads, so a flip can really be persisted. */
@@ -17,6 +18,7 @@ function makeDeps(on: boolean) {
   return {
     state,
     context: {
+      modelScope: new ModelScope(),
       manager: { listAgents: () => [], getMaxConcurrent: () => 10, getMaxConcurrentForeground: () => 0 },
       scheduler: { isActive: () => false, list: () => [] },
       workflowTasks: new Map(),

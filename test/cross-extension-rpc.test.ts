@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type EventBus, PROTOCOL_VERSION, type RpcDeps, registerRpcHandlers, type SpawnCapable } from "../src/agent/rpc.js";
-import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model/model-scope.js";
+import { ModelScope } from "../src/model/model-scope.js";
+
+/**
+ * The scope policy handed to the RPC deps. The scope describe below replaces it
+ * per test, so enabling enforcement in one cannot leak into another suite.
+ */
+let modelScope = new ModelScope();
 
 /** Simple in-process event bus for testing. */
 function createEventBus(): EventBus {
@@ -36,7 +42,7 @@ describe("cross-extension RPC", () => {
       consumeResult: vi.fn().mockReturnValue(true),
     };
     ctx = { session: true };
-    deps = { events, pi: { events }, getCtx: () => ctx, manager };
+    deps = { events, pi: { events }, getCtx: () => ctx, manager, modelScope };
   });
 
   // --- ping ---
@@ -369,7 +375,7 @@ describe("cross-extension RPC", () => {
 
     beforeEach(() => {
       ctx = { session: true, modelRegistry: registry };
-      deps = { events, pi: { events }, getCtx: () => ctx, manager };
+      deps = { events, pi: { events }, getCtx: () => ctx, manager, modelScope };
     });
 
     it("resolves a string model to a Model instance before manager.spawn", async () => {
@@ -475,7 +481,6 @@ describe("cross-extension RPC", () => {
     let projectDir: string;
     let agentDir: string;
     let prevAgentDir: string | undefined;
-    let prevEnabled: boolean;
 
     beforeEach(() => {
       // resolveEnabledModels memoizes on (patterns, mtime+size of both settings
@@ -485,19 +490,18 @@ describe("cross-extension RPC", () => {
       agentDir = mkdtempSync(join(tmpdir(), "pi-rpc-scope-global-"));
       prevAgentDir = process.env.PI_CODING_AGENT_DIR;
       process.env.PI_CODING_AGENT_DIR = agentDir;
-      prevEnabled = isScopeModelsEnabled();
+      modelScope = new ModelScope();
       mkdirSync(join(projectDir, ".pi"), { recursive: true });
       writeFileSync(
         join(projectDir, ".pi", "settings.json"),
         JSON.stringify({ enabledModels: ["openai-codex/gpt-5.5"] }),
       );
-      setScopeModelsEnabled(true);
+      modelScope.setEnabled(true);
       ctx = { session: true, cwd: projectDir, modelRegistry: registry };
-      deps = { events, pi: { events }, getCtx: () => ctx, manager };
+      deps = { events, pi: { events }, getCtx: () => ctx, manager, modelScope };
     });
 
     afterEach(() => {
-      setScopeModelsEnabled(prevEnabled); // module-global — restore for other suites
       if (prevAgentDir == null) delete process.env.PI_CODING_AGENT_DIR;
       else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
       rmSync(projectDir, { recursive: true, force: true });
@@ -543,7 +547,7 @@ describe("cross-extension RPC", () => {
     });
 
     it("does not check scope while the setting is off", async () => {
-      setScopeModelsEnabled(false);
+      modelScope.setEnabled(false);
       const call = await spawn("req-sc4", "sonnet");
       expect(call).toEqual({ success: true, data: { id: "agent-42" } });
       expect(manager.spawn).toHaveBeenCalledWith(

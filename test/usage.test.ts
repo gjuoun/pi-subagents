@@ -1,26 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addUsage, getLifetimeCost, getLifetimeTotal, getSessionContextPercent, getSessionTokens, PendingUsagePool } from "../src/lib/usage.js";
+import { addUsage, getLifetimeCost, getLifetimeTotal, getSessionContextPercent, PendingUsagePool } from "../src/lib/usage.js";
 
 // Regression for issue #38 — token semantics + context indicator
 describe("usage", () => {
-  describe("getSessionTokens", () => {
-    it("uses billed-token semantics (input + output + cacheWrite), not inflated total", () => {
-      const session = {
-        getSessionStats: () => ({
-          tokens: { input: 100, output: 200, cacheRead: 500_000, cacheWrite: 50, total: 500_350 } as any,
-          contextUsage: { tokens: 50_300, contextWindow: 200_000, percent: 25 },
-        }),
-      };
-      expect(getSessionTokens(session)).toBe(350);
-    });
-
-    it("returns 0 when session is undefined or stats throw", () => {
-      expect(getSessionTokens(undefined)).toBe(0);
-      const broken = { getSessionStats: () => { throw new Error("nope"); } } as any;
-      expect(getSessionTokens(broken)).toBe(0);
-    });
-  });
-
   describe("getSessionContextPercent", () => {
     it("returns null when contextUsage is unavailable", () => {
       const session = {
@@ -56,32 +38,16 @@ describe("usage", () => {
       expect(getLifetimeTotal({ input: 100, output: 200, cacheWrite: 50 })).toBe(350);
     });
 
-    // getSessionTokens reads upstream session stats (resets at compaction);
-    // getLifetimeTotal reads our independent accumulator (survives compaction).
-    // They agree pre-compaction, diverge after — both legitimate signals.
-    it("agrees with getSessionTokens pre-compaction, diverges after", () => {
-      let sessionStatsTokens = { input: 100, output: 200, cacheWrite: 50 };
-      const session = {
-        getSessionStats: () => ({ tokens: sessionStatsTokens }),
-      };
+    // The display total reads this accumulator rather than upstream's session
+    // stats: compaction replaces `session.state.messages`, which resets those,
+    // while this sum is fed by `message_end` events and keeps growing.
+    it("accumulates across a compaction instead of resetting", () => {
       const lifetime = { input: 100, output: 200, cacheWrite: 50 };
-
-      expect(getSessionTokens(session)).toBe(350);
       expect(getLifetimeTotal(lifetime)).toBe(350);
 
-      // Compaction: upstream replaces session.state.messages, so stats reset.
-      // Our accumulator is independent — it keeps growing.
-      sessionStatsTokens = { input: 0, output: 0, cacheWrite: 0 };
-
-      expect(getSessionTokens(session)).toBe(0);            // reset
-      expect(getLifetimeTotal(lifetime)).toBe(350);          // preserved
-
-      // Subsequent message_end events feed both: session re-fills, accumulator continues
-      sessionStatsTokens = { input: 80, output: 150, cacheWrite: 30 };
+      // A turn after compaction keeps adding to the same sum.
       lifetime.input += 80; lifetime.output += 150; lifetime.cacheWrite += 30;
-
-      expect(getSessionTokens(session)).toBe(260);           // post-compaction window
-      expect(getLifetimeTotal(lifetime)).toBe(610);          // 350 + 260, monotone
+      expect(getLifetimeTotal(lifetime)).toBe(610); // 350 + 260, monotone
     });
 
     // The accumulator survives compaction because it lives on AgentActivity /

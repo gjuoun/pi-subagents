@@ -28,8 +28,8 @@ const FINDINGS = {
 
 const compile = (schema: unknown) => {
   const result = compileJsonSchema(schema);
-  if (!result.ok) throw new Error(`expected a compiled schema, got: ${result.message}`);
-  return result.compiled;
+  if (result.isErr()) throw new Error(`expected a compiled schema, got: ${result.error}`);
+  return result.value;
 };
 
 describe("compiling a script-supplied schema", () => {
@@ -37,7 +37,7 @@ describe("compiling a script-supplied schema", () => {
     // The whole feature rests on this: `@sinclair/typebox` throws `Unknown
     // type` on a schema with no Kind symbol, so if this ever regresses to that
     // package every schema call dies at the first validation.
-    expect(compileJsonSchema(FINDINGS).ok).toBe(true);
+    expect(compileJsonSchema(FINDINGS).isOk()).toBe(true);
   });
 
   it("keeps the schema object as given, for the tool and the journal key", () => {
@@ -47,44 +47,40 @@ describe("compiling a script-supplied schema", () => {
   it("refuses anything that cannot be a tool's input schema", () => {
     for (const bad of [5, "x", null, undefined, [], { type: "array" }, { type: "string" }]) {
       const result = compileJsonSchema(bad);
-      expect(result.ok, `${JSON.stringify(bad)} should not compile`).toBe(false);
+      expect(result.isErr(), `${JSON.stringify(bad)} should not compile`).toBe(true);
     }
   });
 
   it("says why a non-object root is refused", () => {
     const result = compileJsonSchema({ type: "array" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toMatch(/type: "object"/);
+    expect(result._unsafeUnwrapErr()).toMatch(/type: "object"/);
   });
 
   it("refuses a schema too large to be worth sending", () => {
     const huge = { type: "object", properties: { a: { type: "string", description: "x".repeat(70_000) } } };
-    const result = compileJsonSchema(huge);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toMatch(/too large/);
+    expect(compileJsonSchema(huge)._unsafeUnwrapErr()).toMatch(/too large/);
   });
 
   it("refuses a schema it cannot walk, rather than failing at the first call", () => {
     const result = compileJsonSchema({ type: "object", properties: { a: { type: "nonsense" } } });
     // Either rejected here or provably checkable — what must not happen is a
     // compile that succeeds and then throws inside a child's tool handler.
-    if (result.ok) expect(() => result.compiled.check({ a: 1 })).not.toThrow();
-    else expect(result.message).toMatch(/agent\(\) opts\.schema/);
+    if (result.isOk()) expect(() => result.value.check({ a: 1 })).not.toThrow();
+    else expect(result.error).toMatch(/agent\(\) opts\.schema/);
   });
 });
 
 describe("checking a payload", () => {
   it("passes a conforming value", () => {
-    expect(compile(FINDINGS).check({ findings: [{ file: "a.ts", line: 3 }] })).toBe(true);
+    expect(compile(FINDINGS).check({ findings: [{ file: "a.ts", line: 3 }] }).isOk()).toBe(true);
   });
 
   it("passes when an optional field is absent", () => {
-    expect(compile(FINDINGS).check({ findings: [{ file: "a.ts" }] })).toBe(true);
+    expect(compile(FINDINGS).check({ findings: [{ file: "a.ts" }] }).isOk()).toBe(true);
   });
 
   it("names the missing property at the root", () => {
-    const message = compile(FINDINGS).check({});
-    expect(message).not.toBe(true);
+    const message = compile(FINDINGS).check({})._unsafeUnwrapErr();
     expect(message).toMatch(/findings/);
     expect(message).toContain("$:");
   });
@@ -92,8 +88,7 @@ describe("checking a payload", () => {
   it("names the offending path in JavaScript notation, not JSON Pointer", () => {
     // The model wrote the schema in JavaScript; `$.findings.0.line` is legible
     // to it in a way `/findings/0/line` is not.
-    const message = compile(FINDINGS).check({ findings: [{ file: "a.ts", line: 0 }] });
-    expect(message).not.toBe(true);
+    const message = compile(FINDINGS).check({ findings: [{ file: "a.ts", line: 0 }] })._unsafeUnwrapErr();
     expect(message).toContain("$.findings.0.line");
     expect(message).not.toContain("/findings/");
   });
@@ -104,7 +99,7 @@ describe("checking a payload", () => {
       properties: { a: { type: "string" }, b: { type: "string" }, c: { type: "string" } },
       required: ["a", "b", "c"],
     };
-    const message = String(compile(schema).check({}));
+    const message = compile(schema).check({})._unsafeUnwrapErr();
     for (const missing of ["a", "b", "c"]) expect(message).toContain(missing);
   });
 
@@ -114,7 +109,7 @@ describe("checking a payload", () => {
       properties: { n: { type: "integer", minimum: 1 }, s: { type: "string" } },
       required: ["s"],
     };
-    const message = String(compile(schema).check({ n: 0 }));
+    const message = compile(schema).check({ n: 0 })._unsafeUnwrapErr();
     // A missing property at the root and a bad value below it are two different
     // things to fix; collapsing them would hide one behind the other.
     expect(message).toContain("$: ");
@@ -123,8 +118,9 @@ describe("checking a payload", () => {
   });
 
   it("rejects a value of the wrong type entirely", () => {
-    expect(compile(FINDINGS).check("not an object")).not.toBe(true);
-    expect(compile(FINDINGS).check(null)).not.toBe(true);
+    const compiled = compile(FINDINGS);
+    expect(compiled.check("not an object").isErr()).toBe(true);
+    expect(compiled.check(null).isErr()).toBe(true);
   });
 
   it("never throws, whatever it is handed", () => {

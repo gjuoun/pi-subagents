@@ -30,6 +30,7 @@ vi.mock("../src/agent/session/worktree.js", () => ({
 import { AgentManager } from "../src/agent/agent-manager.js";
 import { runAgent } from "../src/agent/agent-runner.js";
 import { registerAgents } from "../src/config/registry/agent-types.js";
+import { ModelScope } from "../src/model/model-scope.js";
 import { createWorkflowHost } from "../src/workflow/run/host.js";
 import type { WorkflowSpawnRequest } from "../src/workflow/run/runtime.js";
 import { ctx } from "./helpers/boot-extension.js";
@@ -94,7 +95,7 @@ describe("the workflow host reports a child's effective configuration", () => {
     // The registry has to resolve the script's fuzzy spelling, or the spawn is
     // refused before it ever reaches a session — which is the correct behaviour
     // for an unresolvable model, and not what this test is about.
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi,
       ctx: ctx({ modelRegistry: { find: vi.fn(() => haiku), getAvailable: vi.fn(() => [haiku]) } }),
       manager,
@@ -111,7 +112,7 @@ describe("the workflow host reports a child's effective configuration", () => {
 
   it("reports for an agent that named no model — the inherited case", async () => {
     childSessionReports({ model: { provider: "anthropic", id: "claude-sonnet-4-6" } });
-    const host = createWorkflowHost({ pi, ctx: ctx({}), manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi, ctx: ctx({}), manager });
     const reported: { modelId?: string }[] = [];
 
     await host.spawnAgent(spawnRequest({ onResolved: configCollector(reported) }));
@@ -123,7 +124,7 @@ describe("the workflow host reports a child's effective configuration", () => {
 
   it("discloses a thinking level pi clamped below what was asked for (#182)", async () => {
     childSessionReports({ model: { provider: "anthropic", id: "claude-haiku-4-5" }, thinkingLevel: "low" });
-    const host = createWorkflowHost({ pi, ctx: ctx({}), manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi, ctx: ctx({}), manager });
     const reported: { thinking?: string; requestedThinking?: string }[] = [];
 
     await host.spawnAgent(spawnRequest({ effort: "max", onResolved: configCollector(reported) }));
@@ -144,7 +145,7 @@ describe("the workflow host reports a child's effective configuration", () => {
     const opus = { provider: "anthropic", id: "claude-opus-4-6", name: "Opus 4.6" };
     registerAgents(new Map([["pinned", { name: "pinned", model: "anthropic/claude-opus-4-6" } as any]]));
     childSessionReports({ model: haiku });
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi,
       ctx: ctx({
         modelRegistry: {
@@ -172,7 +173,7 @@ describe("the workflow host reports a child's effective configuration", () => {
 
   it("says nothing about a level that was honoured", async () => {
     childSessionReports({ model: { provider: "anthropic", id: "claude-haiku-4-5" }, thinkingLevel: "low" });
-    const host = createWorkflowHost({ pi, ctx: ctx({}), manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi, ctx: ctx({}), manager });
     const reported: { requestedThinking?: string }[] = [];
 
     await host.spawnAgent(spawnRequest({ effort: "low", onResolved: configCollector(reported) }));
@@ -186,7 +187,7 @@ describe("the workflow host reports a child's effective configuration", () => {
     // Deliberately requests no model: passing an unresolvable one would refuse
     // the spawn outright and this would pass without reaching a session at all.
     childSessionReports({});
-    const host = createWorkflowHost({ pi, ctx: ctx({}), manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi, ctx: ctx({}), manager });
     const reported: Record<string, unknown>[] = [];
 
     await host.spawnAgent(spawnRequest({ onResolved: configCollector(reported) }));
@@ -200,7 +201,7 @@ describe("the workflow host reports a child's effective configuration", () => {
     // session — as the configuration half is — would leave exactly the
     // children worth reading, the ones that died in startup, unopenable.
     childSessionReports({});
-    const host = createWorkflowHost({ pi, ctx: ctx({}), manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi, ctx: ctx({}), manager });
     const reported: { recordId?: string }[] = [];
 
     await host.spawnAgent(spawnRequest({ onResolved: info => reported.push(info) }));
