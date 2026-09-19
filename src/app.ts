@@ -38,7 +38,7 @@ import { createGetSubagentResultTool } from "./tools/get-subagent-result.js";
 import { createJevTool } from "./tools/jev.js";
 import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
-import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/workflow.js";
+import { createWorkflowTool, fleetWorkflows } from "./tools/workflow.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
@@ -50,6 +50,7 @@ import { openWorkflowFromFleet, type WorkflowMenuDeps } from "./ui/workflow/work
 import { decideWorkflowCollision } from "./workflow/collisions.js";
 import { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG, type WorkflowEntryData, workflowEntryData } from "./workflow/run/entry.js";
 import { createWorkflowTask, formatWorkflowNotification, workflowRunId } from "./workflow/run/task.js";
+import { runWorkflowTask } from "./workflow/run/task-runner.js";
 import { extractMeta, type WorkflowMeta, } from "./workflow/script/meta.js";
 
 export function createExtension(pi: ExtensionAPI): void {

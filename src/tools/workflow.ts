@@ -13,7 +13,7 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { defineTool, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { renderToolDescriptionTemplate } from "../agent/description.js";
@@ -24,11 +24,10 @@ import { type NotificationDetails } from "../lib/types.js";
 import { type FleetWorkflow } from "../ui/fleet-list.js";
 import { textResult } from "../ui/notifications.js";
 import { renderWorkflowCard } from "../ui/workflow/workflow-card.js";
-import { createWorkflowHost } from "../workflow/run/host.js";
-import { appendJournal, readJournal, type WorkflowJournalEntry } from "../workflow/run/journal.js";
+import { readJournal } from "../workflow/run/journal.js";
 import { elapsedMs } from "../workflow/run/progress.js";
-import { runWorkflow } from "../workflow/run/runtime.js";
-import { completeWorkflowTask, createWorkflowTask, failWorkflowTask, formatWorkflowNotification, resolveResumeTarget, updateWorkflowProgressBatch, type WorkflowTask, workflowResultText, workflowRunId } from "../workflow/run/task.js";
+import { createWorkflowTask, formatWorkflowNotification, resolveResumeTarget, type WorkflowTask, workflowResultText, workflowRunId } from "../workflow/run/task.js";
+import { runWorkflowTask } from "../workflow/run/task-runner.js";
 import { extractMeta, type WorkflowMeta, workflowCallName } from "../workflow/script/meta.js";
 import { resolveWorkflowScript } from "../workflow/script/saved.js";
 import { fullWorkflowToolDescription } from "../workflow/tool-description.js";
@@ -58,43 +57,6 @@ export function fleetWorkflows(deps: ToolsDeps): FleetWorkflow[] {
   }));
 }
 
-/**
- * Run a task to completion against the real manager, settling the record
- * either way. Never rejects: a run that cannot start (bad `meta`, oversized
- * source, non-JSON `args`) is a failed workflow, and both callers here are
- * detached — a rejection would surface as an unhandled one.
- */
-export async function runWorkflowTask(deps: ToolsDeps, ctx: ExtensionContext, task: WorkflowTask): Promise<void> {
-  try {
-    const result = await runWorkflow({
-      script: task.script,
-      args: task.args,
-      signal: task.abortController.signal,
-      host: createWorkflowHost({
-        pi: deps.pi,
-        ctx,
-        manager: deps.services.manager,
-        signal: task.abortController.signal,
-        rootSessionId: ctx.sessionManager.getSessionId(),
-        workflowId: task.id,
-        modelScope: deps.services.modelScope,
-      }),
-      onProgress: entries => updateWorkflowProgressBatch(task, entries),
-      // The dialog's pause / skip / retry keys run through this; it is dropped
-      // again when the task settles.
-      onControl: control => { task.control = control; },
-      journal: {
-        ...(task.replay !== undefined ? { entries: task.replay } : {}),
-        ...(task.journalPath !== undefined
-          ? { append: (entry: WorkflowJournalEntry) => appendJournal(task.journalPath!, entry) }
-          : {}),
-      },
-    });
-    completeWorkflowTask(task, result);
-  } catch (err) {
-    failWorkflowTask(task, err instanceof Error ? err.message : String(err));
-  }
-}
 
 /**
  * Hand a finished run back to the model through the SAME channel a background
