@@ -1142,6 +1142,33 @@ export class AgentManager {
     }
 
     // Foreground resume: run inline and return the settled record.
+    //
+    // Charged to the foreground pool, and QUEUED behind it at the limit, exactly
+    // like a blocking spawn: `blocking` is what `maxConcurrentForeground` bounds,
+    // and this caller is awaiting inline. Uncharged, a resume was work the limit
+    // did not describe. The charge has to come WITH the queue — acquiring without
+    // waiting would push the count past the limit, which is not a bound.
+    const pool = this.poolFor(record);
+    if (pool !== undefined && !this.pools.hasRoom(pool)) {
+      record.status = "queued";
+      await new Promise<void>(resolve => {
+        this.pools.admit({
+          id,
+          pool,
+          // Acquired SYNCHRONOUSLY, before the caller wakes: drainQueue starts
+          // every runnable entry in one pass, so a slot claimed a microtask later
+          // could be popped out from under a second entry in that same pass.
+          start: async () => { this.pools.acquire(pool); resolve(); },
+          release: () => resolve(),
+        });
+      });
+      // Dropped from the queue instead of started (aborted or disposed): the
+      // waiter is released either way, so decide here rather than run on.
+      if (record.status !== "queued") return record;
+    } else {
+      this.pools.acquire(pool);
+    }
+
     record.status = "running";
     record.startedAt = Date.now();
     record.completedAt = undefined;
@@ -1172,6 +1199,10 @@ export class AgentManager {
       record.status = "error";
       record.error = err instanceof Error ? err.message : String(err);
       record.completedAt = Date.now();
+    } finally {
+      // This path's own decrement — the inline equivalent of `settleRun`'s. The
+      // pool is the one resolved at charge time, never a recomputed one.
+      this.pools.release(pool);
     }
 
     // Same contract as the spawn settle paths: children spawned during the

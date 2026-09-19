@@ -27,7 +27,7 @@ vi.mock("../src/agent/session/worktree.js", () => ({
   isWorktreeIsolationEnabled: vi.fn(() => true),
 }));
 
-import { runAgent } from "../src/agent/agent-runner.js";
+import { resumeAgent, runAgent } from "../src/agent/agent-runner.js";
 import { createWorktree } from "../src/agent/session/worktree.js";
 
 const mockPi = {} as any;
@@ -130,6 +130,83 @@ describe("maxConcurrentForeground", () => {
     expect(await second).toMatchObject({ record: { result: "b-result" } });
     resolvers.get("c")!();
     expect(await third).toMatchObject({ record: { result: "c-result" } });
+  });
+
+  // An inline resume is a caller awaiting one agent inline, which is exactly
+  // what `blocking` — and so this pool — is keyed on. Uncharged, it runs
+  // straight past the limit and the pool bounds spawns only.
+  it("charges an inline resume to the foreground pool, so it waits for a slot", async () => {
+    const resolvers = controllableRuns();
+    vi.mocked(resumeAgent).mockClear();
+    vi.mocked(resumeAgent).mockImplementation((_session: any, prompt: any) =>
+      new Promise<any>(resolve => {
+        resolvers.set(prompt as string, () => resolve({ text: `${prompt}-result`, failure: undefined }));
+      }),
+    );
+    manager = new AgentManager();
+    manager.setMaxConcurrentForeground(1);
+
+    // Settle one blocking run, so its record has a session to resume.
+    const done = fg(manager, "a");
+    await flush();
+    const record = recordFor(manager, "a");
+    resolvers.get("a")!();
+    await done;
+
+    // A second blocking run holds the only slot.
+    const holder = fg(manager, "b");
+    await flush();
+    expect(recordFor(manager, "b").status).toBe("running");
+
+    const resumed = manager.resume(record.id, "again");
+    await flush();
+    expect(resumeAgent).not.toHaveBeenCalled();
+
+    resolvers.get("b")!();
+    await holder;
+    await flush();
+    expect(resumeAgent).toHaveBeenCalledTimes(1);
+
+    resolvers.get("again")!();
+    expect(await resumed).toMatchObject({ status: "completed", result: "again-result" });
+  });
+
+  // The file's own doctrine: every path out of the queue must RESOLVE, and a
+  // wait that ends in a stop must not then start the run it waited for.
+  it("does not start a queued inline resume that was aborted before its slot freed", async () => {
+    const resolvers = controllableRuns();
+    vi.mocked(resumeAgent).mockClear();
+    vi.mocked(resumeAgent).mockImplementation((_session: any, prompt: any) =>
+      new Promise<any>(resolve => {
+        resolvers.set(prompt as string, () => resolve({ text: `${prompt}-result`, failure: undefined }));
+      }),
+    );
+    manager = new AgentManager();
+    manager.setMaxConcurrentForeground(1);
+
+    const done = fg(manager, "a");
+    await flush();
+    const record = recordFor(manager, "a");
+    resolvers.get("a")!();
+    await done;
+
+    const holder = fg(manager, "b");
+    await flush();
+
+    const resumed = manager.resume(record.id, "again");
+    await flush();
+    expect(resumeAgent).not.toHaveBeenCalled();
+
+    manager.abortAll();
+    await flush();
+    // The mocked run settles only when told to, abort or not.
+    resolvers.get("b")!();
+    await holder;
+    await flush();
+
+    // Never started, and — the part that would hang rather than fail — resolved.
+    expect(resumeAgent).not.toHaveBeenCalled();
+    expect(await resumed).toMatchObject({ status: expect.stringMatching(/stopped|error/) });
   });
 
   // The deadlock guard. A nested child's parent is blocked AWAITING it, so
