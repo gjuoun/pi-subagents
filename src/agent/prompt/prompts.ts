@@ -2,7 +2,8 @@
  * prompts.ts — System prompt builder for agents.
  */
 
-import type { AgentConfig, EnvInfo } from "../../lib/types.js";
+import { AgentConfig } from "../../lib/types.js";
+import type { EnvInfo } from "./env.js";
 
 /** Extra sections to inject into the system prompt (memory, skills, etc.). */
 export interface PromptExtras {

@@ -271,10 +271,11 @@ export interface AgentRecord {
   rootSessionId?: string;
 }
 
+
 /**
- * What a session reports as its level: pi's `ThinkingLevel` plus the `"off"` a
- * model with thinking disabled reports. Display-only — spawning still takes a
- * `ThinkingLevel`, so this widening cannot leak into an invocation.
+ * What a session reports as its level: pi's `ThinkingLevel` plus the `"off"` a model with
+ * thinking disabled reports. Display-only — spawning still takes a `ThinkingLevel`, so this
+ * widening cannot leak into an invocation.
  */
 export type EffectiveThinkingLevel = ThinkingLevel | "off";
 
@@ -302,74 +303,6 @@ export interface AgentInvocation {
   isolation?: IsolationMode;
 }
 
-/** Details attached to custom notification messages for visual rendering. */
-export interface NotificationDetails {
-  id: string;
-  description: string;
-  status: string;
-  toolUses: number;
-  turnCount: number;
-  maxTurns?: number;
-  totalTokens: number;
-  /**
-   * Estimated cost in USD, from pi's per-message `usage.cost.total`. Always
-   * populated (0 when the model has no pricing); the renderer decides whether
-   * to show it, per the `showCost` setting.
-   */
-  totalCost?: number;
-  durationMs: number;
-  outputFile?: string;
-  error?: string;
-  resultPreview: string;
-  /** Additional agents in a group notification. */
-  others?: NotificationDetails[];
-}
 
-export interface EnvInfo {
-  isGitRepo: boolean;
-  branch: string;
-  platform: string;
-}
 
-/**
- * A subagent spawn registered to fire on a schedule.
- *
- * Stored at `<cwd>/.pi/subagent-schedules/<sessionId>.json`. Session-scoped:
- * survives `/resume` but resets on `/new`, mirroring pi-chonky-tasks.
- */
-export interface ScheduledSubagent {
-  id: string;
-  /** Unique within store. Defaults to `description`. */
-  name: string;
-  description: string;
-  /** Raw user input — cron expr | "+10m" | ISO | "5m". */
-  schedule: string;
-  scheduleType: "cron" | "once" | "interval";
-  /** Computed at create time for interval/once. */
-  intervalMs?: number;
 
-  // spawn params (subset of Agent tool params; no inherit_context, no resume)
-  subagent_type: SubagentType;
-  prompt: string;
-  model?: string;
-  thinking?: ThinkingLevel;
-  max_turns?: number;
-  isolated?: boolean;
-  isolation?: IsolationMode;
-
-  // state
-  enabled: boolean;
-  /** ISO timestamp. */
-  createdAt: string;
-  lastRun?: string;
-  lastStatus?: "success" | "error" | "running";
-  /** Refreshed on every fire and on store load. */
-  nextRun?: string;
-  runCount: number;
-}
-
-export interface ScheduleStoreData {
-  /** For future migrations. */
-  version: 1;
-  jobs: ScheduledSubagent[];
-}
