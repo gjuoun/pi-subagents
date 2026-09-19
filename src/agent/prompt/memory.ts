@@ -18,7 +18,6 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { isSymlink, isUnsafeName, safeReadFile } from "../../lib/fs-safe.js";
 import type { MemoryScope } from "../../lib/types.js";
 
-/** Maximum lines to read from MEMORY.md */
 const MAX_MEMORY_LINES = 200;
 
 /**

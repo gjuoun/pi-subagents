@@ -1,29 +1,22 @@
 /**
  * concurrency-pools.ts — pool admission for the agent manager.
  *
- * Two concurrency pools, never one, and one queue serving both:
+ * Two concurrency pools, never one, and one queue serving both: background
+ * (`maxBackground`) bounds detached agents, foreground (`maxForeground`, `0` =
+ * unlimited) bounds agents a caller is blocking on inline. Independent by design: a
+ * foreground agent blocks the parent anyway, so charging it to the background pool would
+ * let a saturated pool starve the main session of work it could have done itself.
  *
- * - Background (`maxBackground`) bounds detached agents.
- * - Foreground (`maxForeground`, `0` = unlimited) bounds agents a caller is
- *   blocking on inline.
- *
- * Independent by design: a foreground agent blocks the parent anyway, so
- * charging it to the background pool would let a saturated pool starve the main
- * session of work it could have done itself.
- *
- * These left `agent-manager.ts` together because they are one mechanism, not
- * five fields. The limits bound how many agents run, the counters count them,
- * and the queue holds the rest; every rule that matters is a relation between
- * them — a slot is taken before the first `await` so two spawns cannot both see
- * room, and given back on exactly one path — so splitting them up would let the
- * halves drift out of agreement. `agent-manager.ts`'s own hardest invariant
- * ("removing an entry from `queue` MUST release it") is enforced here, in
- * `remove`, for the same reason.
- *
- * What stayed in the manager: which pool a given spawn is charged to
- * (`poolFor`, which reads `AgentRecord` flags — nested children and detached
- * non-background spawns are charged to neither), and what happens to a queued
- * entry when it starts.
+ * These left `agent-manager.ts` together because they are one mechanism, not five
+ * fields — the limits bound how many agents run, the counters count them, the queue holds
+ * the rest, and every rule that matters is a relation between them: a slot is taken
+ * before the first `await` so two spawns cannot both see room, and given back on exactly
+ * one path. Splitting them up would let the halves drift. The manager's hardest
+ * invariant, "removing an entry from `queue` MUST release it", is enforced here in
+ * `remove` for the same reason. What stayed in the manager: which pool a spawn is
+ * charged to (`poolFor`, which reads `AgentRecord` flags — nested children and detached
+ * non-background spawns are charged to neither) and what happens to a queued entry when
+ * it starts.
  */
 
 /** Which concurrency pool a spawn is charged to. */

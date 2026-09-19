@@ -1,29 +1,18 @@
 /**
- * Reads `enabledModels` from pi's settings (global `<agentDir>/settings.json`
- * + project-local `<cwd>/.pi/settings.json`, project wins) for scope validation.
+ * Reads `enabledModels` from pi's settings (global `<agentDir>/settings.json` +
+ * project-local `<cwd>/.pi/settings.json`, project wins) for scope validation.
  *
- * **Project overrides global**, mirroring pi's own `SettingsManager`
- * deep-merge behavior and matching the precedence we use for our own
- * `subagents.json` settings (see `src/settings.ts:loadSettings`). If
- * project file has `enabledModels` set, it wholly replaces global's
- * (array fields are replaced, not concatenated).
+ * **Project overrides global**, mirroring pi's own `SettingsManager` deep-merge and the
+ * precedence our `subagents.json` settings use: an array field is replaced whole, not
+ * concatenated.
  *
- * **Limited subset of upstream's resolveModelScope.** We support exact
- * `provider/modelId` matching only. Upstream (pi-coding-agent's
- * `core/model-resolver.ts`) additionally supports glob patterns
- * (`*sonnet*`, `anthropic/*`), bare model IDs without provider, and
- * thinking-level suffixes (`provider/*:high`). Those forms are silently
- * ignored here — see `ModelScope` in model-scope.ts for where patterns turn
- * into an allowlist.
- *
- * In practice, pi's `/scoped-models` picker writes exact `provider/modelId`
- * entries, so the limitation is invisible for users who configure scope
- * through pi's UI. Hand-edited settings using globs or bare IDs will
- * produce an empty allowed set (scope check becomes a no-op).
- *
- * Example:
- *   enabledModels = ["anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-6"]
- *   → resolves to { "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-6" }
+ * **A limited subset of upstream's `resolveModelScope`**: exact `provider/modelId`
+ * matching only. Upstream also supports glob patterns (`*sonnet*`, `anthropic/*`), bare
+ * model ids without a provider, and thinking-level suffixes (`provider/*:high`); those
+ * forms are silently ignored here — see `ModelScope` in model-scope.ts for where patterns
+ * become an allowlist. It is invisible for users who configure scope through pi's
+ * `/scoped-models` picker, which writes exact entries; a hand-edited glob produces an
+ * empty allowed set, i.e. the scope check becomes a no-op.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";

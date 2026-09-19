@@ -1,16 +1,11 @@
 /**
  * agent-meta.ts — the agent vocabulary that is not one domain's property.
  *
- * `THINKING_LEVELS` is pi's own advertised set, mirrored here so the Agent tool's description,
- * the generated-agent template and the `/agents` wizard can't drift behind pi again (#147).
- *
- * It started in `ui/agent-status.ts` (it was split out of `index.ts` with the status line) and
- * that is the wrong layer: the description builder that needs it lives in `agent/`, and
- * `agent → ui` is a layering violation. It is pure and has consumers on both sides of the tree,
- * which is what admits it here — the same rule that puts `SUBAGENT_TOOL_NAMES` in `tool-names.ts`.
- *
- * `formatToolsSuffix` did not come along: it needs `BUILTIN_TOOL_NAMES`, which `lib/` may not
- * reach into `config/` for. It lives with that list, in `config/registry/agent-types.ts`.
+ * `THINKING_LEVELS` is pi's own advertised set, mirrored here so the Agent tool's
+ * description, the generated-agent template and the `/agents` wizard cannot drift behind pi
+ * again (#147). It is pure and has consumers on both sides of the tree, which is what admits
+ * it to `lib/`; `formatToolsSuffix` could not come along — it needs `BUILTIN_TOOL_NAMES` —
+ * so it lives with that list in `config/registry/agent-types.ts`.
  */
 
 /**

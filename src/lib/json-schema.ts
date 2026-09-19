@@ -1,44 +1,30 @@
 /**
  * json-schema.ts — validating a script-supplied JSON Schema.
  *
- * `agent(prompt, { schema })` hands us a raw JSON Schema written by a model, to
- * be used two ways: as a tool's `parameters` (so the provider fills the fields)
- * and as the check that decides whether what came back is usable.
+ * `agent(prompt, { schema })` hands us a raw JSON Schema written by a model, used two
+ * ways: as a tool's `parameters` and as the check that decides whether what came back is
+ * usable.
  *
- * ## Which typebox
+ * **`typebox`, not `@sinclair/typebox`.** Both are installed here, and `@sinclair`'s
+ * dispatches on a `Kind` symbol that a schema arriving over the wire does not carry, so
+ * `Value.Check` throws `Unknown type` on a plain JSON Schema — and `Type.Unsafe` does
+ * not help, it stamps an unregistered `Kind`. `typebox` v1 is a standards validator that
+ * takes the schema as-is, and is the package pi itself types `ToolDefinition.parameters`
+ * against, so one object serves both roles with no conversion.
  *
- * **`typebox`, not `@sinclair/typebox`.** They are different packages and both
- * are installed here. `@sinclair/typebox` (0.34) dispatches on a `Kind` symbol
- * that a schema arriving over the wire does not carry, so `Value.Check` throws
- * `Unknown type` on a plain JSON Schema — and `Type.Unsafe` does not help, it
- * stamps a `Kind` that is not registered. `typebox` v1 is a standards JSON
- * Schema validator and takes the schema as-is. It is also the package pi itself
- * types `ToolDefinition.parameters` against, so the same schema object serves
- * both roles with no conversion.
+ * Nothing in pi checks a tool call's arguments against the tool's `parameters`:
+ * `validateToolCall`/`validateToolArguments` exist in `pi-ai` but are never called, so a
+ * schema on a tool is a *prompt to the provider*, not an enforcement point. Every
+ * guarantee the script gets about its result's shape is made here.
  *
- * ## Why we validate at all
- *
- * Nothing in pi checks a tool call's arguments against the tool's `parameters`.
- * `validateToolCall`/`validateToolArguments` exist in `pi-ai` but are never
- * called from either shipped package, so a schema on a tool is a *prompt to the
- * provider*, not an enforcement point. Every guarantee the script gets about
- * the shape of its result is made here.
- *
- * ## Failure currency
- *
- * The error type is a `string` — author-facing prose, never branched on, and
- * already the form every consumer wants (the workflow runtime answers the script
- * with it, the StructuredOutput tool reproaches the child with it). A catalog
- * would add a `code` no caller would read.
- *
- * Pure and pi-free on purpose, so `runtime.ts` can import it without dragging
- * sessions and models into the runtime's tests.
+ * The error type is a `string` — author-facing prose, never branched on, and already the
+ * form every consumer wants. Pure and pi-free on purpose, so `runtime.ts` can import it
+ * without dragging sessions and models into the runtime's tests.
  */
 
 import { err, fromThrowable, ok, type Result, safeTry } from "neverthrow";
 import { Check, Errors } from "typebox/value";
 
-/** Largest schema we will accept, serialized. */
 const MAX_SCHEMA_BYTES = 64 * 1024;
 
 /** How many validation errors are quoted back to the model. */

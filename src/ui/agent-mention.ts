@@ -1,45 +1,19 @@
 /**
  * agent-mention.ts — what `@` can address, and the suggestions pi renders for it.
  *
- * A subagent is addressable whether or not it is currently running: a live
- * record is messaged or resumed, an evicted one whose session is still on disk
- * is reopened, and an agent *type* with no instance at all is started. That is
- * the point of the handle — `@explore` means the Explore agent, not "the
- * Explore process that happens to exist right now" — so the roster below unions
- * all three, and the dispatcher and the popup read the same list.
+ * A subagent is addressable whether or not it is running: a live record is messaged or
+ * resumed, an evicted one whose session is still on disk is reopened, and an agent
+ * *type* with no instance is started — the handle means the agent, not "the process
+ * that happens to exist right now". Rows are per agent, not per handle: an agent with
+ * a `name` holds two names and lists once, under the alias.
  *
- * Rows are per *agent*, not per handle. An agent given a `name` holds two names
- * (its alias and its type-derived handle) and both resolve, but it lists once,
- * under the alias, with its type moved into the description so the row still
- * says what it is.
- *
- * pi's `CombinedAutocompleteProvider` already owns `@`, where it means "attach a
- * file". Extensions can wrap it (`ctx.ui.addAutocompleteProvider`), so this
- * provider adds the `@` tokens that name an agent and delegates everything else
- * — including all of `applyCompletion`, whose `@`-branch already inserts
- * `item.value` plus a trailing space, which is exactly what a handle needs.
- *
- * Matching mirrors Claude Code: case-insensitive prefix, not fuzzy. What it does
- * NOT mirror is Claude Code dropping files whenever an agent matches. Here `@` is
- * pi's file picker first, and the handles are additive, so a token matching both
- * lists both — agents first. Suppressing on any match sounds narrow and is not:
- * an empty token prefix-matches every handle, so a bare `@` — the gesture people
- * use to browse files — would offer no files at all, and a single letter
- * beginning any handle would do the same.
- *
- * Both halves ship under ONE `prefix`, which is sound because wherever BOTH sides
- * produce rows they measured the same span. pi's `extractAtPrefix` takes the
- * token after the last of `{space, tab, ", ', =}` and keeps it only if it starts
- * with `@`; `MENTION_TRIGGER` matches `@[\w-]*` at the cursor, after start-of-line
- * or `[\s。、？！]`. Where those two disagree, exactly one side answers and there
- * is nothing to merge: `@src/index.ts` and `@"my file` are pi's alone (no handle
- * matches), `=@ex` is pi's alone (`=` is a delimiter to pi, not a boundary to us),
- * and `。@ex` is ours alone (the reverse). A merged response therefore never
- * carries a prefix from one side and an item from the other.
- *
- * Offering never-started types is a deliberate step beyond Claude Code, whose
- * registry holds only live tasks, so an agent you had not launched yet was
- * unaddressable.
+ * pi's `CombinedAutocompleteProvider` owns `@` for files and this provider wraps it,
+ * delegating everything else including all of `applyCompletion`. Matching is a
+ * case-insensitive prefix, not fuzzy, and — unlike Claude Code — files are never
+ * dropped when an agent matches: an empty token prefix-matches every handle, so
+ * suppressing on a match would empty the bare `@` browse gesture. Both halves ship
+ * under one `prefix`, which is sound because wherever both sides produce rows they
+ * measured the same span; where they disagree, exactly one side answers.
  */
 
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";

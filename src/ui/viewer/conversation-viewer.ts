@@ -592,7 +592,6 @@ export class ConversationViewer implements Component {
     }
   }
 
-  // ---- Private ----
 
   private viewportHeight(): number {
     // Cap mirrors the overlay's maxHeight — otherwise the viewer would render

@@ -209,7 +209,6 @@ function warnIfNew(message: string): void {
   console.warn(`[pi-subagents] ${message}`);
 }
 
-// ---- Field parsers ----
 // All follow the same convention: omitted → default, "none"/empty → nothing, value → exact.
 
 /** Extract a string or undefined. */

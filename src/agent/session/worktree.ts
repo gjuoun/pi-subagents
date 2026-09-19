@@ -108,7 +108,6 @@ export async function createWorktree(
   const worktreePath = join(tmpdir(), `pi-agent-${agentId}-${suffix}`);
 
   try {
-    // Create detached worktree at HEAD
     await git(pi, cwd, ["worktree", "add", "--detach", worktreePath, "HEAD"], 30000);
     return { path: worktreePath, branch, baseSha, workPath: subdir ? join(worktreePath, subdir) : worktreePath };
   } catch {

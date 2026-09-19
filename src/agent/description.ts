@@ -59,7 +59,6 @@ export interface DescriptionFlags {
     return name.replace(/-\d{8}$/, "");
   }
 
-  // ---- Agent tool ----
 
   // Schedule param + its guideline are gated on `schedulingEnabled` (read once
   // at registration; flipping the setting later requires next pi session for

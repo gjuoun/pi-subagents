@@ -1,31 +1,26 @@
 /**
  * tool-description.ts — the model-facing description of the `SubagentWorkflow` tool.
  *
- * This is a deliberate port of Claude Code's `Workflow` tool description, not a
- * paraphrase of it. The rule the text is held to: **match Claude Code's wording
- * everywhere; deviate only in the specific clause where its sentence would be
- * false about pi, and keep that deviation minimal and in its voice.** Wording
- * parity is the point — a user who knows one tool should not have to relearn
- * the other, and the orchestration patterns below are load-bearing guidance
- * that gets used badly when compressed.
+ * A deliberate port of Claude Code's `Workflow` tool description, not a paraphrase. The
+ * rule the text is held to: **match Claude Code's wording everywhere; deviate only in
+ * the specific clause where its sentence would be false about pi, and keep that
+ * deviation minimal and in its voice.** Wording parity is the point — a user who knows
+ * one tool should not have to relearn the other — and the orchestration patterns below
+ * are load-bearing guidance that gets used badly when compressed.
  *
- * Parts omitted because pi has no such feature: the `ultracode` opt-in, MCP
- * tools reached through `ToolSearch`, the `agent-<id>.jsonl` resume fallback,
- * and the `/config` workflow-size guideline.
+ * Omitted because pi has no such feature: the `ultracode` opt-in, MCP tools reached
+ * through `ToolSearch`, the `agent-<id>.jsonl` resume fallback, the `/config`
+ * workflow-size guideline. Deviating because Claude Code's wording is untrue here:
+ * `schema` is pressure rather than force (no `toolChoice` in pi's `AgentSession`);
+ * `budget.total` is always null; `parallel` propagates a fatal run error instead of
+ * folding it to null; `effort` inherits the agent definition's level then the parent's;
+ * `isolation` removes the worktree on settle with changes kept on a branch. Additions
+ * with no upstream counterpart: `gate`, `resume`, `effort: "minimal"`, the
+ * saved-workflow directories, the reject-unknown-options guarantee.
  *
- * Clauses that had to deviate, each because Claude Code's is untrue here:
- *   - `schema` is pressure, not force — `toolChoice` is not plumbed through
- *     pi's `AgentSession`, so a child can decline and the call returns null.
- *   - `budget.total` is always null; pi has no token-target directive.
- *   - `parallel` propagates a fatal run error instead of folding it to null.
- *   - `effort` inherits the agent definition's level, then the parent's.
- *   - `isolation` removes the worktree on settle, changes kept on a branch.
- * Additions with no upstream counterpart: `gate`, `resume`, `effort: "minimal"`,
- * the saved-workflow directories, and the reject-unknown-options guarantee.
- *
- * Kept out of index.ts purely for size. `{{placeholder}}` tokens are rendered by
- * the same substitution pass the Agent tool's description uses, so a
- * user-authored override can interpolate the live agent roster.
+ * Kept out of `index.ts` purely for size. `{{placeholder}}` tokens are rendered by the
+ * same substitution pass the Agent tool's description uses, so a user-authored override
+ * can interpolate the live agent roster.
  */
 
 /**

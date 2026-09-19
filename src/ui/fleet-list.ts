@@ -141,7 +141,6 @@ export class FleetList {
     private viewerMarkdown?: () => ViewerMarkdownMode,
   ) {}
 
-  // ---- Lifecycle ----
 
   setEnabled(enabled: boolean): void {
     if (enabled === this.enabled) return;
@@ -237,7 +236,6 @@ export class FleetList {
     }
   }
 
-  // ---- Roster ----
 
   /**
    * Agents shown in the list, ordered earliest-launched first so the ones you
@@ -316,7 +314,6 @@ export class FleetList {
     if (this.selectedIndex < 0) this.selectedIndex = 0;
   }
 
-  // ---- Key handling ----
 
   /** Returns `{consume:true}` to swallow a key, or undefined to let it through. */
   handleKey(data: string): { consume?: boolean; data?: string } | undefined {
@@ -466,7 +463,6 @@ export class FleetList {
     this.update();
   }
 
-  // ---- Rendering ----
 
   private renderBar(width: number, theme: Theme): string[] {
     const rows = this.roster().slice(1) as (WorkflowEntry | AgentEntry)[];

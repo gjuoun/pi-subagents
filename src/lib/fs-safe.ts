@@ -1,12 +1,3 @@
-/**
- * fs-safe.ts — the small filesystem guardrails the name-and-file loaders share.
- *
- * Hoisted out of `agent/prompt/memory.ts`: `agent/prompt/skill-loader.ts` and
- * `workflow/script/saved.ts` both need them, so `workflow/` was reaching into `agent/prompt/`
- * for them — a reach-around with no other reason to exist. They are pure and touch nothing
- * internal, which is what admits them to `lib/`.
- */
-
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 
 /**
