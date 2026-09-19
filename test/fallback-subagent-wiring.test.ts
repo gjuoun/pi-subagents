@@ -20,7 +20,8 @@ vi.mock("../src/agent/agent-runner.js", async () => {
 });
 
 import { runAgent } from "../src/agent/agent-runner.js";
-import { getAllTypes, getAvailableTypes, NO_FALLBACK, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
+import { getAllTypes, getAvailableTypes, registerAgents } from "../src/config/registry/agent-types.js";
+import { NO_FALLBACK, setFallbackSubagent } from "../src/config/registry/fallback.js";
 import subagentsExtension from "../src/index.js";
 
 function makePi() {

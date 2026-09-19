@@ -15,7 +15,8 @@ import { getMaxSubagentDepth, setMaxSubagentDepth } from "../../agent/nested-too
 import { getDefaultMaxTurns, getGraceTurns, getRememberAgents, setDefaultMaxTurns, setGraceTurns, setRememberAgents } from "../../agent/run-limits.js";
 import { getOutputTranscriptDefault, setOutputTranscriptDefault } from "../../agent/session/output-file.js";
 import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "../../agent/session/worktree.js";
-import { getAvailableTypes, getFallbackSubagent, isDefaultsDisabled, NO_FALLBACK, setFallbackSubagent } from "../../config/registry/agent-types.js";
+import { getAvailableTypes, isDefaultsDisabled } from "../../config/registry/agent-types.js";
+import { getFallbackSubagent, NO_FALLBACK, setFallbackSubagent } from "../../config/registry/fallback.js";
 import { type SubagentsSettings, saveAndEmitChanged, type ToolDescriptionMode } from "../../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../../lib/types.js";
 import type { AgentsUiDeps } from "./deps.js";
