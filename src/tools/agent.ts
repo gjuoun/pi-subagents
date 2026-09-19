@@ -30,7 +30,7 @@ import { getLifetimeCost } from "../lib/usage.js";
 import { describeModel, resolveModel } from "../model/model-resolver.js";
 import { renderAgentName } from "../ui/agent-color.js";
 import { buildInvocationTags, getDisplayName, getPromptModeLabel } from "../ui/agent-display.js";
-import { formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-status.js";
+import { formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-result-status.js";
 import { buildDetails, textResult } from "../ui/notifications.js";
 import type { ToolsDeps } from "./deps.js";
 

@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../src/tools/jev-client.js", async () => {
-  const actual = await vi.importActual<typeof import("../../src/tools/jev-client.js")>("../../src/tools/jev-client.js");
+vi.mock("../../src/tools/jev/client.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/tools/jev/client.js")>("../../src/tools/jev/client.js");
   return {
     ...actual,
     askJev: vi.fn(async () => ({

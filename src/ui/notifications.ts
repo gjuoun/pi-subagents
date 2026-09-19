@@ -19,7 +19,7 @@ import type { AgentRecord, NotificationDetails } from "../lib/types.js";
 import type { AgentActivity, AgentDetails } from "../lib/ui/theme.js";
 import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "../lib/usage.js";
 import { escapeXml } from "../lib/xml.js";
-import { formatLifetimeTokens, getStatusLabel } from "./agent-status.js";
+import { formatLifetimeTokens, getStatusLabel } from "./agent-result-status.js";
 
 /** Tool execute return value for a text response. */
 export function textResult(msg: string, details?: AgentDetails) {

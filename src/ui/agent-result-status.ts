@@ -1,5 +1,5 @@
 /**
- * agent-status.ts — how a running agent reports itself on the transcript row.
+ * agent-result-status.ts — how a running agent reports itself on the transcript row.
  *
  * The status container the Agent tool's call line draws, its spinner, and the completion labels.
  * Pure presentation — no `pi.*` call, no activation-scope state. The activity *state* it renders

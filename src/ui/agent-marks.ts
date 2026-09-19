@@ -1,5 +1,5 @@
 /**
- * agent-status-line.ts — the extension status row: one coloured mark per agent.
+ * agent-marks.ts — the extension status row: one coloured mark per agent.
  *
  * Replaces the old `"3 running, 1 queued agents"` text. Four states, and the glyph set is the whole
  * vocabulary:
@@ -27,7 +27,7 @@ export type PhaseGlyphs = readonly [string, string, string, string];
  * THE ANIMATION — one glyph per phase, in cycle order. This array is the row's whole look, and the
  * single place to change it.
  *
- * Everything else is plumbing with no opinion about these characters: `agent-status-bar.ts` owns
+ * Everything else is plumbing with no opinion about these characters: `agent-status-row.ts` owns
  * only *when* the phase advances (when the clock runs at all, and how far each mark lags the one
  * before it), `formatAgentStatusLine` owns only the lookup, and the bar's suite derives every frame
  * it expects from this array. Swap these four

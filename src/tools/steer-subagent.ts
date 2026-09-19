@@ -13,7 +13,7 @@ import { steerAgent } from "../agent/agent-runner.js";
 import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
 import { formatCost } from "../lib/ui/format.js";
 import { getLifetimeCost, getSessionContextPercent } from "../lib/usage.js";
-import { formatLifetimeTokens } from "../ui/agent-status.js";
+import { formatLifetimeTokens } from "../ui/agent-result-status.js";
 import { textResult } from "../ui/notifications.js";
 import type { ToolsDeps } from "./deps.js";
 

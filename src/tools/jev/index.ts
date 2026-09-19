@@ -10,10 +10,10 @@
  */
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
-import { textResult } from "../ui/notifications.js";
-import { askJev } from "./jev-client.js";
-import { buildJevQuestion, buildJevState, buildRosterCriteria } from "./jev-state.js";
+import { SUBAGENT_TOOL_NAMES } from "../../lib/tool-names.js";
+import { textResult } from "../../ui/notifications.js";
+import { askJev } from "./client.js";
+import { buildJevQuestion, buildJevState, buildRosterCriteria } from "./state.js";
 
 /**
  * The classifier key: `JEV_API_KEY` preferred, Vercel gateway key as the

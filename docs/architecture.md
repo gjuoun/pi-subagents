@@ -109,10 +109,10 @@ src/                  # Layered by domain. A file may import only from the layer
     tool-description.ts # Model-facing description carrying the orchestration patterns
 
   ui/                 # TUI surfaces. Only the wiring layer may import these.
-    agent-status-bar.ts # The status row: its text, the turn-based aging of marks, the clock
-    agent-status-line.ts # The row's marks: one coloured glyph per agent (pure, timer-free)
+    agent-status-row.ts # The status row: its text, the turn-based aging of marks, the clock
+    agent-marks.ts # The row's marks: one coloured glyph per agent (pure, timer-free)
     agent-display.ts  # Agent-identity adapters: display name, prompt mode, invocation tags
-    agent-status.ts   # The Agent tool's transcript row: result container and activity tracker
+    agent-result-status.ts   # The Agent tool's transcript row: result container and activity tracker
     notifications.ts  # Task-notification text, details payloads, tool-result envelopes
     agent-color.ts    # Claude Code/Agency Agents name color parsing and badge rendering
     fleet-list.ts     # FleetView: navigable agent list below the editor
@@ -144,8 +144,8 @@ src/                  # Layered by domain. A file may import only from the layer
     get-subagent-result.ts # get_subagent_result
     steer-subagent.ts   # steer_subagent
     jev.ts              # The toggleable jev agent-selector tool
-    jev-client.ts       # jev's HTTP client: request, parse, fail-open (injectable fetch)
-    jev-state.ts        # jev roster criteria and routing-rules state
+    jev/client.ts       # jev's HTTP client: request, parse, fail-open (injectable fetch)
+    jev/state.ts        # jev roster criteria and routing-rules state
 
   extension/
     context.ts        # The activation's state — settings, session cells, batch grouping — plus

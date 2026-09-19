@@ -37,7 +37,7 @@ import type { AgentActivity } from "./lib/ui/theme.js";
 import { PendingUsagePool } from "./lib/usage.js";
 import { ModelScope } from "./model/model-scope.js";
 import { SubagentScheduler } from "./schedule/schedule.js";
-import { AgentStatusBar } from "./ui/agent-status-bar.js";
+import { AgentStatusBar } from "./ui/agent-status-row.js";
 import { FleetList } from "./ui/fleet-list.js";
 import type { WorkflowTask } from "./workflow/run/task.js";
 

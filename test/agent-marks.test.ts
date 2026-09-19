@@ -4,7 +4,7 @@ import {
   RUN_PHASE_GLYPHS,
   type StatusAgent,
   type StatusPhase,
-} from "../src/ui/agent-status-line.js";
+} from "../src/ui/agent-marks.js";
 
 const amber = () => "#FFC800";
 const cyan = () => "#00C8FF";

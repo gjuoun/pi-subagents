@@ -5,7 +5,7 @@
  * the real `~/.pi/agent/agents` or the skills repo.
  */
 import { describe, expect, it } from "vitest";
-import { buildJevState, buildRosterCriteria, SITUATION_DEFAULT } from "../src/tools/jev-state.js";
+import { buildJevState, buildRosterCriteria, SITUATION_DEFAULT } from "../src/tools/jev/state.js";
 
 describe("buildRosterCriteria", () => {
   it("maps enabled types to name → description criteria", () => {

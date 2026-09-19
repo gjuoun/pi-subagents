@@ -1,10 +1,10 @@
 /**
  * activity.ts — the live activity state of a running agent, and the callbacks that feed it.
  *
- * Moved out of ui/agent-status.ts, where it sat because it was split off the transcript row it
+ * Moved out of ui/agent-result-status.ts, where it sat because it was split off the transcript row it
  * feeds. It is not presentation: it is the run's own state — which tools are open, how many have
  * closed, the turn count, the session handle — that the status row, the fleet list and the
- * workflow card all render. ui/agent-status.ts keeps the drawing and imports this.
+ * workflow card all render. ui/agent-result-status.ts keeps the drawing and imports this.
  *
  * The shape it produces stays in lib/ui/theme.ts, the contract every renderer names. This module
  * only creates it — and it lives here because the spawn paths that create it for a programmatic

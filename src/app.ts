@@ -32,7 +32,7 @@ import { startScheduler } from "./schedule/start.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
 import { createGetSubagentResultTool } from "./tools/get-subagent-result.js";
-import { createJevTool } from "./tools/jev.js";
+import { createJevTool } from "./tools/jev/index.js";
 import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
 import { createWorkflowTool, fleetWorkflows } from "./tools/workflow.js";
