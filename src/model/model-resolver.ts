@@ -2,6 +2,10 @@
  * Model resolution: exact match ("provider/modelId") with fuzzy fallback.
  */
 
+import type { Model } from "@earendil-works/pi-ai";
+import { err, ok, type Result } from "neverthrow";
+import { type ModelFailure, modelError } from "./errors.js";
+
 export interface ModelEntry {
   id: string;
   name: string;
@@ -34,31 +38,87 @@ export function describeModel(
 
 /**
  * Resolve a model string to a Model instance.
- * Tries exact match first ("provider/modelId"), then fuzzy match against all available models.
- * Returns the Model on success, or an error message string on failure.
+ *
+ * Three attempts, in order: an exact `provider/modelId` match, a fuzzy match
+ * against the models that have auth, and — when the input named a provider that
+ * turned out not to have the model — the same id under any other provider. Each
+ * is a *recovery* from the previous one's miss, so they compose as an `.orElse`
+ * chain; a `safeTry` generator would short-circuit on the first `Err` and never
+ * reach the second attempt.
+ *
+ * Every failure is the same {@link modelError}.`NOT_FOUND` about `input`: the
+ * domain has one code and one message, and the caller spelled the input, so the
+ * answer is worded about what it spelled rather than about the attempt that
+ * missed. The message text is quoted in `docs/rpc.md` — keep it verbatim.
  */
 export function resolveModel(
   input: string,
   registry: ModelRegistry,
-): any | string {
+): Result<Model<any>, ModelFailure> {
   // Available models (those with auth configured)
   const all = (registry.getAvailable?.() ?? registry.getAll()) as ModelEntry[];
-  const availableSet = new Set(all.map(m => `${m.provider}/${m.id}`.toLowerCase()));
-
-  // 1. Exact match: "provider/modelId" — only if available (has auth)
+  const availableSet = new Set(all.map(entry => `${entry.provider}/${entry.id}`.toLowerCase()));
   const slashIdx = input.indexOf("/");
-  if (slashIdx !== -1) {
-    const provider = input.slice(0, slashIdx);
-    const modelId = input.slice(slashIdx + 1);
-    if (availableSet.has(input.toLowerCase())) {
-      const found = registry.find(provider, modelId);
-      if (found) return found;
-    }
-  }
+  // A miss answers the same way wherever it happens, and building the list is
+  // the only cost of a failure: sorted here so a successful resolution never
+  // pays for a message it will not show.
+  const notFound = (): ModelFailure =>
+    modelError.NOT_FOUND(input, all.map(entry => `${entry.provider}/${entry.id}`).sort());
 
-  // 2. Fuzzy match against available models. Normalize separators so cosmetic
-  // punctuation differences still match — e.g. "claude-haiku-4.5" and
-  // "claude-haiku-4-5" (dot vs dash in the version) resolve to the same model.
+  // A lookup answer as a Result: a found model is the attempt's success, and a
+  // miss is the function's own not-found answer, which the next `.orElse`
+  // recovers from.
+  const attempt = (found: Model<any> | undefined): Result<Model<any>, ModelFailure> =>
+    found ? ok(found) : err(notFound());
+
+  return attempt(exactMatch(input, slashIdx, availableSet, registry))
+    .orElse(() => attempt(fuzzyMatch(input, all, registry)))
+    .orElse(() =>
+      slashIdx === -1
+        ? err(notFound())
+        // Provider fallback: a "provider/modelId" query that didn't match under
+        // the named provider (exact or fuzzy above) retries against all
+        // providers. The named provider is preferred when present; this only
+        // kicks in when it isn't, so the same model from another provider beats
+        // falling back to "inherit".
+        : resolveModel(input.slice(slashIdx + 1), registry),
+    )
+    // The recursive attempt words its failure about the *bare* id it was handed,
+    // and the fuzzy step words its miss about nothing. The caller asked about
+    // the input as spelled, so every path answers about that.
+    .mapErr(() => notFound());
+}
+
+/**
+ * Attempt 1 — exact match: "provider/modelId", and only when that exact model
+ * is available (has auth). A name the registry knows but the user cannot reach
+ * must not resolve: the spawn would fail on a missing API key.
+ */
+function exactMatch(
+  input: string,
+  slashIdx: number,
+  availableSet: Set<string>,
+  registry: ModelRegistry,
+): Model<any> | undefined {
+  if (slashIdx === -1) return undefined;
+  if (!availableSet.has(input.toLowerCase())) return undefined;
+  const provider = input.slice(0, slashIdx);
+  const modelId = input.slice(slashIdx + 1);
+  // The registry's own `find` is duck-typed (`ModelRegistry` is a structural
+  // minimum — see the interface above), so the one cast in this module is here.
+  return registry.find(provider, modelId) as Model<any> | undefined;
+}
+
+/**
+ * Attempt 2 — fuzzy match against the available models. Normalize separators so
+ * cosmetic punctuation differences still match — e.g. "claude-haiku-4.5" and
+ * "claude-haiku-4-5" (dot vs dash in the version) resolve to the same model.
+ */
+function fuzzyMatch(
+  input: string,
+  all: ModelEntry[],
+  registry: ModelRegistry,
+): Model<any> | undefined {
   const normalize = (s: string) => s.toLowerCase().replace(/\./g, "-");
   const query = normalize(input);
 
@@ -96,23 +156,7 @@ export function resolveModel(
   }
 
   if (bestMatch && bestScore >= 20) {
-    const found = registry.find(bestMatch.provider, bestMatch.id);
-    if (found) return found;
+    return registry.find(bestMatch.provider, bestMatch.id) as Model<any> | undefined;
   }
-
-  // 3. Provider fallback: a "provider/modelId" query that didn't match under the
-  // named provider (exact or fuzzy above) retries against all providers. The
-  // named provider is preferred when present; this only kicks in when it isn't,
-  // so the same model from another provider beats falling back to "inherit".
-  if (slashIdx !== -1) {
-    const bare = resolveModel(input.slice(slashIdx + 1), registry);
-    if (typeof bare !== "string") return bare;
-  }
-
-  // 4. No match — list available models
-  const modelList = all
-    .map(m => `  ${m.provider}/${m.id}`)
-    .sort()
-    .join("\n");
-  return `Model not found: "${input}".\n\nAvailable models:\n${modelList}`;
+  return undefined;
 }

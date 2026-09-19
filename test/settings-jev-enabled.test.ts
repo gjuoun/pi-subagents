@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { applySettings, type SettingsAppliers, type SubagentsSettings } from "../src/config/settings.js";
 import { ActivationContext } from "../src/extension/context.js";
+import { ModelScope } from "../src/model/model-scope.js";
 import type { AgentsUiDeps } from "../src/ui/agents/deps.js";
 import { snapshotSettings } from "../src/ui/agents/settings-overlay.js";
 
@@ -48,6 +49,7 @@ function makeDeps(context: ActivationContext): AgentsUiDeps {
     pi: { events: { emit: vi.fn() } } as unknown as AgentsUiDeps["pi"],
     context: Object.assign(context, {
       manager: { getMaxConcurrent: () => 10, getMaxConcurrentForeground: () => 0 },
+      modelScope: new ModelScope(),
     }) as unknown as AgentsUiDeps["context"],
     reloadCustomAgents: vi.fn(),
   } as unknown as AgentsUiDeps;

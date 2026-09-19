@@ -27,7 +27,7 @@ import { describeActivity, fgPreservingNestedStyles, formatCost, formatMs, forma
 import { type AgentDetails, type UICtx } from "../lib/ui/theme.js";
 import { getLifetimeCost } from "../lib/usage.js";
 import { describeModel, resolveModel } from "../model/model-resolver.js";
-import { checkModelScope } from "../model/model-scope.js";
+
 import { renderAgentName } from "../ui/agent-color.js";
 import { buildInvocationTags, getDisplayName, getPromptModeLabel } from "../ui/agent-display.js";
 import { createActivityTracker, formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-status.js";
@@ -295,18 +295,21 @@ export function createAgentTool(deps: ToolsDeps) {
       let model = ctx.model;
       if (resolvedConfig.modelInput) {
         const resolved = resolveModel(resolvedConfig.modelInput, ctx.modelRegistry);
-        if (typeof resolved === "string") {
-          if (resolvedConfig.modelFromParams) return textResult(resolved);
-          // config-specified: silent fallback to parent
+        if (resolved.isErr()) {
+          // Caller-supplied: the tool call named a model and the caller is the
+          // one who can fix the typo or the missing auth — say so. Otherwise the
+          // agent file's own `model:` is user-authored config, so it falls back
+          // to the parent silently.
+          if (resolvedConfig.modelFromParams) return textResult(resolved.error.message);
         } else {
-          model = resolved;
+          model = resolved.value;
         }
       }
 
       // Scope validation: the effective resolved model is checked against the
       // user's enabledModels list. Policy (hard error vs warn-and-proceed) lives
       // in model-scope.ts so the nested delegation tools apply the same rule.
-      const scopeVerdict = checkModelScope({
+      const scopeVerdict = deps.context.modelScope.check({
         model,
         cwd: ctx.cwd,
         modelRegistry: ctx.modelRegistry,
@@ -348,8 +351,8 @@ export function createAgentTool(deps: ToolsDeps) {
       const askedModel = ((asked: string | undefined) => {
         if (!asked) return undefined;
         const resolvedAsked = resolveModel(asked, ctx.modelRegistry);
-        if (typeof resolvedAsked === "string") return asked;
-        return resolvedAsked.provider === model?.provider && resolvedAsked.id === model?.id ? undefined : asked;
+        if (resolvedAsked.isErr()) return asked;
+        return resolvedAsked.value.provider === model?.provider && resolvedAsked.value.id === model?.id ? undefined : asked;
       })(resolvedConfig.overridden?.model);
       const effectiveMaxTurns = normalizeMaxTurns(resolvedConfig.maxTurns ?? getDefaultMaxTurns());
       const agentInvocation: AgentInvocation = {

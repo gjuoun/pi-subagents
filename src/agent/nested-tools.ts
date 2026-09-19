@@ -25,7 +25,7 @@ import type {
 } from "../lib/types.js";
 import { addUsage } from "../lib/usage.js";
 import { resolveModel } from "../model/model-resolver.js";
-import { checkModelScope } from "../model/model-scope.js";
+import type { ModelScope } from "../model/model-scope.js";
 import { isolationParam, resolveAgentInvocationConfig } from "./invocation.js";
 import {
   createOutputFilePath,
@@ -102,6 +102,12 @@ export interface NestedToolContext {
   allowedSubagents: "all" | string[];
   /** Root used for agent/config discovery; may differ from the agent's working directory. */
   configCwd: string;
+  /**
+   * The activation's `scopeModels` policy. Reaches here through the runtime
+   * (`RunOptions.nestedRuntime`), because a child session's tools are built in
+   * agent-runner.ts, where the manager is the only handle on the activation.
+   */
+  modelScope: ModelScope;
 }
 
 function textResult(text: string, isError = false) {
@@ -231,17 +237,20 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       let model = ctx.model;
       if (invocation.modelInput) {
         const resolvedModel = resolveModel(invocation.modelInput, ctx.modelRegistry);
-        if (typeof resolvedModel === "string") {
-          if (invocation.modelFromParams) return textResult(resolvedModel, true);
+        if (resolvedModel.isErr()) {
+          // Same policy as the top-level Agent tool: a caller-supplied model
+          // that cannot be resolved is an error, a config-supplied one falls
+          // back to the parent in silence.
+          if (invocation.modelFromParams) return textResult(resolvedModel.error.message, true);
         } else {
-          model = resolvedModel;
+          model = resolvedModel.value;
         }
       }
 
       // Same scopeModels policy as the top-level Agent tool — a nested spawn
       // must not escape the allowlist. A "warn" verdict proceeds silently:
       // child sessions have no UI surface to toast to.
-      const scopeVerdict = checkModelScope({
+      const scopeVerdict = context.modelScope.check({
         model,
         cwd: context.configCwd,
         modelRegistry: ctx.modelRegistry,

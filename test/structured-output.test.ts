@@ -23,9 +23,9 @@ const SCHEMA = {
 
 function build() {
   const compilation = compileJsonSchema(SCHEMA);
-  if (!compilation.ok) throw new Error(compilation.message);
+  if (compilation.isErr()) throw new Error(compilation.error);
   const capture = createStructuredCapture();
-  return { tool: createStructuredOutputTool(compilation.compiled, capture), capture };
+  return { tool: createStructuredOutputTool(compilation.value, capture), capture };
 }
 
 const call = (tool: ReturnType<typeof build>["tool"], params: unknown) =>

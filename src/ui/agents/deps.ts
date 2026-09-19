@@ -17,6 +17,7 @@ import type { AgentManager } from "../../agent/agent-manager.js";
 import type { ToolDescriptionMode } from "../../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../../lib/types.js";
 import type { AgentActivity } from "../../lib/ui/theme.js";
+import type { ModelScope } from "../../model/model-scope.js";
 import type { SubagentScheduler } from "../../schedule/schedule.js";
 import type { WorkflowTask } from "../../workflow/run/task.js";
 
@@ -32,6 +33,8 @@ export interface AgentsUiContext {
   workflowTasks: ReadonlyMap<string, WorkflowTask>;
   /** Whether a bad agent file is fatal on load — the one plain field these menus write. */
   strictAgentFiles: boolean;
+  /** The `scopeModels` policy the Settings row reads and writes. */
+  modelScope: ModelScope;
 
   isReportUsageEnabled(): boolean;
   setReportUsage(b: boolean): void;

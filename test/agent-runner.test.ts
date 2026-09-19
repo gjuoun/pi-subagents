@@ -840,8 +840,8 @@ const STRUCTURED = (() => {
     properties: { answer: { type: "string" } },
     required: ["answer"],
   });
-  if (!compilation.ok) throw new Error(compilation.message);
-  return compilation.compiled;
+  if (compilation.isErr()) throw new Error(compilation.error);
+  return compilation.value;
 })();
 
 /** One of the tools injected into the session as `customTools`, by name. */

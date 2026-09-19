@@ -75,8 +75,8 @@ Every failure reaches the caller as `{ success: false, error }`, where `error` i
 |---|---|
 | `No active session` | `src/agent/rpc.ts:107` — called before the first bound `session_start`, or in a session that excludes pi-subagents |
 | `Model override "<label>" provided but ctx.modelRegistry is unavailable` | `src/agent/rpc.ts:126` |
-| `Model not found: "<input>".` + available models | `src/model/model-resolver.ts:117` |
-| `Model not in scope: "<input>".` + allowed models | `src/model/model-scope.ts:62` — only with `scopeModels` on, and checked against the *resolved* model |
+| `Model not found: "<input>".` + available models | `src/model/errors.ts:24` |
+| `Model not in scope: "<input>".` + allowed models | `src/model/model-scope.ts:124` — only with `scopeModels` on, and checked against the *resolved* model |
 | `Unknown or disabled agent type: "<raw>". Available: <list>.` | `src/config/registry/agent-types.ts:228` — only under `fallbackSubagent: none` |
 | `No agent type given. Available: <list>.` | `src/config/registry/agent-types.ts:228-235` — same condition |
 | `<reason> The configured fallbackSubagent "<x>" is itself unknown or disabled. Available: <list>.` | `src/config/registry/agent-types.ts:246-248` |

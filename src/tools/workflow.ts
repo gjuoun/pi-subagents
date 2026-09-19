@@ -77,6 +77,7 @@ export async function runWorkflowTask(deps: ToolsDeps, ctx: ExtensionContext, ta
         signal: task.abortController.signal,
         rootSessionId: ctx.sessionManager.getSessionId(),
         workflowId: task.id,
+        modelScope: deps.context.modelScope,
       }),
       onProgress: entries => updateWorkflowProgressBatch(task, entries),
       // The dialog's pause / skip / retry keys run through this; it is dropped

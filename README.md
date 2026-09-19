@@ -649,6 +649,8 @@ When on, each subagent spawn's effective model is validated against pi's own `en
 
 **No-op safety:** if `enabledModels` is missing or empty in pi's settings, scope check skips entirely — no false positives, no spurious errors.
 
+**A file that cannot be parsed is reported, not swallowed:** a settings file that exists but fails to parse warns on the next spawn, naming the file, and scope enforcement is skipped for it. Before, "unreadable" and "never configured" were the same value, so a corrupt file silently passed every model.
+
 ## Persistent Settings
 
 Runtime tuning values set via `/agents` → Settings (max concurrency, max foreground concurrency, default max turns, grace turns, nested depth, fallback agent, default join mode, scheduling on/off, scope models on/off, disable defaults on/off, strict agent files on/off, agent mentions on/off, output transcript on/off, tool description full/compact/custom, widget all/background/off, usage reporting on/off, cost display on/off, model display on/off, viewer markdown off/assistant/all, jev agent selector on/off) persist across pi restarts. Two files, merged on load:
@@ -989,6 +991,7 @@ src/                  # Layered by domain. A directory may import only from the 
 
   lib/                # Shared code and types. Imports nothing internal.
     types.ts              # AgentConfig, AgentRecord, AgentInvocation, ViewerMarkdownMode, ...
+    result.ts             # autoTag/FactoryUnion — how this extension's failure catalogs are built
     usage.ts              # Token usage shapes, accumulators, session-stats readers
     json-schema.ts        # The compiled-schema type and compiler, shared across domains
     tool-names.ts         # SUBAGENT_TOOL_NAMES / EXCLUDED_TOOL_NAMES — the pi-facing freeze list
@@ -1009,9 +1012,10 @@ src/                  # Layered by domain. A directory may import only from the 
       agent-file-toggle.ts # Locate/edit an agent's .md: enabled: toggle, eject to frontmatter
 
   model/              # Which model a spawn runs on, and whether it is allowed
-    model-resolver.ts # Exact provider/modelId with fuzzy fallback
+    model-resolver.ts # Exact provider/modelId with fuzzy fallback, as a Result
+    errors.ts         # The model-resolution failure catalog (autoTag)
     enabled-models.ts # Read pi's enabledModels settings (project over global)
-    model-scope.ts    # scopeModels allowlist policy, shared by top-level and nested tools
+    model-scope.ts    # ModelScope — the scopeModels policy, shared by every spawn path
 
   agent/              # The subagent lifecycle
     agent-manager.ts      # Lifecycle, concurrency queue, completion notifications

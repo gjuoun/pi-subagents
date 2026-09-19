@@ -37,6 +37,7 @@ import type { CompiledSchema } from "../lib/json-schema.js";
 import type { AgentInvocation, AgentRecord, AgentTombstone, IsolationMode, MentionResolution, SubagentType, ThinkingLevel } from "../lib/types.js";
 import { addUsage, type LifetimeUsage } from "../lib/usage.js";
 import { describeModel } from "../model/model-resolver.js";
+import type { ModelScope } from "../model/model-scope.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { ConcurrencyPools, type Pool } from "./concurrency-pools.js";
 import { assignHandle, handleBase } from "./mention/mention.js";
@@ -384,6 +385,17 @@ export class AgentManager {
   /** Base repos worktrees were created from — so dispose() can prune them all,
    *  not just the parent repo (caller-supplied cwd can target other repos). */
   private worktreeRepos = new Set<string>();
+
+  /**
+   * The activation's `scopeModels` policy, assigned once by `index.ts` right
+   * after construction. It rides here rather than through `SpawnOptions`
+   * because the nested delegation tools are built per child inside
+   * `agent-runner.ts`, where the manager is the only handle on the activation —
+   * one assignment covers every spawn path, where a per-call option would have
+   * to be remembered by each of them (and silently disabled scope for the ones
+   * that forgot).
+   */
+  modelScope!: ModelScope;
 
   /**
    * Startup phases, keyed by agent id. `spawn()` still returns synchronously,
@@ -784,6 +796,7 @@ export class AgentManager {
         parentAgentId: id,
         depth: record.depth ?? 1,
         maxSubagentDepth: record.maxSubagentDepth,
+        modelScope: this.modelScope,
       },
       onSessionCreated: (session) => {
         record.session = session;

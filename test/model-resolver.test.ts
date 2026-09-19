@@ -26,62 +26,62 @@ describe("resolveModel", () => {
   describe("exact match (provider/modelId)", () => {
     it("resolves exact provider/modelId", () => {
       const result = resolveModel("anthropic/claude-opus-4-6", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("resolves another exact provider/modelId", () => {
       const result = resolveModel("openai/gpt-4o", makeRegistry());
-      expect(result).toEqual(MODELS[3]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[3]);
     });
 
     it("falls through to fuzzy when exact provider/modelId not found", () => {
       // "anthropic/haiku" is not an exact match, but fuzzy should find it
       const result = resolveModel("anthropic/haiku", makeRegistry());
-      expect(result).toEqual(MODELS[2]); // haiku
+      expect(result._unsafeUnwrap()).toEqual(MODELS[2]); // haiku
     });
   });
 
   describe("fuzzy match — exact id", () => {
     it("matches exact model id without provider", () => {
       const result = resolveModel("claude-opus-4-6", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("is case-insensitive", () => {
       const result = resolveModel("Claude-Opus-4-6", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("matches exact id for non-anthropic models", () => {
       const result = resolveModel("gpt-4o", makeRegistry());
-      expect(result).toEqual(MODELS[3]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[3]);
     });
   });
 
   describe("fuzzy match — substring", () => {
     it("matches 'haiku' to claude-haiku model", () => {
       const result = resolveModel("haiku", makeRegistry());
-      expect(result).toEqual(MODELS[2]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[2]);
     });
 
     it("matches 'sonnet' to claude-sonnet model", () => {
       const result = resolveModel("sonnet", makeRegistry());
-      expect(result).toEqual(MODELS[1]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[1]);
     });
 
     it("matches 'opus' to claude-opus model", () => {
       const result = resolveModel("opus", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("matches 'gemini' to gemini model", () => {
       const result = resolveModel("gemini", makeRegistry());
-      expect(result).toEqual(MODELS[4]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[4]);
     });
 
     it("is case-insensitive for substring", () => {
       const result = resolveModel("HAIKU", makeRegistry());
-      expect(result).toEqual(MODELS[2]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[2]);
     });
   });
 
@@ -93,15 +93,15 @@ describe("resolveModel", () => {
     const dashReg = makeRegistry([HAIKU]);
 
     it("matches a dotted query to a dashed id", () => {
-      expect(resolveModel("claude-haiku-4.5", dashReg)).toEqual(HAIKU);
+      expect(resolveModel("claude-haiku-4.5", dashReg)._unsafeUnwrap()).toEqual(HAIKU);
     });
 
     it("matches a dotted provider/id query to a dashed id", () => {
-      expect(resolveModel("anthropic/claude-haiku-4.5", dashReg)).toEqual(HAIKU);
+      expect(resolveModel("anthropic/claude-haiku-4.5", dashReg)._unsafeUnwrap()).toEqual(HAIKU);
     });
 
     it("matches a dashed query to a dotted id", () => {
-      expect(resolveModel("gemini-2-5-pro", makeRegistry())).toEqual(MODELS[4]);
+      expect(resolveModel("gemini-2-5-pro", makeRegistry())._unsafeUnwrap()).toEqual(MODELS[4]);
     });
   });
 
@@ -112,16 +112,16 @@ describe("resolveModel", () => {
     const HAIKU_DOT = { id: "claude-haiku-4.5", name: "Claude Haiku", provider: "anthropic" };
 
     it("matches a dated provider/id config to an undated registry id", () => {
-      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([HAIKU_DASH]))).toEqual(HAIKU_DASH);
+      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([HAIKU_DASH]))._unsafeUnwrap()).toEqual(HAIKU_DASH);
     });
 
     it("matches a dated config to an undated *dotted* registry id (date + separator)", () => {
-      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([HAIKU_DOT]))).toEqual(HAIKU_DOT);
+      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([HAIKU_DOT]))._unsafeUnwrap()).toEqual(HAIKU_DOT);
     });
 
     it("still prefers an exact dated id when the registry has it", () => {
       const dated = { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", provider: "anthropic" };
-      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([dated]))).toEqual(dated);
+      expect(resolveModel("anthropic/claude-haiku-4-5-20251001", makeRegistry([dated]))._unsafeUnwrap()).toEqual(dated);
     });
   });
 
@@ -130,75 +130,86 @@ describe("resolveModel", () => {
     const anthropicHaiku = { id: "claude-haiku-4-5", name: "Claude Haiku", provider: "anthropic" };
 
     it("falls back to another provider when the named one lacks the model", () => {
-      expect(resolveModel("anthropic/claude-haiku-4-5", makeRegistry([gatewayHaiku]))).toEqual(gatewayHaiku);
+      expect(resolveModel("anthropic/claude-haiku-4-5", makeRegistry([gatewayHaiku]))._unsafeUnwrap()).toEqual(gatewayHaiku);
     });
 
     it("prefers the named provider when it has the model", () => {
-      expect(resolveModel("anthropic/claude-haiku-4-5", makeRegistry([gatewayHaiku, anthropicHaiku]))).toEqual(anthropicHaiku);
+      expect(resolveModel("anthropic/claude-haiku-4-5", makeRegistry([gatewayHaiku, anthropicHaiku]))._unsafeUnwrap()).toEqual(anthropicHaiku);
     });
 
     it("still errors when no provider has the model", () => {
-      expect(typeof resolveModel("anthropic/nonexistent-xyz", makeRegistry([gatewayHaiku]))).toBe("string");
+      expect(resolveModel("anthropic/nonexistent-xyz", makeRegistry([gatewayHaiku])).isErr()).toBe(true);
     });
   });
 
   describe("fuzzy match — name contains", () => {
     it("matches 'Opus 4.6' via model name", () => {
       const result = resolveModel("Opus 4.6", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("matches 'Haiku 4.5' via model name", () => {
       const result = resolveModel("Haiku 4.5", makeRegistry());
-      expect(result).toEqual(MODELS[2]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[2]);
     });
   });
 
   describe("fuzzy match — multi-part", () => {
     it("matches 'anthropic opus' across provider and id", () => {
       const result = resolveModel("anthropic opus", makeRegistry());
-      expect(result).toEqual(MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[0]);
     });
 
     it("matches 'google pro' across provider and id", () => {
       const result = resolveModel("google pro", makeRegistry());
-      expect(result).toEqual(MODELS[4]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[4]);
     });
   });
 
   describe("fuzzy match — prefers tighter matches", () => {
     it("prefers exact id over substring", () => {
       const result = resolveModel("gpt-4o", makeRegistry());
-      expect(result).toEqual(MODELS[3]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[3]);
     });
 
     it("substring match prefers shorter model id (tighter fit)", () => {
       // Both opus and sonnet contain their query as substring, but "opus" is a tighter match
       // for "opus" than "sonnet" is for "sonnet" — each should resolve to itself
-      expect(resolveModel("opus", makeRegistry())).toEqual(MODELS[0]);
-      expect(resolveModel("sonnet", makeRegistry())).toEqual(MODELS[1]);
+      expect(resolveModel("opus", makeRegistry())._unsafeUnwrap()).toEqual(MODELS[0]);
+      expect(resolveModel("sonnet", makeRegistry())._unsafeUnwrap()).toEqual(MODELS[1]);
     });
   });
 
   describe("no match", () => {
     it("returns error string for unknown model", () => {
       const result = resolveModel("nonexistent-model", makeRegistry());
-      expect(typeof result).toBe("string");
-      expect(result).toContain('Model not found: "nonexistent-model"');
-      expect(result).toContain("Available models:");
+      const failure = result._unsafeUnwrapErr();
+      expect(failure.code).toBe("NOT_FOUND");
+      expect(failure.input).toBe("nonexistent-model");
+      expect(failure.message).toContain('Model not found: "nonexistent-model"');
+      expect(failure.message).toContain("Available models:");
     });
 
     it("error lists available models", () => {
-      const result = resolveModel("xyz", makeRegistry());
-      expect(result).toContain("anthropic/claude-opus-4-6");
-      expect(result).toContain("openai/gpt-4o");
+      const failure = resolveModel("xyz", makeRegistry())._unsafeUnwrapErr();
+      // The list is data as well as prose: a caller can render it without
+      // re-parsing the message.
+      expect(failure.available).toEqual([
+        "anthropic/claude-haiku-4-5-20251001",
+        "anthropic/claude-opus-4-6",
+        "anthropic/claude-sonnet-4-6",
+        "google/gemini-2.5-pro",
+        "openai/gpt-4o",
+      ]);
+      expect(failure.message).toContain("anthropic/claude-opus-4-6");
+      expect(failure.message).toContain("openai/gpt-4o");
     });
 
     it("empty string matches a model (multi-part vacuous truth)", () => {
       // Empty string splits to empty parts; every() on empty array is true
       // This is fine — callers guard against empty input
       const result = resolveModel("", makeRegistry());
-      expect(typeof result).toBe("object");
+      expect(result.isOk()).toBe(true);
     });
   });
 
@@ -207,21 +218,19 @@ describe("resolveModel", () => {
       const available = [MODELS[0], MODELS[2]]; // only opus and haiku
       const result = resolveModel("sonnet", makeRegistry(MODELS, available));
       // sonnet is in getAll but not in getAvailable — should not fuzzy match
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Model not found");
+      expect(result._unsafeUnwrapErr().message).toContain("Model not found");
     });
 
     it("exact match fails when model is not in getAvailable (no auth)", () => {
       const available = [MODELS[0]]; // only opus available
       const result = resolveModel("anthropic/claude-sonnet-4-6", makeRegistry(MODELS, available));
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Model not found");
+      expect(result._unsafeUnwrapErr().message).toContain("Model not found");
     });
 
     it("fuzzy matches against available models only", () => {
       const available = [MODELS[2]]; // only haiku available
       const result = resolveModel("haiku", makeRegistry(MODELS, available));
-      expect(result).toEqual(MODELS[2]);
+      expect(result._unsafeUnwrap()).toEqual(MODELS[2]);
     });
   });
 
@@ -235,25 +244,24 @@ describe("resolveModel", () => {
     it("'sonnet' prefers tighter id match (shorter id)", () => {
       const result = resolveModel("sonnet", makeRegistry(SIMILAR_MODELS));
       // "sonnet" is a larger fraction of "claude-sonnet-4-6" than "claude-sonnet-4-5-20241022"
-      expect(result).toEqual(SIMILAR_MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(SIMILAR_MODELS[0]);
     });
 
     it("'sonnet 4.5' resolves to the 4.5 model via name", () => {
       const result = resolveModel("sonnet 4.5", makeRegistry(SIMILAR_MODELS));
-      expect(result).toEqual(SIMILAR_MODELS[1]);
+      expect(result._unsafeUnwrap()).toEqual(SIMILAR_MODELS[1]);
     });
 
     it("'4-6' picks the 4.6 model", () => {
       const result = resolveModel("4-6", makeRegistry(SIMILAR_MODELS));
-      expect(result).toEqual(SIMILAR_MODELS[0]);
+      expect(result._unsafeUnwrap()).toEqual(SIMILAR_MODELS[0]);
     });
   });
 
   describe("empty registry", () => {
     it("returns error with empty available list", () => {
       const result = resolveModel("haiku", makeRegistry([]));
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Model not found");
+      expect(result._unsafeUnwrapErr().message).toContain("Model not found");
     });
   });
 });

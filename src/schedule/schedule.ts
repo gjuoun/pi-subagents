@@ -15,6 +15,7 @@
  *     `subagent-notification` followUp path. No new delivery code.
  */
 
+import type { Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Cron } from "croner";
 import { nanoid } from "nanoid";
@@ -232,10 +233,12 @@ export class SubagentScheduler {
     // Resolve model at fire time — registry contents may have changed since the
     // job was created (auth added/removed). Fall back silently to spawn-default
     // if resolution fails; the spawn path handles undefined model gracefully.
-    let resolvedModel: any | undefined;
+    let resolvedModel: Model<any> | undefined;
     if (job.model) {
+      // Silent on failure: the spawn path handles an undefined model
+      // gracefully, and a scheduled job has no caller to answer.
       const r = resolveModel(job.model, ctx.modelRegistry);
-      if (typeof r !== "string") resolvedModel = r;
+      if (r.isOk()) resolvedModel = r.value;
     }
 
     let agentId: string;

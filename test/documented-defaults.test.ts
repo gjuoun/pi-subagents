@@ -76,7 +76,7 @@ describe("documented defaults (README:441)", () => {
   it("model scope is off by default", async () => {
     // Off is the safe default: on, an unconfigured enabledModels would start
     // refusing spawns. README:428 documents it as opt-in.
-    const { isScopeModelsEnabled } = await import("../src/model/model-scope.js");
-    expect(isScopeModelsEnabled()).toBe(false);
+    const { ModelScope } = await import("../src/model/model-scope.js");
+    expect(new ModelScope().isEnabled()).toBe(false);
   });
 });

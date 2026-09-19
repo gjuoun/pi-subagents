@@ -18,7 +18,6 @@ import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "../../a
 import { getAvailableTypes, getFallbackSubagent, isDefaultsDisabled, NO_FALLBACK, setFallbackSubagent } from "../../config/registry/agent-types.js";
 import { type SubagentsSettings, saveAndEmitChanged, type ToolDescriptionMode } from "../../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../../lib/types.js";
-import { isScopeModelsEnabled, setScopeModelsEnabled } from "../../model/model-scope.js";
 import type { AgentsUiDeps } from "./deps.js";
 
 /**
@@ -43,7 +42,7 @@ export function snapshotSettings(deps: AgentsUiDeps) {
     defaultJoinMode: deps.context.getDefaultJoinMode(),
     backgroundByDefault: deps.context.getBackgroundByDefault(),
     schedulingEnabled: deps.context.isSchedulingEnabled(),
-    scopeModels: isScopeModelsEnabled(),
+    scopeModels: deps.context.modelScope.isEnabled(),
     strictAgentFiles: deps.context.strictAgentFiles,
     disableDefaultAgents: isDefaultsDisabled(),
     toolDescriptionMode: deps.context.getToolDescriptionMode(),
@@ -195,7 +194,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         id: "scopeModels",
         label: "Scope models",
         description: "Validate subagent models against scoped models (/scoped-models)",
-        currentValue: isScopeModelsEnabled() ? "on" : "off",
+        currentValue: deps.context.modelScope.isEnabled() ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -397,7 +396,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       }
     } else if (id === "scopeModels") {
       const enabled = value === "on";
-      setScopeModelsEnabled(enabled);
+      deps.context.modelScope.setEnabled(enabled);
       notifyApplied(ctx, `Scope models ${enabled ? "enabled" : "disabled"}`);
     } else if (id === "strictAgentFiles") {
       const enabled = value === "on";

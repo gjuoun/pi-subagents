@@ -31,6 +31,7 @@ import type { ToolDescriptionMode } from "../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../lib/types.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
+import type { ModelScope } from "../model/model-scope.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
 import type { AgentStatusBar } from "../ui/agent-status-bar.js";
 import type { FleetList } from "../ui/fleet-list.js";
@@ -155,5 +156,12 @@ export class ActivationContext {
   scheduler!: SubagentScheduler;
   workflowTasks!: Map<string, WorkflowTask>;
   pendingUsage!: PendingUsagePool;
+  /**
+   * The one `scopeModels` policy for this activation — written by the settings
+   * applier and the `/agents` toggle, read by every spawn path (Agent tool,
+   * nested tools, workflow host, RPC). It has to be one object: the allowlist
+   * cache is keyed by working directory, which only an instance can hold.
+   */
+  modelScope!: ModelScope;
   pendingNudges!: Map<string, ReturnType<typeof setTimeout>>;
 }

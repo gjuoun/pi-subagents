@@ -39,7 +39,7 @@ import { getAgentConfig, resolveSpawnType } from "../../config/registry/agent-ty
 import type { AgentRecord, ThinkingLevel } from "../../lib/types.js";
 import { getLifetimeTotal } from "../../lib/usage.js";
 import { resolveModel } from "../../model/model-resolver.js";
-import { checkModelScope } from "../../model/model-scope.js";
+import type { ModelScope } from "../../model/model-scope.js";
 import { resolveWorkflowSource } from "../script/saved.js";
 import type { WorkflowGateResult, WorkflowHost, WorkflowSpawnResult } from "./runtime.js";
 
@@ -68,6 +68,8 @@ export interface WorkflowHostOptions {
    */
   workflowId?: string;
   gateTimeoutMs?: number;
+  /** The activation's `scopeModels` policy — a script's `agent({ model })` is a runtime choice. */
+  modelScope: ModelScope;
 }
 
 /**
@@ -206,10 +208,10 @@ export function createWorkflowHost(deps: WorkflowHostOptions): WorkflowHost {
       const modelInput = request.model ?? config?.model;
       if (modelInput !== undefined) {
         const resolved = resolveModel(modelInput, ctx.modelRegistry);
-        if (typeof resolved === "string") {
-          if (request.model !== undefined) return { ok: false, error: resolved };
+        if (resolved.isErr()) {
+          if (request.model !== undefined) return { ok: false, error: resolved.error.message };
         } else {
-          model = resolved;
+          model = resolved.value;
         }
       }
 
@@ -220,7 +222,7 @@ export function createWorkflowHost(deps: WorkflowHostOptions): WorkflowHost {
       // and NOT `modelInput` — the latter has already absorbed the agent file's
       // own `model:`, which is user-authored config and so earns the
       // warn-and-proceed branch rather than a refusal.
-      const scopeVerdict = checkModelScope({
+      const scopeVerdict = deps.modelScope.check({
         model,
         cwd: ctx.cwd,
         modelRegistry: ctx.modelRegistry,

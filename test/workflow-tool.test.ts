@@ -25,7 +25,7 @@ import subagentsExtension, { WORKFLOW_ENTRY_TYPE, WORKFLOW_FILE_FLAG } from "../
 import { compileJsonSchema } from "../src/lib/json-schema.js";
 import { SUBAGENT_TOOL_NAMES } from "../src/lib/tool-names.js";
 import type { AgentRecord } from "../src/lib/types.js";
-import { isScopeModelsEnabled, setScopeModelsEnabled } from "../src/model/model-scope.js";
+import { ModelScope } from "../src/model/model-scope.js";
 import { createWorkflowHost } from "../src/workflow/run/host.js";
 import type { WorkflowSpawnRequest } from "../src/workflow/run/runtime.js";
 import { ctx, flush, type Hermetic, hermeticDir, makePi, textOf } from "./helpers/boot-extension.js";
@@ -105,7 +105,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     const stub = stubManager(() =>
       record({ result: "the answer", toolUses: 3, lifetimeUsage: { input: 100, output: 20, cacheWrite: 5 } }),
     );
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({ label: "review:bugs" }));
 
@@ -125,7 +125,7 @@ describe("createWorkflowHost — spawn mapping", () => {
   it("passes isolation and the run's abort signal down to the spawn", async () => {
     const stub = stubManager();
     const controller = new AbortController();
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi: {} as any,
       ctx: ctx(),
       manager: stub.manager,
@@ -145,7 +145,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     // Not a second resolution path: `resolveSpawnType` owns the fallback policy,
     // so an unknown type falls back here exactly as it does for a tool call…
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const fellBack = await host.spawnAgent(request({ agentType: "no-such-agent" }));
     expect(fellBack.ok).toBe(true);
@@ -155,7 +155,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     setFallbackSubagent(NO_FALLBACK);
     try {
       const strict = stubManager();
-      const strictHost = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: strict.manager });
+      const strictHost = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: strict.manager });
       const rejected = await strictHost.spawnAgent(request({ agentType: "no-such-agent" }));
       expect(rejected.ok).toBe(false);
       expect(rejected.error).toMatch(/no-such-agent/);
@@ -167,7 +167,7 @@ describe("createWorkflowHost — spawn mapping", () => {
 
   it("rejects a model the script named and cannot be resolved", async () => {
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({ model: "not-a-model" }));
 
@@ -179,7 +179,7 @@ describe("createWorkflowHost — spawn mapping", () => {
   it("resolves a model the script named through the session's registry", async () => {
     const stub = stubManager();
     const model = { id: "claude-haiku-4-5", name: "Haiku", provider: "anthropic" };
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi: {} as any,
       ctx: ctx({
         modelRegistry: {
@@ -200,7 +200,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     // from the fleet list, the widget and the `/agents` menus, and what keeps
     // one fan-out from filling the session's concurrency pool.
     const stub = stubManager();
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi: {} as any,
       ctx: ctx(),
       manager: stub.manager,
@@ -220,21 +220,21 @@ describe("createWorkflowHost — spawn mapping", () => {
     // `result` is prose and picks up the worktree branch note on the way out;
     // the caller asked for a schema and must get the payload, not the prose.
     const compilation = compileJsonSchema({ type: "object", properties: { a: { type: "string" } } });
-    if (!compilation.ok) throw new Error(compilation.message);
+    if (compilation.isErr()) throw new Error(compilation.error);
     const stub = stubManager(() =>
       record({ result: "here you go", structuredJson: '{"a":"x"}' }),
     );
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
-    const result = await host.spawnAgent(request({ schema: compilation.compiled }));
+    const result = await host.spawnAgent(request({ schema: compilation.value }));
 
-    expect(stub.spawnAndWait.mock.calls[0][4].structuredOutput).toBe(compilation.compiled);
+    expect(stub.spawnAndWait.mock.calls[0][4].structuredOutput).toBe(compilation.value);
     expect(result).toMatchObject({ ok: true, text: '{"a":"x"}' });
   });
 
   it("falls back to the prose when no schema was asked for", async () => {
     const stub = stubManager(() => record({ result: "here you go" }));
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({}));
 
@@ -246,7 +246,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     // The runtime tests drive the host without one; an undefined stamp must not
     // become the string "undefined" and quietly group unrelated agents.
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({}));
 
@@ -255,7 +255,7 @@ describe("createWorkflowHost — spawn mapping", () => {
 
   it("maps opts.effort onto the spawn's thinking level", async () => {
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({ effort: "high" }));
 
@@ -266,7 +266,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     // The agent definition's `thinking` resolves it downstream; sending
     // `undefined` explicitly would be the same, but sending a default would not.
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({}));
 
@@ -277,7 +277,7 @@ describe("createWorkflowHost — spawn mapping", () => {
     const stub = stubManager(() => {
       throw new Error('Cannot run with isolation: "worktree" — not a git repo');
     });
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     // `await` rather than `rejects`: a startup failure must land in the script
     // as a null, so the rest of a fan-out keeps going.
@@ -291,9 +291,9 @@ describe("createWorkflowHost — spawn mapping", () => {
     const failing = stubManager(() => record({ status: "error", error: "boom" }));
     const stopped = stubManager(() => record({ status: "stopped" }));
 
-    const failed = await createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: failing.manager })
+    const failed = await createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: failing.manager })
       .spawnAgent(request());
-    const skipped = await createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stopped.manager })
+    const skipped = await createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stopped.manager })
       .spawnAgent(request());
 
     expect(failed).toMatchObject({ ok: false, error: "boom" });
@@ -325,7 +325,8 @@ describe("createWorkflowHost — scopeModels", () => {
   let projectDir: string;
   let agentDir: string;
   let prevAgentDir: string | undefined;
-  let prevEnabled: boolean;
+  /** The policy the scope tests below drive; replaced per test, never shared. */
+  let modelScope: ModelScope;
   let notify: ReturnType<typeof vi.fn>;
 
   /** A session ctx whose cwd is where the allowlist was written. */
@@ -338,15 +339,15 @@ describe("createWorkflowHost — scopeModels", () => {
     });
 
   beforeEach(() => {
-    // `resolveEnabledModels` memoizes on the patterns plus the mtime/size of
-    // both settings files, so one case's allowlist would otherwise be served to
-    // the next — a fresh project dir per test is what invalidates it. Same
-    // harness as test/cross-extension-rpc.test.ts.
+    // The scope's cache memoizes on the directory, the patterns, and the
+    // mtime/size of both settings files, so a fresh project dir per test is what
+    // keeps one case's allowlist from being served to the next. Same harness as
+    // test/cross-extension-rpc.test.ts.
     projectDir = mkdtempSync(join(tmpdir(), "wf-scope-project-"));
     agentDir = mkdtempSync(join(tmpdir(), "wf-scope-global-"));
     prevAgentDir = process.env.PI_CODING_AGENT_DIR;
     process.env.PI_CODING_AGENT_DIR = agentDir;
-    prevEnabled = isScopeModelsEnabled();
+    modelScope = new ModelScope();
     mkdirSync(join(projectDir, ".pi"), { recursive: true });
     writeFileSync(
       join(projectDir, ".pi", "settings.json"),
@@ -368,7 +369,6 @@ describe("createWorkflowHost — scopeModels", () => {
   });
 
   afterEach(() => {
-    setScopeModelsEnabled(prevEnabled); // module-global — restore for other suites
     if (prevAgentDir == null) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
     rmSync(projectDir, { recursive: true, force: true });
@@ -377,9 +377,9 @@ describe("createWorkflowHost — scopeModels", () => {
   });
 
   it("refuses a model the script named that is out of scope, and fails only that agent", async () => {
-    setScopeModelsEnabled(true);
+    modelScope.setEnabled(true);
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope, pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
 
     const blocked = await host.spawnAgent(request({ model: "anthropic/blocked-model" }));
 
@@ -399,9 +399,9 @@ describe("createWorkflowHost — scopeModels", () => {
   it("warns but still spawns when the agent file pinned the out-of-scope model", async () => {
     // User-authored config, not a choice the script made — the model folds into
     // `modelInput`, so keying `callerSupplied` off it would wrongly hard-error.
-    setScopeModelsEnabled(true);
+    modelScope.setEnabled(true);
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope, pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({ agentType: "pinned" }));
 
@@ -412,9 +412,9 @@ describe("createWorkflowHost — scopeModels", () => {
   });
 
   it("warns but still spawns on an inherited parent model", async () => {
-    setScopeModelsEnabled(true);
+    modelScope.setEnabled(true);
     const stub = stubManager();
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope,
       pi: {} as any,
       ctx: scopedCtx({ model: BLOCKED }),
       manager: stub.manager,
@@ -431,9 +431,9 @@ describe("createWorkflowHost — scopeModels", () => {
   });
 
   it("toasts a repeated warning once, not once per child of a fan-out", async () => {
-    setScopeModelsEnabled(true);
+    modelScope.setEnabled(true);
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope, pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
 
     for (let i = 0; i < 3; i++) {
       const spawned = await host.spawnAgent(request({ agentId: `wf-agent-${i}`, agentType: "pinned" }));
@@ -445,9 +445,9 @@ describe("createWorkflowHost — scopeModels", () => {
   });
 
   it("leaves every spawn alone when scopeModels is off — the default", async () => {
-    setScopeModelsEnabled(false);
+    modelScope.setEnabled(false);
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope, pi: {} as any, ctx: scopedCtx(), manager: stub.manager });
 
     const named = await host.spawnAgent(request({ model: "anthropic/blocked-model" }));
     const pinnedAgent = await host.spawnAgent(request({ agentId: "wf-agent-1", agentType: "pinned" }));
@@ -476,7 +476,7 @@ describe("createWorkflowHost — worktree cwd propagation", () => {
     const stub = stubManager(() =>
       record({ worktree: { path: worktree, branch: "b", baseSha: "sha", workPath: worktree } }),
     );
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({ isolation: "worktree" }));
 
@@ -492,7 +492,7 @@ describe("createWorkflowHost — worktree cwd propagation", () => {
     const stub = stubManager(() =>
       record({ worktree: { path: gone, branch: "b", baseSha: "sha", workPath: gone } }),
     );
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const result = await host.spawnAgent(request({ isolation: "worktree" }));
 
@@ -501,7 +501,7 @@ describe("createWorkflowHost — worktree cwd propagation", () => {
 
   it("reports no cwd for a child that never had a worktree", async () => {
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     expect((await host.spawnAgent(request())).cwd).toBeUndefined();
   });
@@ -514,7 +514,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("aborts the manager record the runtime's agent id stands for", async () => {
     const stub = stubManager(() => record({ id: "manager-id-7" }));
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({ agentId: "wf-agent-3" }));
     host.abortAgent("wf-agent-3");
@@ -524,7 +524,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("does not abort anything for an agent that never started", () => {
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     host.abortAgent("wf-agent-0");
 
@@ -533,7 +533,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("resumes the same manager record, long after that agent settled", async () => {
     const stub = stubManager(() => record({ id: "manager-id-7" }));
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({ agentId: "wf-agent-0" }));
     const resumed = await host.resumeAgent?.("wf-agent-0", "and now this");
@@ -544,7 +544,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("refuses to resume an agent the run never spawned", async () => {
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     const resumed = await host.resumeAgent?.("wf-agent-9", "continue");
 
@@ -558,7 +558,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
     // one: nothing would run in it, and the manager's settle path is shared
     // with every other spawn.
     const stub = stubManager();
-    const host = createWorkflowHost({ pi: {} as any, ctx: ctx(), manager: stub.manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: {} as any, ctx: ctx(), manager: stub.manager });
 
     await host.spawnAgent(request({ isolation: "worktree" }));
     expect(stub.spawnAndWait.mock.calls[0][4].onBeforeWorktreeCleanup).toBeUndefined();
@@ -569,7 +569,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("runs a gate through pi.exec in the child's own tree", async () => {
     const exec = vi.fn(async () => execResult({ stdout: "3 passing" }));
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi: { exec } as any,
       ctx: ctx({ cwd: "/session" }),
       manager: stubManager().manager,
@@ -583,7 +583,7 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("falls back to the session's cwd when the child had no tree of its own", async () => {
     const exec = vi.fn(async () => execResult());
-    const host = createWorkflowHost({
+    const host = createWorkflowHost({ modelScope: new ModelScope(),
       pi: { exec } as any,
       ctx: ctx({ cwd: "/session" }),
       manager: stubManager().manager,
@@ -596,14 +596,14 @@ describe("createWorkflowHost — abort, resume and gate", () => {
 
   it("fails a gate on a non-zero exit and surfaces its output", async () => {
     const exec = vi.fn(async () => execResult({ code: 1, stderr: "1 failing" }));
-    const host = createWorkflowHost({ pi: { exec } as any, ctx: ctx(), manager: stubManager().manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: { exec } as any, ctx: ctx(), manager: stubManager().manager });
 
     expect(await host.runGate?.("npm test", { agentId: "wf-agent-0" })).toEqual({ ok: false, output: "1 failing" });
   });
 
   it("fails a gate that was killed, which pi.exec reports with exit code 0", async () => {
     const exec = vi.fn(async () => execResult({ killed: true, code: 0 }));
-    const host = createWorkflowHost({ pi: { exec } as any, ctx: ctx(), manager: stubManager().manager });
+    const host = createWorkflowHost({ modelScope: new ModelScope(), pi: { exec } as any, ctx: ctx(), manager: stubManager().manager });
 
     const gate = await host.runGate?.("sleep 999", { agentId: "wf-agent-0" });
 

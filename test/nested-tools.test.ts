@@ -6,13 +6,16 @@ import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager
 import { encodeCwd } from "../src/agent/session/output-file.js";
 import { getAvailableTypes, registerAgents, setFallbackSubagent } from "../src/config/registry/agent-types.js";
 import { loadCustomAgents } from "../src/config/registry/custom-agents.js";
-import { setScopeModelsEnabled } from "../src/model/model-scope.js";
+import { ModelScope } from "../src/model/model-scope.js";
 
 let cwd: string;
 let manager: NestedAgentManager;
 let records: Map<string, any>;
 let spawn: ReturnType<typeof vi.fn>;
 let spawnAndWait: ReturnType<typeof vi.fn>;
+
+/** The scope policy every harness below reads; a test that cares replaces it. */
+let modelScope = new ModelScope();
 
 function writeAgent(name: string, extra = "") {
   const dir = join(cwd, ".pi", "agents");
@@ -51,6 +54,7 @@ function tools(
     maxSubagentDepth,
     allowedSubagents,
     configCwd,
+    modelScope,
   });
 }
 
@@ -85,7 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  setScopeModelsEnabled(false);
+  modelScope.setEnabled(false);
   rmSync(cwd, { recursive: true, force: true });
 });
 
@@ -185,7 +189,7 @@ describe("child-safe nested Agent tools", () => {
       join(cwd, ".pi", "settings.json"),
       JSON.stringify({ enabledModels: ["anthropic/allowed"] }),
     );
-    setScopeModelsEnabled(true);
+    modelScope.setEnabled(true);
     const [agent] = tools();
 
     const blocked = await execute(agent, {
