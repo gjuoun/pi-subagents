@@ -29,17 +29,17 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { runAgent } from "../src/agent/agent-runner.js";
-import { resolveAgentInvocationConfig } from "../src/agent/invocation.js";
-import { getAgentConfig, registerAgents } from "../src/config/registry/agent-types.js";
-import { loadCustomAgents } from "../src/config/registry/custom-agents.js";
-import { registerFauxProvider } from "./helpers/pi-ai.js";
+import { runAgent } from "../../src/agent/agent-runner.js";
+import { resolveAgentInvocationConfig } from "../../src/agent/invocation.js";
+import { getAgentConfig, registerAgents } from "../../src/config/registry/agent-types.js";
+import { loadCustomAgents } from "../../src/config/registry/custom-agents.js";
+import { registerFauxProvider } from "../helpers/pi-ai.js";
 
 // Real pi-mono (loader + dynamic extension import + session construction) — a
 // cold run under full-suite contention can exceed vitest's 5s default.
 vi.setConfig({ testTimeout: 30_000 });
 
-const FIXTURES_DIR = resolve(fileURLToPath(new URL("./fixtures", import.meta.url)));
+const FIXTURES_DIR = resolve(fileURLToPath(new URL("../fixtures", import.meta.url)));
 const TEMPLATES_DIR = join(FIXTURES_DIR, ".pi", "agents");
 
 function csv(val: unknown): string[] {
