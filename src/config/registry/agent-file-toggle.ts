@@ -1,28 +1,20 @@
 /**
- * agent-file-toggle.ts — Pure helpers for the `/agents` file-editing operations:
- * locating an agent's .md file, toggling its `enabled:` frontmatter flag, and
- * serializing an AgentConfig back to frontmatter for eject.
+ * agent-file-toggle.ts — pure helpers for the `/agents` file-editing operations: locating
+ * an agent's .md file, toggling its `enabled:` frontmatter flag, and serializing an
+ * AgentConfig back to frontmatter for eject. They live outside `index.ts` so they can be
+ * tested directly — the `/agents` command handler is an ~890-line closure reached only
+ * through `registerCommand`, which every test mocks.
  *
- * These live outside src/index.ts so they can be tested directly: the `/agents`
- * command handler is an ~890-line closure reached only through `registerCommand`,
- * which every test mocks.
- *
- * The read side of this data (src/custom-agents.ts) parses frontmatter with a
- * real YAML parser, so it honors `enabled: false` at any position in the block.
- * This module must agree with it, and splits the work accordingly:
- *
- * - Deciding whether a file is disabled is a *read*, so it calls that same parser
- *   (`isDisabledContent`) instead of mirroring it. A mirror has to be right about
- *   YAML's boolean spellings and about pi's fence scan, and a regex was wrong
- *   about both.
- * - *Editing* cannot go through the parser, because re-serializing a parsed
- *   document would reformat a file the README tells users to hand-author —
- *   discarding their comments, key order, and quoting. So the edits are line-wise
- *   and preserve everything they don't touch.
- *
- * That leaves removal best-effort: it recognizes a lowercase bare `false`, and
- * reports `changed: false` for the spellings it cannot rewrite, so the caller
- * refuses honestly rather than announcing a change it did not make.
+ * The read side (`config/registry/custom-agents.ts`) parses frontmatter with a real YAML
+ * parser, so it honors `enabled: false` at any position. Deciding whether a file is
+ * disabled is a *read*, so that same parser is called rather than mirrored — a regex was
+ * wrong about both YAML's boolean spellings and pi's fence scan. *Editing* cannot go
+ * through the parser, because re-serializing a parsed document would reformat a file the
+ * README tells users to hand-author: comments, key order and quoting discarded. The edits
+ * are line-wise and preserve everything they do not touch, which leaves removal
+ * best-effort — it recognizes a lowercase bare `false` and reports `changed: false` for
+ * the spellings it cannot rewrite, so the caller refuses honestly rather than announcing a
+ * change it did not make.
  */
 
 import { existsSync } from "node:fs";
@@ -36,6 +28,18 @@ export type AgentFileLocation = "project" | "workspace" | "personal";
 export const projectAgentsDir = (cwd: string = process.cwd()) => join(cwd, ".pi", "agents");
 export const workspaceAgentsDir = (cwd: string = process.cwd()) => join(cwd, ".agents", "agents");
 export const personalAgentsDir = () => join(getAgentDir(), "agents");
+
+/**
+ * Ask which directory an agent file should be written to. Returns the directory, or
+ * undefined when the user escapes — every caller then aborts without writing.
+ */
+export async function chooseAgentDir(ui: {
+  select(title: string, options: string[]): Promise<string | undefined>;
+}): Promise<string | undefined> {
+  const location = await ui.select("Choose location", ["Project (.pi/agents/)", `Personal (${personalAgentsDir()})`]);
+  if (!location) return undefined;
+  return location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
+}
 
 /**
  * Find the file path of a custom agent by name, in discovery-precedence order
@@ -97,7 +101,6 @@ export type DisableOutcome = "disabled" | "already-disabled" | "no-frontmatter";
 
 /** A line that sets `enabled: false`, ignoring trailing whitespace / CR. */
 const ENABLED_FALSE = /^enabled:[ \t]*false[ \t]*$/;
-/** An opening or closing `---` fence line. */
 const FENCE = /^---[ \t]*$/;
 
 /**
