@@ -32,7 +32,7 @@ import { describeModel } from "../model/model-resolver.js";
 import type { ModelScope } from "../model/model-scope.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { ConcurrencyPools, type Pool } from "./concurrency-pools.js";
-import { assignHandle, handleBase } from "./mention/mention.js";
+import { assignHandle, handleBase } from "./handle-registry.js";
 import { cleanupWorktree, createWorktree, isWorktreeIsolationEnabled, pruneWorktrees, } from "./session/worktree.js";
 
 export type OnAgentComplete = (record: AgentRecord) => void;

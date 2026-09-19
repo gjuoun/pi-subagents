@@ -7,10 +7,10 @@
  * with a non-empty message after the handle — which is why a bare `@code-review` goes to
  * the main model rather than anywhere near the agent.
  *
- * A record's identity is a UUID plus a deliberately non-unique description, neither
- * typeable, so the handle is derived from the agent type and collisions are numbered
- * (`explore`, `explore-2`) — as Claude Code's `allocateName` does, recycling a name only
- * once the task behind it is gone.
+ * What a handle is CALLED, and how one is allocated, is `agent/handle-registry.ts`: a record's
+ * identity is a UUID plus a deliberately non-unique description, neither typeable, so handles are
+ * derived from the agent type and collisions numbered (`explore`, `explore-2`), as Claude Code's
+ * `allocateName` does. This module is only the syntax that carries one.
  */
 
 /**
@@ -23,64 +23,6 @@ export const MENTION_TRIGGER = /(^|[\s。、？！])@([\w-]*)$/;
 /** Send grammar: leading `@handle`, then a non-empty message. */
 const MENTION_SEND = /^@([\w-]+)\s+([\s\S]+)$/;
 
-/**
- * Upper bound on a handle, matching Claude Code's `dSS`. Nothing here generates
- * a name this long, but an agent type or a model-supplied name can be arbitrary
- * text, and an unbounded handle would wrap the suggestion popup.
- */
-const MAX_HANDLE_LENGTH = 64;
-
-/**
- * Handles that address something other than a subagent, and so can never be
- * allocated to one. Claude Code reserves exactly this name (`Vq = "main"`),
- * refusing it at spawn and routing it to the main conversation instead.
- */
-const RESERVED_HANDLES: ReadonlySet<string> = new Set(["main"]);
-
-/** Whether `@handle` names the main conversation rather than any subagent. */
-export function isReservedHandle(handle: string): boolean {
-  return RESERVED_HANDLES.has(handle.toLowerCase());
-}
-
-/** Slug of an agent type or name, restricted to the `[\w-]` the grammar allows. */
-export function handleBase(type: string): string {
-  const slug = type.toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, MAX_HANDLE_LENGTH)
-    // The slice can land mid-run and leave the trailing hyphen back.
-    .replace(/-+$/, "");
-  return slug || "agent";
-}
-
-/**
- * `base`, else `base-2`, `base-3`, … — the first form that is neither `taken`
- * nor reserved. Callers pass one shared `taken` set covering type-derived
- * handles and model-supplied aliases alike, so the two can never collide.
- */
-export function assignHandle(base: string, taken: ReadonlySet<string>): string {
-  let candidate = base;
-  let n = 1;
-  while (taken.has(candidate) || RESERVED_HANDLES.has(candidate)) {
-    n++;
-    candidate = `${base}-${n}`;
-  }
-  return candidate;
-}
-
-/**
- * Map a typed handle back to a registered agent type, so `@explore fix it`
- * reaches the Explore agent even when no instance has ever run. `handleBase` is
- * the single source of truth in both directions, so a type is addressable by
- * exactly the handle its instances would be given.
- */
-export function resolveHandleToType(handle: string, types: readonly string[]): string | undefined {
-  const wanted = handle.toLowerCase();
-  // A type slugging to a reserved name is unaddressable rather than shadowing
-  // it — `assignHandle` refuses that name too, so its instances never hold one.
-  if (RESERVED_HANDLES.has(wanted)) return undefined;
-  return types.find(type => handleBase(type) === wanted);
-}
 
 /**
  * Claude Code documents `@agent-<name>` as the form you type by hand when the
