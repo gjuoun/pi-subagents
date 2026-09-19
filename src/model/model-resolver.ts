@@ -58,23 +58,24 @@ export function resolveModel(
   // Available models (those with auth configured)
   const all = (registry.getAvailable?.() ?? registry.getAll()) as ModelEntry[];
   const availableSet = new Set(all.map(entry => `${entry.provider}/${entry.id}`.toLowerCase()));
-  // Sorted for the failure message, which lists them one per line.
-  const available = all.map(entry => `${entry.provider}/${entry.id}`).sort();
   const slashIdx = input.indexOf("/");
-  const notFound = (): Result<Model<any>, ModelFailure> =>
-    err(modelError.NOT_FOUND(input, available));
+  // A miss answers the same way wherever it happens, and building the list is
+  // the only cost of a failure: sorted here so a successful resolution never
+  // pays for a message it will not show.
+  const notFound = (): ModelFailure =>
+    modelError.NOT_FOUND(input, all.map(entry => `${entry.provider}/${entry.id}`).sort());
 
   // A lookup answer as a Result: a found model is the attempt's success, and a
   // miss is the function's own not-found answer, which the next `.orElse`
   // recovers from.
   const attempt = (found: Model<any> | undefined): Result<Model<any>, ModelFailure> =>
-    found ? ok(found) : notFound();
+    found ? ok(found) : err(notFound());
 
   return attempt(exactMatch(input, slashIdx, availableSet, registry))
     .orElse(() => attempt(fuzzyMatch(input, all, registry)))
     .orElse(() =>
       slashIdx === -1
-        ? notFound()
+        ? err(notFound())
         // Provider fallback: a "provider/modelId" query that didn't match under
         // the named provider (exact or fuzzy above) retries against all
         // providers. The named provider is preferred when present; this only
@@ -85,7 +86,7 @@ export function resolveModel(
     // The recursive attempt words its failure about the *bare* id it was handed,
     // and the fuzzy step words its miss about nothing. The caller asked about
     // the input as spelled, so every path answers about that.
-    .mapErr(() => modelError.NOT_FOUND(input, available));
+    .mapErr(() => notFound());
 }
 
 /**
