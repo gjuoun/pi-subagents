@@ -32,9 +32,9 @@ import type { AgentsUiDeps } from "./deps.js";
 /** The whole settings snapshot, as one object — exported so every other entry point persists the same shape. */
 export function snapshotSettings(deps: AgentsUiDeps) {
   return {
-    maxConcurrent: deps.context.manager.getMaxConcurrent(),
+    maxConcurrent: deps.services.manager.getMaxConcurrent(),
     // 0 = unlimited, and the default — see SubagentsSettings.
-    maxConcurrentForeground: deps.context.manager.getMaxConcurrentForeground(),
+    maxConcurrentForeground: deps.services.manager.getMaxConcurrentForeground(),
     // 0 = unlimited — per SubagentsSettings.defaultMaxTurns docstring and
     // normalizeMaxTurns() in agent-runner.ts (which maps 0 → undefined).
     defaultMaxTurns: getDefaultMaxTurns() ?? 0,
@@ -42,7 +42,7 @@ export function snapshotSettings(deps: AgentsUiDeps) {
     defaultJoinMode: deps.context.defaultJoinMode,
     backgroundByDefault: deps.context.backgroundByDefault,
     schedulingEnabled: deps.context.schedulingEnabled,
-    scopeModels: deps.context.modelScope.isEnabled(),
+    scopeModels: deps.services.modelScope.isEnabled(),
     strictAgentFiles: deps.context.strictAgentFiles,
     disableDefaultAgents: isDefaultsDisabled(),
     toolDescriptionMode: deps.context.toolDescriptionMode,
@@ -104,8 +104,8 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
   }
 
   function buildItems(): SettingItem[] {
-    const mc = deps.context.manager.getMaxConcurrent();
-    const mcf = deps.context.manager.getMaxConcurrentForeground();
+    const mc = deps.services.manager.getMaxConcurrent();
+    const mcf = deps.services.manager.getMaxConcurrentForeground();
     const dmt = getDefaultMaxTurns() ?? 0;
     const gt = getGraceTurns();
     const msd = getMaxSubagentDepth();
@@ -194,7 +194,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         id: "scopeModels",
         label: "Scope models",
         description: "Validate subagent models against scoped models (/scoped-models)",
-        currentValue: deps.context.modelScope.isEnabled() ? "on" : "off",
+        currentValue: deps.services.modelScope.isEnabled() ? "on" : "off",
         values: ["on", "off"],
       },
       {
@@ -307,14 +307,14 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
     if (id === "maxConcurrent") {
       const n = parseInt(value, 10);
       if (n >= 1) {
-        deps.context.manager.setMaxConcurrent(n);
+        deps.services.manager.setMaxConcurrent(n);
         notifyApplied(ctx, `Max concurrency set to ${n}`);
       }
     } else if (id === "maxConcurrentForeground") {
       // 0 is meaningful here, unlike maxConcurrent above: it means unlimited.
       const n = parseInt(value, 10);
       if (n >= 0) {
-        deps.context.manager.setMaxConcurrentForeground(n);
+        deps.services.manager.setMaxConcurrentForeground(n);
         notifyApplied(ctx, n === 0
           ? "Max foreground concurrency set to unlimited"
           : `Max foreground concurrency set to ${n}`);
@@ -363,7 +363,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
         ctx.ui.notify(`Scheduling already ${enabled ? "enabled" : "disabled"}.`, "info");
       } else {
         deps.context.schedulingEnabled = enabled;
-        if (!enabled) deps.context.scheduler.stop();  // immediate kill — outstanding fires stop ticking
+        if (!enabled) deps.services.scheduler.stop();  // immediate kill — outstanding fires stop ticking
         notifyApplied(
           ctx,
           `Scheduling ${enabled ? "enabled" : "disabled"}. Tool spec change takes effect on next pi session.`,
@@ -396,7 +396,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       }
     } else if (id === "scopeModels") {
       const enabled = value === "on";
-      deps.context.modelScope.setEnabled(enabled);
+      deps.services.modelScope.setEnabled(enabled);
       notifyApplied(ctx, `Scope models ${enabled ? "enabled" : "disabled"}`);
     } else if (id === "strictAgentFiles") {
       const enabled = value === "on";
@@ -522,9 +522,9 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
   // If a numeric field ID was returned, prompt for typed input
   if (result && NUMERIC_IDS.has(result)) {
     const current = result === "maxConcurrent"
-      ? String(deps.context.manager.getMaxConcurrent())
+      ? String(deps.services.manager.getMaxConcurrent())
       : result === "maxConcurrentForeground"
-        ? String(deps.context.manager.getMaxConcurrentForeground())
+        ? String(deps.services.manager.getMaxConcurrentForeground())
         : result === "defaultMaxTurns"
           ? String(getDefaultMaxTurns() ?? 0)
           : result === "maxSubagentDepth"

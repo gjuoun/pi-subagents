@@ -14,10 +14,13 @@ import type { AgentsUiDeps } from "../src/ui/agents/deps.js";
 import { snapshotSettings } from "../src/ui/agents/settings-overlay.js";
 
 /** A target whose context is a plain object, so every write is observable. */
-function makeTarget(): { context: SettingsSurface; target: SettingsTarget } {
-  const context = {
+function makeTarget(): { context: SettingsSurface; services: SettingsTarget["services"]; target: SettingsTarget } {
+  // The two handles a setting drives live on the services object, not the context.
+  const services = {
     manager: { setMaxConcurrent: vi.fn(), setMaxConcurrentForeground: vi.fn() },
     modelScope: { setEnabled: vi.fn() },
+  };
+  const context = {
     strictAgentFiles: false,
     defaultJoinMode: "smart",
     backgroundByDefault: true,
@@ -40,6 +43,7 @@ function makeTarget(): { context: SettingsSurface; target: SettingsTarget } {
     setWorkflowsEnabled: vi.fn(),
   } satisfies SettingsSurface;
   const target: SettingsTarget = {
+    services,
     context,
     setDefaultMaxTurns: vi.fn(),
     setGraceTurns: vi.fn(),
@@ -50,17 +54,18 @@ function makeTarget(): { context: SettingsSurface; target: SettingsTarget } {
     setOutputTranscript: vi.fn(),
     setWorktreeIsolation: vi.fn(),
   };
-  return { context, target };
+  return { context, services, target };
 }
 
-/** Minimal deps for snapshotSettings — real context, one stub for the un-assigned manager. */
+/** Minimal deps for snapshotSettings — a real context plus the two handles it reads. */
 function makeDeps(context: ActivationContext): AgentsUiDeps {
   return {
     pi: { events: { emit: vi.fn() } } as unknown as AgentsUiDeps["pi"],
-    context: Object.assign(context, {
+    services: {
       manager: { getMaxConcurrent: () => 10, getMaxConcurrentForeground: () => 0 },
       modelScope: new ModelScope(),
-    }) as unknown as AgentsUiDeps["context"],
+    } as unknown as AgentsUiDeps["services"],
+    context: context as unknown as AgentsUiDeps["context"],
     reloadCustomAgents: vi.fn(),
   } as unknown as AgentsUiDeps;
 }

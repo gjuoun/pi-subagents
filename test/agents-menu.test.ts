@@ -17,11 +17,14 @@ function makeDeps(on: boolean) {
   const state = { on };
   return {
     state,
-    context: {
+    // The handles these menus read live on the services object; the context is state only.
+    services: {
       modelScope: new ModelScope(),
       manager: { listAgents: () => [], getMaxConcurrent: () => 10, getMaxConcurrentForeground: () => 0 },
       scheduler: { isActive: () => false, list: () => [] },
       workflowTasks: new Map(),
+    },
+    context: {
       strictAgentFiles: false,
       setFleetViewEnabled: vi.fn((b: boolean) => { state.on = b; }),
       get fleetViewEnabled() { return state.on; },
@@ -95,7 +98,9 @@ describe("/agents root menu", () => {
   });
 
   it("is the only way in: no separate /agent command is registered", async () => {
-    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+    // The composition root (src/app.ts) is where every registration lives; the entry
+    // (src/index.ts) only guards and calls it.
+    const source = readFileSync(new URL("../src/app.ts", import.meta.url), "utf8");
     expect(source).toMatch(/registerCommand\("agents", \{/);
     expect(source).not.toMatch(/registerCommand\("agent", \{/);
   });

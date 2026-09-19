@@ -14,15 +14,34 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AgentManager } from "../../agent/agent-manager.js";
-import type { ToolDescriptionMode } from "../../config/settings.js";
-import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../../lib/types.js";
+import type { SettingsSurface } from "../../config/settings.js";
 import type { AgentActivity } from "../../lib/ui/theme.js";
 import type { ModelScope } from "../../model/model-scope.js";
 import type { SubagentScheduler } from "../../schedule/schedule.js";
 import type { WorkflowTask } from "../../workflow/run/task.js";
 
-/** The slice of the activation context these surfaces read and write. */
-export interface AgentsUiContext {
+/**
+ * The slice of the activation context these surfaces read and write: the settings the applier
+ * owns, taken from SettingsSurface rather than restated (that type is what the FIELDS table in
+ * config/settings.ts is written against, so a setting and its writer stay in step in one place),
+ * plus the one field the Workflows row reads on its own.
+ */
+export interface AgentsUiContext extends SettingsSurface {
+  /**
+   * Whether `workflowsEnabled` is the user's own answer rather than the default. The Workflows
+   * row shows the difference: a default may yield to another extension's workflow tool, an
+   * explicit choice may not.
+   */
+  workflowsPinned: boolean;
+}
+
+/**
+ * The live handles these surfaces read, declared structurally rather than imported: `Services` is
+ * composed in the wiring layer (src/bootstrap.ts), which a `ui/` module may not reach for. Every
+ * member is satisfied by the frozen object that layer builds, so a renamed or re-typed handle is a
+ * compile error at the one place the two are put together — the deps literal in src/index.ts.
+ */
+export interface AgentsUiServices {
   /** The manager behind every row these menus list, inspect or spawn. */
   manager: AgentManager;
   /** Live per-agent activity, handed to the conversation viewer. */
@@ -31,41 +50,16 @@ export interface AgentsUiContext {
   scheduler: SubagentScheduler;
   /** Live workflow runs, counted on the `Workflows` entry. */
   workflowTasks: ReadonlyMap<string, WorkflowTask>;
-  /** Whether a bad agent file is fatal on load — the one plain field these menus write. */
-  strictAgentFiles: boolean;
   /** The `scopeModels` policy the Settings row reads and writes. */
   modelScope: ModelScope;
-
-  // Settings, read live by the overlay and written by its rows.
-  reportUsage: boolean;
-  showCost: boolean;
-  showModel: boolean;
-  viewerMarkdown: ViewerMarkdownMode;
-  widgetMode: WidgetMode;
-  fleetViewEnabled: boolean;
-  agentMentionMode: AgentMentionMode;
-  defaultJoinMode: JoinMode;
-  backgroundByDefault: boolean;
-  schedulingEnabled: boolean;
-  workflowsEnabled: boolean;
-  workflowsPinned: boolean;
-  jevEnabled: boolean;
-  toolDescriptionMode: ToolDescriptionMode;
-
-  // The six setters that do more than store the value: a repaint, the usage drain, or
-  // latching the user's answer as their own.
-  setReportUsage(b: boolean): void;
-  setShowCost(b: boolean): void;
-  setShowModel(b: boolean): void;
-  setWidgetMode(m: WidgetMode): void;
-  setFleetViewEnabled(b: boolean): void;
-  setWorkflowsEnabled(b: boolean): void;
 }
 
 /** Everything the `/agents` surfaces need from the extension around them. */
 export interface AgentsUiDeps {
   /** The extension API: the settings save emits on it, the generate wizard spawns through it. */
   pi: ExtensionAPI;
+  /** The live handles: the manager, the surfaces, the schedule store. Built by src/bootstrap.ts. */
+  services: AgentsUiServices;
   /** The activation's state and settings accessors. */
   context: AgentsUiContext;
   /** Re-read the project/global agent dirs and re-register the merged set. */

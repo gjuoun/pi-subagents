@@ -13,7 +13,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AgentManager } from "../agent/agent-manager.js";
-import type { ToolDescriptionMode } from "../config/settings.js";
+import type { SettingsSurface } from "../config/settings.js";
 import type { AgentRecord, JoinMode } from "../lib/types.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
@@ -23,8 +23,37 @@ import type { AgentStatusBar } from "../ui/agent-status-bar.js";
 import type { FleetList } from "../ui/fleet-list.js";
 import type { WorkflowTask } from "../workflow/run/task.js";
 
-/** The slice of the activation context the tool layer reads and writes. */
-export interface ToolsContext {
+/**
+ * The slice of the activation context the tool layer reads and writes. The settings half is
+ * taken from SettingsSurface rather than restated: that type is what the FIELDS table in
+ * config/settings.ts is written against, so a setting and its writer stay in step in one place
+ * instead of three. The two members below it are the batching state only this layer touches.
+ */
+export interface ToolsContext
+  extends Pick<
+    SettingsSurface,
+    | "showCost"
+    | "defaultJoinMode"
+    | "schedulingEnabled"
+    | "jevEnabled"
+    | "backgroundByDefault"
+    | "reportUsage"
+    | "toolDescriptionMode"
+  > {
+  /** Background ids spawned in this turn, for smart-join grouping. */
+  currentBatchAgents: { id: string; joinMode: JoinMode }[];
+  /** The debounce timer that closes the current batch. */
+  batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
+}
+
+/**
+ * The live handles the tool layer reads, declared structurally rather than imported: `Services`
+ * is composed in the wiring layer (src/bootstrap.ts), which a `tools/` module may not reach for.
+ * Every member is satisfied by the frozen object that layer builds, so a renamed or re-typed
+ * handle is a compile error at the one place the two are put together — the deps literal in
+ * src/index.ts.
+ */
+export interface ToolsServices {
   /** The manager every spawn, resume, steer and abort goes through. */
   manager: AgentManager;
   /** Live per-agent activity, read by the workflow host's callbacks. */
@@ -37,26 +66,8 @@ export interface ToolsContext {
   scheduler: SubagentScheduler;
   /** Live workflow runs, by task id. */
   workflowTasks: Map<string, WorkflowTask>;
-  /** Show `~$X` beside token counts — read when a tool result is rendered. */
-  showCost: boolean;
-  /** Join mode for a fan-out that did not ask for one. */
-  defaultJoinMode: JoinMode;
-  /** Background ids spawned in this turn, for smart-join grouping. */
-  currentBatchAgents: { id: string; joinMode: JoinMode }[];
-  /** The debounce timer that closes the current batch. */
-  batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Whether the schedule param is offered. */
-  schedulingEnabled: boolean;
-  /** Whether the toggleable `jev` agent-selector tool is registered. */
-  jevEnabled: boolean;
-  /** Whether an unqualified top-level spawn detaches. */
-  backgroundByDefault: boolean;
-  /** Attach subagent spend to tool results, so the parent session counts it. */
-  reportUsage: boolean;
   /** Spend accumulated since the parent was last told about it. */
   pendingUsage: PendingUsagePool;
-  /** Which Agent tool description is registered. */
-  toolDescriptionMode: ToolDescriptionMode;
   /** The `scopeModels` policy every spawn from this tool passes through. */
   modelScope: ModelScope;
 }
@@ -65,6 +76,8 @@ export interface ToolsContext {
 export interface ToolsDeps {
   /** The extension API: tools are registered on it and events are emitted from it. */
   pi: ExtensionAPI;
+  /** The live handles: the manager, the surfaces, the pools. Built by src/bootstrap.ts. */
+  services: ToolsServices;
   /** The activation's state and settings accessors. */
   context: ToolsContext;
   /** Re-read the project/global agent dirs and re-register the merged set. */

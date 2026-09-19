@@ -15,7 +15,7 @@ import { selectItem } from "../select-item.js";
 import type { AgentsUiDeps } from "./deps.js";
 
 export async function showRunningAgents(ctx: ExtensionCommandContext, deps: AgentsUiDeps): Promise<void> {
-  const agents = deps.context.manager.listAgents().filter(isTopLevelAgent);
+  const agents = deps.services.manager.listAgents().filter(isTopLevelAgent);
   if (agents.length === 0) {
     ctx.ui.notify("No agents.", "info");
     return;
@@ -44,15 +44,15 @@ export async function viewAgentConversation(ctx: ExtensionCommandContext, record
 
   const { ConversationViewer, VIEWER_OVERLAY } = await import("../viewer/conversation-viewer.js");
   const session = record.session;
-  const activity = deps.context.agentActivity.get(record.id);
+  const activity = deps.services.agentActivity.get(record.id);
 
   await ctx.ui.custom<undefined>(
     (tui, theme, keybindings, done) => {
       return new ConversationViewer(tui, session, record, activity, theme, done, () => {
-        if (deps.context.manager.abort(record.id)) {
+        if (deps.services.manager.abort(record.id)) {
           ctx.ui.notify(`Stopped "${record.description}".`, "info");
         }
-      }, keybindings, (message: string) => deps.context.manager.steer(record.id, message), () => deps.context.viewerMarkdown);
+      }, keybindings, (message: string) => deps.services.manager.steer(record.id, message), () => deps.context.viewerMarkdown);
     },
     // One shared frame for every entry point — see VIEWER_OVERLAY.
     { ...VIEWER_OVERLAY },
