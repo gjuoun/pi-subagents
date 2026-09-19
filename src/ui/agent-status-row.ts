@@ -1,5 +1,5 @@
 /**
- * agent-status-bar.ts — owns the extension status row: the status text, the turn-based
+ * agent-status-row.ts — owns the extension status row: the status text, the turn-based
  * aging of finished marks, and the clock.
  *
  * The clock has exactly two jobs — cycling the running marks' glyph and playing out a
@@ -10,7 +10,7 @@
  * failure is not missed. Those guards are load-bearing rather than nice to have: in pi-web
  * every `setStatus` is an event that re-renders the chat.
  *
- * What a cycling mark looks like is `RUN_PHASE_GLYPHS` in `agent-status-line.ts` — one
+ * What a cycling mark looks like is `RUN_PHASE_GLYPHS` in `agent-marks.ts` — one
  * exported table, swappable without touching this file, the clock rule or the tests.
  */
 import {
@@ -19,7 +19,7 @@ import {
   RUN_PHASE_GLYPHS,
   type StatusAgent,
   type StatusPhase,
-} from "./agent-status-line.js";
+} from "./agent-marks.js";
 
 const STATUS_KEY = "subagents";
 /** Cycle cadence: one glyph per beat, so a full four-frame cycle is 2.4 s. */

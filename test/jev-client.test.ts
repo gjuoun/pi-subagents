@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { askJev, buildJevRequest, type FetchLike, type JevQuestions } from "../src/tools/jev-client.js";
+import { askJev, buildJevRequest, type FetchLike, type JevQuestions } from "../src/tools/jev/client.js";
 
 const KEY = "sk-test";
 const STATE = "TASK: build a parser";

@@ -16,7 +16,7 @@ import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
 import { formatCost, formatDuration } from "../lib/ui/format.js";
 import { getLifetimeCost, getSessionContextPercent } from "../lib/usage.js";
 import { getDisplayName } from "../ui/agent-display.js";
-import { formatLifetimeTokens } from "../ui/agent-status.js";
+import { formatLifetimeTokens } from "../ui/agent-result-status.js";
 import { textResult } from "../ui/notifications.js";
 import type { ToolsDeps } from "./deps.js";
 

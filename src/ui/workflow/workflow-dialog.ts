@@ -39,7 +39,7 @@ import {
   type WorkflowEntry,
 } from "../../workflow/run/progress.js";
 import type { WorkflowMeta } from "../../workflow/script/meta.js";
-import { SPINNER } from "../agent-status.js";
+import { SPINNER } from "../agent-result-status.js";
 import {
   ASCII_GLYPHS,
   clampLine,

@@ -4,21 +4,21 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/tools/jev-client.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/tools/jev-client.js")>("../src/tools/jev-client.js");
+vi.mock("../src/tools/jev/client.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/tools/jev/client.js")>("../src/tools/jev/client.js");
   return { ...actual, askJev: vi.fn() };
 });
-vi.mock("../src/tools/jev-state.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/tools/jev-state.js")>("../src/tools/jev-state.js");
+vi.mock("../src/tools/jev/state.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/tools/jev/state.js")>("../src/tools/jev/state.js");
   return {
     ...actual,
     buildRosterCriteria: vi.fn(() => ({ worker: "implements tasks with TDD", finder: "searches the codebase" })),
   };
 });
 
-import { createJevTool } from "../src/tools/jev.js";
-import { askJev } from "../src/tools/jev-client.js";
-import { buildRosterCriteria } from "../src/tools/jev-state.js";
+import { askJev } from "../src/tools/jev/client.js";
+import { createJevTool } from "../src/tools/jev/index.js";
+import { buildRosterCriteria } from "../src/tools/jev/state.js";
 
 const tool = createJevTool(undefined);
 const textOf = (r: any): string => r.content[0].text;

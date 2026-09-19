@@ -43,7 +43,7 @@ vi.mock("@earendil-works/pi-tui", async (importOriginal) => {
 });
 
 // After the mock, so the subjects bind the counting versions.
-const { AgentStatusBar } = await import("../../src/ui/agent-status-bar.js");
+const { AgentStatusBar } = await import("../../src/ui/agent-status-row.js");
 const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
 const { makeActivity, makeFleet, makeSession, mountViewer, perfTheme, perfTui } = await import(
   "../helpers/perf-fixtures.js"

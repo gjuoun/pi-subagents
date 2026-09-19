@@ -1,5 +1,5 @@
 /**
- * jev-state.ts — roster criteria and state assembly for the `jev` tool.
+ * jev/state.ts — roster criteria and state assembly for the `jev` tool.
  *
  * DI via parameters (types/describe/routingRules) so the suite stays offline,
  * and the routing-rules source stays configuration (env override → known shadow
@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getAgentConfig, getAvailableTypes } from "../config/registry/agent-types.js";
+import { getAgentConfig, getAvailableTypes } from "../../config/registry/agent-types.js";
 
 /** Default situation paragraph — the one the live probe settled on 2026-09-18. */
 export const SITUATION_DEFAULT =

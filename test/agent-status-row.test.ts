@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AgentStatusBar, type StatusClock } from "../src/ui/agent-status-bar.js";
 import {
   formatAgentStatusLine,
   type StatusAgent,
   type StatusPhase,
-} from "../src/ui/agent-status-line.js";
+} from "../src/ui/agent-marks.js";
+import { AgentStatusBar, type StatusClock } from "../src/ui/agent-status-row.js";
 
 const AMBER = "#FFC800";
 /** The cadence the row is built on: a 4-frame glyph cycle of 600 ms beats is 2.4 s. */
@@ -16,7 +16,7 @@ const completed = (id = "a1", type = "finder"): StatusAgent => ({ id, type, stat
 
 /**
  * Every expected frame is derived from the line module's own animation rather than written out
- * again here. What a frame looks like is pinned by `agent-status-line.test.ts` (its literal table is
+ * again here. What a frame looks like is pinned by `agent-marks.test.ts` (its literal table is
  * where a new animation gets recorded); this file proves only the plumbing around it — which phase
  * is current, how long a pop burns, and when the clock runs — so replacing `RUN_PHASE_GLYPHS`
  * needs no edit in this file and none to the clock rule.
@@ -42,7 +42,7 @@ const DRAWN_TICKS = Array.from({ length: TICKS }, (_, i) => i + 1).filter(
 ).length;
 
 /**
- * The row the bar should draw, again derived rather than written out: `agent-status-line.test.ts`
+ * The row the bar should draw, again derived rather than written out: `agent-marks.test.ts`
  * owns what a cascade looks like, this file proves only which slot each mark was given.
  */
 const cascade = (agents: readonly StatusAgent[], phase: StatusPhase, lags: Record<string, number>) =>

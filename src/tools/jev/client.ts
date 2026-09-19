@@ -1,5 +1,5 @@
 /**
- * jev-client.ts — the `jev` tool's HTTP client: request, parse, fail-open.
+ * jev/client.ts — the `jev` tool's HTTP client: request, parse, fail-open.
  *
  * Pure module, no pi imports, `fetchImpl` injectable for tests. Speaks the
  * evaluation endpoint the way vgw proved on this machine (2026-09-18): the
