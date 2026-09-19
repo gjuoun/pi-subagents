@@ -28,11 +28,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAgent } from "../src/agent/agent-runner.js";
-import { extensionCanonicalName } from "../src/agent/session/extension-scope.js";
-import { registerAgents } from "../src/config/registry/agent-types.js";
-import type { AgentConfig } from "../src/lib/types.js";
-import { registerFauxProvider } from "./helpers/pi-ai.js";
+import { runAgent } from "../../src/agent/agent-runner.js";
+import { extensionCanonicalName } from "../../src/agent/session/extension-scope.js";
+import { registerAgents } from "../../src/config/registry/agent-types.js";
+import type { AgentConfig } from "../../src/lib/types.js";
+import { registerFauxProvider } from "../helpers/pi-ai.js";
 
 // These tests spin up the REAL pi-mono runtime (loader + dynamic extension
 // import + session construction), so a cold first run under full-suite CPU
@@ -40,7 +40,7 @@ import { registerFauxProvider } from "./helpers/pi-ai.js";
 // a genuine hang still fails, just later.
 vi.setConfig({ testTimeout: 30_000 });
 
-const FIXTURE = resolve(fileURLToPath(new URL("./fixtures/e2e-probe-ext.mjs", import.meta.url)));
+const FIXTURE = resolve(fileURLToPath(new URL("../fixtures/e2e-probe-ext.mjs", import.meta.url)));
 /** The fixture registers exactly this tool. */
 const EXT_TOOL = "e2e_probe";
 const BUILTINS = ["read", "bash", "edit", "write", "grep", "find", "ls"];

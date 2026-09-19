@@ -26,7 +26,7 @@ import {
   agentToolResults,
   type PrintModeRun,
   runPrintMode,
-} from "./helpers/print-mode-runner.js";
+} from "../helpers/print-mode-runner.js";
 
 // Real pi-mono: loader, dynamic extension import, three live sessions.
 vi.setConfig({ testTimeout: 60_000 });

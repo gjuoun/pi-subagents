@@ -23,6 +23,13 @@ src/                  # Layered by domain. A file may import only from the layer
                       # layer above them. `lib/` imports nothing from another layer, and only
                       # `index.ts` and `app.ts` may import `tools/` or `extension/`. Enforced
                       # by test/layout-fence.test.ts — a new top-level dir is structural.
+                      #
+                      # Why `lib/ui/` stays in `lib/` rather than moving under `ui/`: it holds the
+                      # UI *contract* (`theme.ts` — the shape every renderer names), not presentation,
+                      # and `agent/` imports it DOWNWARD (`activity.ts` creates the activity state,
+                      # `group-join.ts` names the delivery callback). Moving it up would make those
+                      # imports illegal; the contract stays innermost so every domain can name it.
+                      # The rendering that consumes it lives in `ui/`.
   index.ts            # Extension entry: the child-session guard, one call, two re-exports.
                       # Its PATH is load-bearing — `index.ts` directly inside `src/`
                       # canonicalises to the allowlist token `src`, which agent frontmatter
