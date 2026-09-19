@@ -15,7 +15,7 @@
 
 import type { AgentRecord } from "../lib/types.js";
 import { type ModelRegistry, resolveModel } from "../model/model-resolver.js";
-import { checkModelScope } from "../model/model-scope.js";
+import type { ModelScope } from "../model/model-scope.js";
 import { isTopLevelAgent } from "./agent-manager.js";
 
 /** Minimal event bus interface needed by the RPC handlers. */
@@ -57,6 +57,8 @@ export interface RpcDeps {
   pi: unknown;                    // passed through to manager.spawn
   getCtx: () => unknown | undefined;  // returns current ExtensionContext
   manager: SpawnCapable;
+  /** The activation's `scopeModels` policy — an RPC payload's model is an orchestrator-level choice. */
+  modelScope: ModelScope;
 }
 
 export interface RpcHandle {
@@ -95,7 +97,7 @@ function handleRpc<P extends { requestId: string }>(
  * Returns unsub functions for cleanup.
  */
 export function registerRpcHandlers(deps: RpcDeps): RpcHandle {
-  const { events, pi, getCtx, manager } = deps;
+  const { events, pi, getCtx, manager, modelScope } = deps;
 
   const unsubPing = handleRpc(events, "subagents:rpc:ping", () => {
     return { version: PROTOCOL_VERSION };
@@ -128,14 +130,14 @@ export function registerRpcHandlers(deps: RpcDeps): RpcHandle {
         let model = override;
         if (typeof override === "string") {
           const resolved = resolveModel(override, modelRegistry);
-          if (typeof resolved === "string") {
-            // resolveModel returns a human-readable error string when the
-            // input doesn't match any available model. Surface it instead of
-            // silently falling back so the caller sees the auth/typo issue.
-            throw new Error(resolved);
+          if (resolved.isErr()) {
+            // The failure names the input and lists what is available.
+            // Surface it instead of silently falling back so the caller sees
+            // the auth/typo issue.
+            throw new Error(resolved.error.message);
           }
-          model = resolved;
-          normalizedOptions = { ...normalizedOptions, model: resolved };
+          model = resolved.value;
+          normalizedOptions = { ...normalizedOptions, model: resolved.value };
         }
 
         // A model on the RPC payload is an orchestrator-level choice, exactly
@@ -144,7 +146,7 @@ export function registerRpcHandlers(deps: RpcDeps): RpcHandle {
         // resolveModel is fuzzy, so a bare "sonnet" can land on a provider the
         // caller never named. Frontmatter-pinned and parent-inherited models are
         // resolved later, in agent-runner, and keep warn-and-proceed.
-        const verdict = checkModelScope({
+        const verdict = modelScope.check({
           model,
           cwd: cwd ?? process.cwd(),
           modelRegistry,

@@ -34,7 +34,7 @@ import { type AgentRecord, type NotificationDetails, } from "./lib/types.js";
 import { formatCost, formatMs, formatTokens, formatTurns } from "./lib/ui/format.js";
 import type { AgentActivity, UICtx } from "./lib/ui/theme.js";
 import { getLifetimeTotal, PendingUsagePool, toReportedUsage } from "./lib/usage.js";
-import { setScopeModelsEnabled } from "./model/model-scope.js";
+import { ModelScope } from "./model/model-scope.js";
 import { SubagentScheduler } from "./schedule/schedule.js";
 import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { createAgentTool } from "./tools/agent.js";
@@ -194,6 +194,9 @@ export default function (pi: ExtensionAPI) {
    */
   context.viewerMarkdown = "all";
   context.pendingUsage = new PendingUsagePool();
+  // The one scopeModels policy for this activation: the settings applier and the
+  // /agents toggle below both write it, and every spawn path reads it.
+  context.modelScope = new ModelScope();
 
   // ---- Cancellable pending notifications ----
   // Holds notifications briefly so get_subagent_result can cancel them
@@ -396,6 +399,9 @@ export default function (pi: ExtensionAPI) {
     // pool grows in a session that will never drain it.
     if (context.reportUsage) context.pendingUsage.add(usage);
   });
+  // Nested delegation tools are built per child in agent-runner.ts, where the
+  // manager is the only handle on this activation — so the scope rides with it.
+  context.manager.modelScope = context.modelScope;
 
   // Expose manager via Symbol.for() global registry for cross-package access.
   // Standard Node.js pattern for cross-package singletons (used by OpenTelemetry, etc.).
@@ -568,6 +574,7 @@ export default function (pi: ExtensionAPI) {
         events: pi.events,
         pi,
         getCtx: () => context.currentCtx,
+        modelScope: context.modelScope,
         manager: {
           spawn: spawnTopLevel,
           awaitStartup: (id) => context.manager.awaitStartup(id),
@@ -1147,7 +1154,7 @@ export default function (pi: ExtensionAPI) {
       setDefaultJoinMode: (m) => context.setDefaultJoinMode(m),
       setBackgroundByDefault: (b) => context.setBackgroundByDefault(b),
       setSchedulingEnabled: (b) => context.setSchedulingEnabled(b),
-      setScopeModels: setScopeModelsEnabled,
+      setScopeModels: (enabled) => context.modelScope.setEnabled(enabled),
       setStrictAgentFiles: (b) => { context.strictAgentFiles = b; },
       setDisableDefaultAgents: setDisableDefaultAgents,
       setToolDescriptionMode: (m) => context.setToolDescriptionMode(m),

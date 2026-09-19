@@ -17,6 +17,7 @@ import type { ToolDescriptionMode } from "../config/settings.js";
 import type { AgentRecord, JoinMode } from "../lib/types.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
 import type { PendingUsagePool } from "../lib/usage.js";
+import type { ModelScope } from "../model/model-scope.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
 import type { AgentStatusBar } from "../ui/agent-status-bar.js";
 import type { FleetList } from "../ui/fleet-list.js";
@@ -56,6 +57,8 @@ export interface ToolsContext {
   pendingUsage: PendingUsagePool;
   /** Which Agent tool description is registered. */
   toolDescriptionMode: ToolDescriptionMode;
+  /** The `scopeModels` policy every spawn from this tool passes through. */
+  modelScope: ModelScope;
 }
 
 /** Everything the tool definitions need from the extension around them. */

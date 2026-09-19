@@ -93,15 +93,16 @@ export function createStructuredOutputTool(
     execute: async (_toolCallId, params) => {
       capture.called = true;
       const verdict = compiled.check(params);
-      if (verdict !== true) {
-        capture.lastError = verdict;
+      if (verdict.isErr()) {
+        const reason = verdict.error;
+        capture.lastError = reason;
         // `isError` puts the reason in front of the model as a tool result, so
         // it can correct itself inside this same run. This is where most
         // mismatches are resolved; the prompt-level retry is the backstop.
         return {
           content: [{
             type: "text",
-            text: `StructuredOutput did not match the required schema:\n${verdict}\nCall it again with a corrected value.`,
+            text: `StructuredOutput did not match the required schema:\n${reason}\nCall it again with a corrected value.`,
           }],
           isError: true,
           details: {},

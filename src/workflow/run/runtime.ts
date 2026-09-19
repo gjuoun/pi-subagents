@@ -514,12 +514,14 @@ function applySchema(result: WorkflowSpawnResult, compiled: CompiledSchema): Wor
     };
   }
   const verdict = compiled.check(parsed);
-  if (verdict === true) return result;
-  return {
-    ...result,
-    ok: false,
-    error: `The agent's answer did not match the requested schema: ${verdict}`,
-  };
+  if (verdict.isErr()) {
+    return {
+      ...result,
+      ok: false,
+      error: `The agent's answer did not match the requested schema: ${verdict.error}`,
+    };
+  }
+  return result;
 }
 
 async function applyGate(
@@ -830,11 +832,11 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<Workflow
       let compiledSchema: CompiledSchema | undefined;
       if (payload.schema !== undefined) {
         const compilation = compileJsonSchema(payload.schema);
-        if (!compilation.ok) {
-          respond(callId, false, undefined, compilation.message, true);
+        if (compilation.isErr()) {
+          respond(callId, false, undefined, compilation.error, true);
           return;
         }
-        compiledSchema = compilation.compiled;
+        compiledSchema = compilation.value;
       }
 
       if (agentCount >= agentCap) {

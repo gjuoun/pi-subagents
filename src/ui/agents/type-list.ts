@@ -25,11 +25,11 @@ function getModelLabel(type: string, registry?: ModelRegistry): string {
   const resolved = resolveModel(cfg.model, registry);
   // Configured but unresolvable: the runtime silently falls back to the parent
   // model, so flag it (and the fallback) rather than hiding the config.
-  if (typeof resolved === "string") return `${label} (unavailable, fallback: inherit)`;
+  if (resolved.isErr()) return `${label} (unavailable, fallback: inherit)`;
   // Surface what it actually resolved to when that differs from the config —
   // e.g. a provider fallback or a looser version pin. Cosmetic separator/date
   // differences are normalized away so an effectively-identical match stays quiet.
-  const resolvedFull = `${resolved.provider}/${resolved.id}`;
+  const resolvedFull = `${resolved.value.provider}/${resolved.value.id}`;
   const norm = (s: string) => s.toLowerCase().replace(/\./g, "-").replace(/-\d{8}$/, "");
   if (norm(cfg.model) === norm(resolvedFull)) return label;
   return `${label} (→ ${resolvedFull.replace(/-\d{8}$/, "")})`;

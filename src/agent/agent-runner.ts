@@ -28,6 +28,7 @@ import type { CompiledSchema } from "../lib/json-schema.js";
 import { EXCLUDED_TOOL_NAMES } from "../lib/tool-names.js";
 import type { SubagentType, ThinkingLevel } from "../lib/types.js";
 import type { LifetimeUsage } from "../lib/usage.js";
+import type { ModelScope } from "../model/model-scope.js";
 import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
 import { buildParentContext, extractText } from "./prompt/context.js";
 import { detectEnv } from "./prompt/env.js";
@@ -175,6 +176,11 @@ export interface RunOptions {
     parentAgentId: string;
     depth: number;
     maxSubagentDepth?: number;
+    /**
+     * The activation's `scopeModels` policy, carried so a nested spawn enforces
+     * the same allowlist as the spawn that started this branch.
+     */
+    modelScope: ModelScope;
   };
 }
 
@@ -551,6 +557,7 @@ export async function runAgent(
         maxSubagentDepth: effectiveMaxDepth,
         allowedSubagents: agentConfig.allowedSubagents,
         configCwd,
+        modelScope: nestedRuntime.modelScope,
       })
     : [];
   const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
