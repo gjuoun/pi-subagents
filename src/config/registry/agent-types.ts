@@ -121,8 +121,8 @@ export function registerAgents(userAgents: Map<string, AgentConfig>): void {
   }
 }
 
-/** Case-insensitive key resolution within a registry. */
-function resolveKeyIn(registry: Map<string, AgentConfig>, name: string): string | undefined {
+/** Resolve a type name case-insensitively in a registry. Returns the canonical key or undefined. */
+export function resolveTypeIn(registry: Map<string, AgentConfig>, name: string): string | undefined {
   if (registry.has(name)) return name;
   const lower = name.toLowerCase();
   for (const key of registry.keys()) {
@@ -131,25 +131,15 @@ function resolveKeyIn(registry: Map<string, AgentConfig>, name: string): string 
   return undefined;
 }
 
-/** Case-insensitive key resolution. */
-function resolveKey(name: string): string | undefined {
-  return resolveKeyIn(agents, name);
-}
-
-/** Resolve a type name case-insensitively in a registry. Returns the canonical key or undefined. */
-export function resolveTypeIn(registry: Map<string, AgentConfig>, name: string): string | undefined {
-  return resolveKeyIn(registry, name);
-}
-
 /** Get the agent config for a type (case-insensitive) from a registry. */
 export function getAgentConfigIn(registry: Map<string, AgentConfig>, name: string): AgentConfig | undefined {
-  const key = resolveKeyIn(registry, name);
+  const key = resolveTypeIn(registry, name);
   return key ? registry.get(key) : undefined;
 }
 
 /** Check if a type is valid and enabled (case-insensitive) in a registry. */
 export function isValidTypeIn(registry: Map<string, AgentConfig>, type: string): boolean {
-  const key = resolveKeyIn(registry, type);
+  const key = resolveTypeIn(registry, type);
   if (!key) return false;
   return registry.get(key)?.enabled !== false;
 }
@@ -266,7 +256,7 @@ export function resolveSpawnType(requested: unknown): SpawnTypeResolution {
 
 /** Resolve a type name case-insensitively. Returns the canonical key or undefined. */
 export function resolveType(name: string): string | undefined {
-  return resolveKey(name);
+  return resolveTypeIn(agents, name);
 }
 
 /** Get the agent config for a type (case-insensitive). */
@@ -284,12 +274,6 @@ export function getAllTypes(): string[] {
   return [...agents.keys()];
 }
 
-/** Get names of default agents currently in the registry. */
-export function getDefaultAgentNames(): string[] {
-  return [...agents.entries()]
-    .filter(([_, config]) => config.isDefault === true)
-    .map(([name]) => name);
-}
 
 /** Get names of user-defined agents (non-defaults) currently in the registry. */
 export function getUserAgentNames(): string[] {
@@ -297,13 +281,14 @@ export function getUserAgentNames(): string[] {
     .filter(([_, config]) => config.isDefault !== true)
     .map(([name]) => name);
 }
-
-/** Check if a type is valid and enabled (case-insensitive). */
+/**
+ * Check if a type is valid and enabled (case-insensitive). Kept exported: the enabled /
+ * disabled and case-insensitivity semantics are asserted through it in agent-types.test.ts.
+ */
 export function isValidType(type: string): boolean {
   return isValidTypeIn(agents, type);
 }
 
-/** Tool names required for memory management. */
 const MEMORY_TOOL_NAMES = ["read", "write", "edit"];
 
 /**
@@ -313,7 +298,6 @@ export function getMemoryToolNames(existingToolNames: Set<string>): string[] {
   return MEMORY_TOOL_NAMES.filter(n => !existingToolNames.has(n));
 }
 
-/** Tool names needed for read-only memory access. */
 const READONLY_MEMORY_TOOL_NAMES = ["read"];
 
 /**
@@ -325,12 +309,26 @@ export function getReadOnlyMemoryToolNames(existingToolNames: Set<string>): stri
 
 /** Get built-in tool names for a type (case-insensitive). */
 export function getToolNamesForType(type: string): string[] {
-  const key = resolveKey(type);
+  const key = resolveTypeIn(agents, type);
   const raw = key ? agents.get(key) : undefined;
   const config = raw?.enabled !== false ? raw : undefined;
   // `undefined` (definition omitted the field) → all built-ins; an explicit `[]`
   // (`tools: none` or a `tools:` with only `ext:` entries) → zero built-ins.
   return config?.builtinToolNames ?? [...BUILTIN_TOOL_NAMES];
+}
+
+/** Project an agent's config onto the `SubagentTypeConfig`-compatible shape `getConfig` returns. */
+function toTypeConfig(config: AgentConfig) {
+  return {
+    displayName: config.displayName ?? config.name,
+    color: config.color,
+    description: config.description,
+    builtinToolNames: config.builtinToolNames ?? BUILTIN_TOOL_NAMES,
+    extensions: config.extensions,
+    excludeExtensions: config.excludeExtensions,
+    skills: config.skills,
+    promptMode: config.promptMode,
+  };
 }
 
 /** Get config for a type (case-insensitive, returns a SubagentTypeConfig-compatible object). Falls back to general-purpose. */
@@ -344,35 +342,13 @@ export function getConfig(type: string): {
   skills: true | string[] | false;
   promptMode: "replace" | "append";
 } {
-  const key = resolveKey(type);
+  const key = resolveTypeIn(agents, type);
   const config = key ? agents.get(key) : undefined;
-  if (config && config.enabled !== false) {
-    return {
-      displayName: config.displayName ?? config.name,
-      color: config.color,
-      description: config.description,
-      builtinToolNames: config.builtinToolNames ?? BUILTIN_TOOL_NAMES,
-      extensions: config.extensions,
-      excludeExtensions: config.excludeExtensions,
-      skills: config.skills,
-      promptMode: config.promptMode,
-    };
-  }
+  if (config && config.enabled !== false) return toTypeConfig(config);
 
   // Fallback for unknown/disabled types — general-purpose config
   const gp = agents.get("general-purpose");
-  if (gp && gp.enabled !== false) {
-    return {
-      displayName: gp.displayName ?? gp.name,
-      color: gp.color,
-      description: gp.description,
-      builtinToolNames: gp.builtinToolNames ?? BUILTIN_TOOL_NAMES,
-      extensions: gp.extensions,
-      excludeExtensions: gp.excludeExtensions,
-      skills: gp.skills,
-      promptMode: gp.promptMode,
-    };
-  }
+  if (gp && gp.enabled !== false) return toTypeConfig(gp);
 
   // Absolute fallback (should never happen)
   return {
