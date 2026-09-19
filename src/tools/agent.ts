@@ -12,6 +12,7 @@
 import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { createActivityTracker } from "../agent/activity.js";
 import { isTopLevelAgent } from "../agent/agent-manager.js";
 import { buildAgentToolDescription, buildScheduleParam } from "../agent/description.js";
 import { isolationParam, resolveAgentInvocationConfig, resolveJoinMode } from "../agent/invocation.js";
@@ -27,10 +28,9 @@ import { describeActivity, fgPreservingNestedStyles, formatCost, formatMs, forma
 import { type AgentDetails, type UICtx } from "../lib/ui/theme.js";
 import { getLifetimeCost } from "../lib/usage.js";
 import { describeModel, resolveModel } from "../model/model-resolver.js";
-
 import { renderAgentName } from "../ui/agent-color.js";
 import { buildInvocationTags, getDisplayName, getPromptModeLabel } from "../ui/agent-display.js";
-import { createActivityTracker, formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-status.js";
+import { formatLifetimeTokens, renderRunningAgentStatus, SPINNER } from "../ui/agent-status.js";
 import { buildDetails, textResult } from "../ui/notifications.js";
 import type { ToolsDeps } from "./deps.js";
 

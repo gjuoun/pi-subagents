@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, } from "@earendil-works/pi-coding-agent";
+import { createActivityTracker } from "./agent/activity.js";
 import { isTopLevelAgent } from "./agent/agent-manager.js";
 import { resolveJoinMode } from "./agent/invocation.js";
 import { createManagerCallbacks } from "./agent/manager-callbacks.js";
@@ -39,7 +40,6 @@ import { createSteerSubagentTool } from "./tools/steer-subagent.js";
 import { registerToolReportingUsage, withUsageReporting } from "./tools/usage-reporting.js";
 import { createWorkflowTool, fleetWorkflows, runWorkflowTask } from "./tools/workflow.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "./ui/agent-mention.js";
-import { createActivityTracker } from "./ui/agent-status.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
