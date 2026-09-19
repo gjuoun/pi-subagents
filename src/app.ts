@@ -31,7 +31,7 @@ import { ActivationContext } from "./extension/context.js";
 import { SUBAGENT_TOOL_NAMES } from "./lib/tool-names.js";
 import type { AgentRecord } from "./lib/types.js";
 import type { UICtx } from "./lib/ui/theme.js";
-import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
+import { startScheduler } from "./schedule/start.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
 import { createGetSubagentResultTool } from "./tools/get-subagent-result.js";
@@ -135,20 +135,6 @@ export function createExtension(pi: ExtensionAPI): void {
   // session_start — and must not advertise or answer RPC it can't service
   // (currentCtx would stay undefined → spawn always "No active session"). Gating
   // here makes a filtered session behave like an absent one (#142).
-  function startScheduler(ctx: ExtensionContext) {
-    try {
-      const sessionId = ctx.sessionManager?.getSessionId?.();
-      if (!sessionId) return;  // sessionId not yet available — try again on next event
-      const path = resolveStorePath(ctx.cwd, sessionId);
-      const store = new ScheduleStore(path);
-      services.scheduler.start(pi, ctx, services.manager, store);
-      pi.events.emit("subagents:scheduler_ready", { sessionId, jobCount: store.list().length });
-    } catch (err) {
-      // Scheduling is non-essential — log and move on so the rest of the
-      // extension keeps working if e.g. .pi/ is unwritable.
-      console.warn("[pi-subagents] Failed to start scheduler:", err);
-    }
-  }
 
   // Capture ctx from session_start for RPC spawn handler + start the scheduler.
   // This also wires the RPC handlers and broadcasts readiness — on the first
@@ -200,7 +186,7 @@ export function createExtension(pi: ExtensionAPI): void {
       // also avoids the race where a consumer loaded after us misses the event.
       pi.events.emit("subagents:ready", {});
     }
-    if (context.schedulingEnabled && !services.scheduler.isActive()) startScheduler(ctx);
+    if (context.schedulingEnabled && !services.scheduler.isActive()) startScheduler({ pi, scheduler: services.scheduler, manager: services.manager }, ctx);
     // Stack `@handle` suggestions on pi's built-in autocomplete. Registered at
     // most once per activation: pi appends wrappers to a list it never prunes,
     // so a second call would layer a duplicate provider on the first. TUI only
