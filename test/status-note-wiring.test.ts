@@ -4,7 +4,7 @@
  * a string. Drives the registered `Agent` / `get_subagent_result` tools and
  * inspects the text delivered back, for a turn-limit abort and a user stop.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/agent/agent-runner.js", async () => {
   const actual = await vi.importActual<typeof import("../src/agent/agent-runner.js")>("../src/agent/agent-runner.js");
@@ -13,6 +13,15 @@ vi.mock("../src/agent/agent-runner.js", async () => {
 
 import { runAgent } from "../src/agent/agent-runner.js";
 import subagentsExtension from "../src/index.js";
+import { type Hermetic, hermeticDir } from "./helpers/boot-extension.js";
+
+// These cases boot the real extension, which reads pi's settings and agent files
+// at activation. Without this the developer's own ~/.pi — and this repo's
+// .pi/subagents.json, which disables the built-in agents — decide whether
+// general-purpose exists, so the suite would pass or fail by machine.
+let hermetic: Hermetic;
+beforeEach(() => { hermetic = hermeticDir(); });
+afterEach(() => { hermetic.restore(); });
 
 function makePi() {
   const tools = new Map<string, any>();
