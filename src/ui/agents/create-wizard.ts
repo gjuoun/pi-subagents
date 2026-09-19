@@ -96,7 +96,7 @@ Guidelines for choosing settings:
 
 Write the file using the write tool. Only write the file, nothing else.`;
 
-  const { record } = await deps.context.manager.spawnAndWait(deps.pi, ctx, "general-purpose", generatePrompt, {
+  const { record } = await deps.services.manager.spawnAndWait(deps.pi, ctx, "general-purpose", generatePrompt, {
     description: `Generate ${name} agent`,
     maxTurns: 5,
     // Exempt from maxConcurrentForeground. This runs from a modal wizard, not

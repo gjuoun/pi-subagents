@@ -46,7 +46,7 @@ export function fleetWorkflows(deps: ToolsDeps): FleetWorkflow[] {
   // Cached counters only, no derivation: the fleet list calls this on a
   // 200ms tick and reads the roster several times per update, so walking a
   // run's progress log here would put O(log) work in the render loop.
-  return [...deps.context.workflowTasks.values()].map(task => ({
+  return [...deps.services.workflowTasks.values()].map(task => ({
     id: task.id,
     name: task.meta?.name ?? task.workflowName ?? task.id,
     status: task.status,
@@ -73,11 +73,11 @@ export async function runWorkflowTask(deps: ToolsDeps, ctx: ExtensionContext, ta
       host: createWorkflowHost({
         pi: deps.pi,
         ctx,
-        manager: deps.context.manager,
+        manager: deps.services.manager,
         signal: task.abortController.signal,
         rootSessionId: ctx.sessionManager.getSessionId(),
         workflowId: task.id,
-        modelScope: deps.context.modelScope,
+        modelScope: deps.services.modelScope,
       }),
       onProgress: entries => updateWorkflowProgressBatch(task, entries),
       // The dialog's pause / skip / retry keys run through this; it is dropped
@@ -102,8 +102,8 @@ export async function runWorkflowTask(deps: ToolsDeps, ctx: ExtensionContext, ta
  * triggers a turn, rendered by the existing `subagent-notification` renderer.
  */
 function notifyWorkflowFinished(deps: ToolsDeps, task: WorkflowTask) {
-  deps.context.status.update();
-  deps.context.fleet.update();
+  deps.services.status.update();
+  deps.services.fleet.update();
   const result = workflowResultText(task);
   deps.scheduleNudge(task.id, () => {
     deps.pi.sendMessage<NotificationDetails>({
@@ -197,7 +197,7 @@ export function createWorkflowTool(deps: ToolsDeps) {
     renderResult(result, _options, theme, renderContext) {
       const text = result.content[0]?.type === "text" ? result.content[0].text : "";
       const taskId = (result.details as { taskId?: string } | undefined)?.taskId;
-      const task = taskId !== undefined ? deps.context.workflowTasks.get(taskId) : undefined;
+      const task = taskId !== undefined ? deps.services.workflowTasks.get(taskId) : undefined;
       // No task means the run predates this session (a reloaded transcript) or
       // the call never started one — show what `execute` said instead.
       if (renderContext.isError || !task) return new Text(text, 0, 0);
@@ -220,7 +220,7 @@ export function createWorkflowTool(deps: ToolsDeps) {
     },
 
     execute: async (toolCallId, params, _signal, _onUpdate, ctx) => {
-      const resumeFrom = resolveResumeTarget(params.resumeFromRunId, deps.context.workflowTasks);
+      const resumeFrom = resolveResumeTarget(params.resumeFromRunId, deps.services.workflowTasks);
       if (resumeFrom !== undefined && !resumeFrom.ok) return textResult(resumeFrom.message);
 
       // A resume with no source of its own re-runs what that run ran. The
@@ -275,13 +275,13 @@ export function createWorkflowTool(deps: ToolsDeps) {
         ...(journalPath !== undefined ? { journalPath } : {}),
         ...(replay !== undefined && replay.length > 0 ? { replay, resumedFrom: resumeFrom!.runId } : {}),
       });
-      deps.context.workflowTasks.set(runId, task);
+      deps.services.workflowTasks.set(runId, task);
       // The run's own row has to appear now, not when it settles. Its agents
       // are owned by it, so their lifecycle callbacks no longer refresh these
       // surfaces — nothing else would register the widget for a run whose
       // first agent has not started yet.
-      deps.context.status.update();
-      deps.context.fleet.update();
+      deps.services.status.update();
+      deps.services.fleet.update();
 
       // Background, like Claude Code: the id comes back now and the run keeps
       // going without the tool call.

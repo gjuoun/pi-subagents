@@ -320,11 +320,6 @@ export type ToolDescriptionMode = "full" | "compact" | "custom";
  * names the member it writes.
  */
 export interface SettingsSurface {
-  /** The two concurrency pools: the only manager state a setting drives. */
-  manager: { setMaxConcurrent(n: number): void; setMaxConcurrentForeground(n: number): void };
-  /** The `scopeModels` policy. */
-  modelScope: { setEnabled(enabled: boolean): void };
-
   strictAgentFiles: boolean;
   defaultJoinMode: JoinMode;
   backgroundByDefault: boolean;
@@ -357,6 +352,17 @@ export interface SettingsSurface {
  * depth and fallback flags, the transcript and worktree switches.
  */
 export interface SettingsTarget {
+  /**
+   * The live handles a setting drives, narrowed to the two methods a setting calls. Declared
+   * structurally rather than imported: `Services` is composed in the wiring layer, and
+   * `config/` may not import it.
+   */
+  services: {
+    /** The two concurrency pools: the only manager state a setting drives. */
+    manager: { setMaxConcurrent(n: number): void; setMaxConcurrentForeground(n: number): void };
+    /** The `scopeModels` policy. */
+    modelScope: { setEnabled(enabled: boolean): void };
+  };
   context: SettingsSurface;
   setDefaultMaxTurns(n: number): void;
   setGraceTurns(n: number): void;
@@ -432,13 +438,13 @@ function parseFallbackSubagent(raw: unknown): string | undefined {
 const FIELDS: Record<keyof SubagentsSettings, SettingsField> = {
   maxConcurrent: {
     parse: intInRange(1, MAX_CONCURRENT_CEILING),
-    apply: (t, s) => when(s.maxConcurrent, (v) => t.context.manager.setMaxConcurrent(v)),
+    apply: (t, s) => when(s.maxConcurrent, (v) => t.services.manager.setMaxConcurrent(v)),
   },
   // Floor 0, not 1 like maxConcurrent above: 0 is the documented "unlimited" value and the
   // default, so dropping it would silently be unrepresentable.
   maxConcurrentForeground: {
     parse: intInRange(0, MAX_CONCURRENT_CEILING),
-    apply: (t, s) => when(s.maxConcurrentForeground, (v) => t.context.manager.setMaxConcurrentForeground(v)),
+    apply: (t, s) => when(s.maxConcurrentForeground, (v) => t.services.manager.setMaxConcurrentForeground(v)),
   },
   defaultMaxTurns: {
     parse: intInRange(0, MAX_TURNS_CEILING),
@@ -481,7 +487,7 @@ const FIELDS: Record<keyof SubagentsSettings, SettingsField> = {
     parse: bool,
     apply: (t, s) =>
       when(s.scopeModels, (v) => {
-        t.context.modelScope.setEnabled(v);
+        t.services.modelScope.setEnabled(v);
       }),
   },
   strictAgentFiles: {

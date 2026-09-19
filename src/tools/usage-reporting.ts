@@ -27,7 +27,7 @@ export function withUsageReporting<T extends { execute: (...args: any[]) => any 
     execute: async (toolCallId: string | undefined, ...rest: any[]) => {
       const result = await tool.execute(toolCallId, ...rest);
       if (!deps.context.reportUsage || !toolCallId) return result;
-      const usage = deps.context.pendingUsage.drain();
+      const usage = deps.services.pendingUsage.drain();
       return usage ? { ...result, usage } : result;
     },
   };

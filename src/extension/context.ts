@@ -19,18 +19,9 @@
  */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { AgentManager } from "../agent/agent-manager.js";
-import type { GroupJoinManager } from "../agent/group-join.js";
 import type { RpcHandle } from "../agent/rpc.js";
 import type { ToolDescriptionMode } from "../config/settings.js";
 import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../lib/types.js";
-import type { AgentActivity } from "../lib/ui/theme.js";
-import type { PendingUsagePool } from "../lib/usage.js";
-import type { ModelScope } from "../model/model-scope.js";
-import type { SubagentScheduler } from "../schedule/schedule.js";
-import type { AgentStatusBar } from "../ui/agent-status-bar.js";
-import type { FleetList } from "../ui/fleet-list.js";
-import type { WorkflowTask } from "../workflow/run/task.js";
 
 export class ActivationContext {
   /** Whether a bad custom agent file is fatal on load. Loaded before settings apply. */
@@ -43,27 +34,31 @@ export class ActivationContext {
     // Whatever accumulated while it was on is stale the moment it goes off:
     // draining it later would bill the parent for a window the user opted out
     // of, in one lump, on some unrelated later tool call.
-    if (!b) this.pendingUsage.drain();
+    if (!b) this.repaint.pendingUsage.drain();
   }
 
   /** Show `~$X` next to token counts in the subagent surfaces. */
   showCost = false;
-  setShowCost(b: boolean): void { this.showCost = b; this.status.update(); this.fleet.update(); }
+  setShowCost(b: boolean): void { this.showCost = b; this.repaint.status.update(); this.repaint.fleet.update(); }
 
   /** Name the model and thinking level on the widget's running rows. */
   showModel = false;
-  setShowModel(b: boolean): void { this.showModel = b; this.status.update(); }
+  setShowModel(b: boolean): void { this.showModel = b; this.repaint.status.update(); }
 
   /** How much of the conversation viewer renders as Markdown. */
   viewerMarkdown: ViewerMarkdownMode = "all";
 
-  /** What the above-editor widget shows. */
+  /**
+   * What the above-editor widget shows: "all" = every agent; "background" = hide foreground
+   * (they already render inline as the Agent tool result, so showing them here too is a
+   * duplicate, #118); "off" = hide the widget entirely. Read live at render time.
+   */
   widgetMode: WidgetMode = "background";
-  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.status.update(); }
+  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.repaint.status.update(); }
 
   /** Whether the below-editor FleetView is drawn at all. */
   fleetViewEnabled = true;
-  setFleetViewEnabled(b: boolean): void { this.fleetViewEnabled = b; this.fleet.setEnabled(b); }
+  setFleetViewEnabled(b: boolean): void { this.fleetViewEnabled = b; this.repaint.fleet.setEnabled(b); }
 
   /** How `@handle` mentions resolve: model-decided, always clone, or off. */
   agentMentionMode: AgentMentionMode = "model";
@@ -78,22 +73,45 @@ export class ActivationContext {
   /** Whether a top-level spawn without `run_in_background` detaches. */
   backgroundByDefault = true;
 
-  /** Master switch for `schedule` params and the schedule store. */
+  /**
+   * Master switch for `schedule` params and the schedule store. Read once at extension init,
+   * before tool registration: a runtime toggle takes effect at once for the menu entry and the
+   * execute-time addJob path, but the param schema itself only changes on the next extension
+   * load (the next pi session).
+   */
   schedulingEnabled = true;
 
-  /** Master switch for the `jev` agent-selector tool. Default OFF — API cost per call. */
+  /**
+   * Master switch for the `jev` agent-selector tool. Default OFF: the tool costs an API call per
+   * use, so it is opt-in. Read once at extension init, before tool registration, so the tool's
+   * presence follows the persisted setting and a runtime toggle lands on the next pi session.
+   */
   jevEnabled = false;
 
-  /** Master switch for the `SubagentWorkflow` tool and everything behind it. */
+  /**
+   * Master switch for the `SubagentWorkflow` tool and everything behind it. Off means the tool
+   * is never registered: the model is not told the feature exists (zero context cost) and has
+   * nothing to call, and the `/agents → Workflows` view and `--subagents-workflow-file` are
+   * refused too — no second door into the same machinery.
+   */
   workflowsEnabled = true;
-  /** Whether `workflowsEnabled` came from the user rather than from its default. */
+  /**
+   * Whether `workflowsEnabled` is the user's answer (a boolean in subagents.json, or the
+   * settings toggle) rather than this default. `resolveWorkflowCollisions` checks it before
+   * yielding to another extension's workflow tool: a default may be overridden by what else is
+   * loaded, an explicit choice may not.
+   */
   workflowsPinned = false;
   setWorkflowsEnabled(b: boolean): void {
     this.workflowsEnabled = b;
     this.workflowsPinned = true;
   }
 
-  /** Which Agent tool description is registered. */
+  /**
+   * Which Agent tool description is registered: "full" (default) keeps the rich Claude
+   * Code-style description, "compact" swaps in a ~75% smaller one for small or local models
+   * (#91). Read once at tool registration — flipping it applies on the next pi session.
+   */
   toolDescriptionMode: ToolDescriptionMode = "full";
 
   /** The live session context, rebound on every `session_start`. */
@@ -107,27 +125,29 @@ export class ActivationContext {
   /** Whether the `--subagents-workflow-file` flag has already been honoured. */
   workflowFlagHandled = false;
 
-  /** Background agent ids spawned in the current turn. */
+  /**
+   * Background agent ids spawned in the current turn, for smart grouping. Collected through a
+   * debounced timer: each new agent resets the window, so parallel tool calls — which the
+   * framework may dispatch across several microtasks — land in the same batch.
+   */
   currentBatchAgents: { id: string; joinMode: JoinMode }[] = [];
   /** Debounce timer that closes the current batch. */
   batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
   /** Monotonic id for the groups those batches become. */
   batchCounter = 0;
 
-  manager!: AgentManager;
-  groupJoin!: GroupJoinManager;
-  agentActivity!: Map<string, AgentActivity>;
-  status!: AgentStatusBar;
-  fleet!: FleetList;
-  scheduler!: SubagentScheduler;
-  workflowTasks!: Map<string, WorkflowTask>;
-  pendingUsage!: PendingUsagePool;
   /**
-   * The one `scopeModels` policy for this activation — written by the settings
-   * applier and the `/agents` toggle, read by every spawn path (Agent tool,
-   * nested tools, workflow host, RPC). It has to be one object: the allowlist
-   * cache is keyed by working directory, which only an instance can hold.
+   * The surfaces a settings write has to repaint, and the pool a disabled `reportUsage` has to
+   * drain. Attached once at activation, from the handles src/bootstrap.ts builds. This is the
+   * only handle reference this class keeps, and it is deliberately the narrowest one that
+   * works: a setter that stores a value without repainting is exactly the bug those six exist
+   * to prevent, so the repaint cannot be pushed out to the callers.
    */
-  modelScope!: ModelScope;
+  repaint!: {
+    status: { update(): void };
+    fleet: { update(): void; setEnabled(enabled: boolean): void };
+    pendingUsage: { drain(): void };
+  };
+
   pendingNudges!: Map<string, ReturnType<typeof setTimeout>>;
 }

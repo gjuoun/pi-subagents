@@ -243,7 +243,7 @@ export function createAgentTool(deps: ToolsDeps) {
 
     execute: async (toolCallId, params, signal, onUpdate, ctx) => {
       // Ensure we have UI context for widget rendering
-      deps.context.status.setUICtx(ctx.ui as UICtx);
+      deps.services.status.setUICtx(ctx.ui as UICtx);
 
       // Reload custom agents so new project/global .md files are picked up without restart
       deps.reloadCustomAgents();
@@ -301,7 +301,7 @@ export function createAgentTool(deps: ToolsDeps) {
       // Scope validation: the effective resolved model is checked against the
       // user's enabledModels list. Policy (hard error vs warn-and-proceed) lives
       // in model-scope.ts so the nested delegation tools apply the same rule.
-      const scopeVerdict = deps.context.modelScope.check({
+      const scopeVerdict = deps.services.modelScope.check({
         model,
         cwd: ctx.cwd,
         modelRegistry: ctx.modelRegistry,
@@ -416,11 +416,11 @@ export function createAgentTool(deps: ToolsDeps) {
         if (params.run_in_background === false) {
           return textResult("Cannot combine `schedule` with `run_in_background: false` — scheduled jobs always run in background.");
         }
-        if (!deps.context.scheduler.isActive()) {
+        if (!deps.services.scheduler.isActive()) {
           return textResult("Scheduler is not active in this session yet. Try again after the session has fully started.");
         }
         try {
-          const job = deps.context.scheduler.addJob({
+          const job = deps.services.scheduler.addJob({
             name: params.description,
             description: params.description,
             schedule: params.schedule as string,
@@ -434,7 +434,7 @@ export function createAgentTool(deps: ToolsDeps) {
             isolated: isolated,
             isolation: isolation,
           });
-          const next = deps.context.scheduler.getNextRun(job.id);
+          const next = deps.services.scheduler.getNextRun(job.id);
           return textResult(
             `${fallbackNote}Scheduled "${job.name}" (id: ${job.id}, type: ${job.scheduleType}). ` +
             `Next run: ${next ?? "(unknown)"}. ` +
@@ -447,7 +447,7 @@ export function createAgentTool(deps: ToolsDeps) {
 
       // Resume existing agent
       if (params.resume) {
-        const existing = deps.context.manager.getRecord(params.resume);
+        const existing = deps.services.manager.getRecord(params.resume);
         if (!existing || !isTopLevelAgent(existing)) {
           return textResult(`Agent not found: "${params.resume}". It may have been cleaned up.`);
         }
@@ -488,14 +488,14 @@ export function createAgentTool(deps: ToolsDeps) {
             `Agent ID: ${id}\n` +
             `Type: ${existing.type}\n` +
             (record.outputFile ? `Output file: ${record.outputFile}\n` : "") +
-            (isQueued ? `Position: queued (max ${deps.context.manager.getMaxConcurrent()} concurrent)\n` : "") +
+            (isQueued ? `Position: queued (max ${deps.services.manager.getMaxConcurrent()} concurrent)\n` : "") +
             `\nYou will be notified when this agent completes.\n` +
             `Use get_subagent_result to retrieve full results, or steer_subagent to send it messages.`,
             { ...detailBaseFor(record), toolUses: record.toolUses, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
           );
         }
 
-        const record = await deps.context.manager.resume(params.resume, params.prompt, signal);
+        const record = await deps.services.manager.resume(params.resume, params.prompt, signal);
         if (!record) {
           return textResult(`Failed to resume agent "${params.resume}".`);
         }
@@ -527,9 +527,9 @@ export function createAgentTool(deps: ToolsDeps) {
           // for the whole run. This is the hook, not a poll, which is why it does not reopen the
           // 200 ms tick problem the single-Agent-View round closed (#agent-view-tui Step 6). The
           // foreground sibling above does the same for its own spawn.
-          deps.context.fleet.ensureTimer();
-          deps.context.fleet.update();
-          const rec = deps.context.manager.getRecord(id);
+          deps.services.fleet.ensureTimer();
+          deps.services.fleet.update();
+          const rec = deps.services.manager.getRecord(id);
           if (rec?.outputFile) {
             rec.outputCleanup = streamToOutputFile(session, rec.outputFile, id, ctx.cwd);
           }
@@ -538,7 +538,7 @@ export function createAgentTool(deps: ToolsDeps) {
         // A throw here means the agent never started. Let it out: pi marks a
         // tool call failed only when execute throws, and a returned message
         // reads to the model as a subagent that ran and reported this (#179).
-        id = deps.context.manager.spawn(deps.pi, ctx, subagentType, params.prompt, {
+        id = deps.services.manager.spawn(deps.pi, ctx, subagentType, params.prompt, {
           description: params.description,
           name: params.name as string | undefined,
           model,
@@ -556,7 +556,7 @@ export function createAgentTool(deps: ToolsDeps) {
         // Set output file + join mode synchronously after spawn, before the
         // event loop yields — onSessionCreated is async so this is safe.
         const joinMode = resolveJoinMode(deps.context.defaultJoinMode, true);
-        const record = deps.context.manager.getRecord(id);
+        const record = deps.services.manager.getRecord(id);
         if (record && joinMode) {
           record.joinMode = joinMode;
           record.toolCallId = toolCallId;
@@ -567,7 +567,7 @@ export function createAgentTool(deps: ToolsDeps) {
         // copy is an awaited git call. Wait for it here, after the synchronous
         // wiring above, so a strict-isolation failure still fails THIS tool
         // call instead of being reported as a subagent that ran (#179).
-        await deps.context.manager.awaitStartup(id);
+        await deps.services.manager.awaitStartup(id);
 
         if (joinMode == null || joinMode === 'async') {
           // Foreground/no join mode or explicit async — not part of any batch
@@ -580,11 +580,11 @@ export function createAgentTool(deps: ToolsDeps) {
           deps.context.batchFinalizeTimer = setTimeout(deps.finalizeBatch, 100);
         }
 
-        deps.context.agentActivity.set(id, bgState);
-        deps.context.status.ensureTimer();
-        deps.context.status.update();
-        deps.context.fleet.ensureTimer();
-        deps.context.fleet.update();
+        deps.services.agentActivity.set(id, bgState);
+        deps.services.status.ensureTimer();
+        deps.services.status.update();
+        deps.services.fleet.ensureTimer();
+        deps.services.fleet.update();
 
         deps.pi.events.emit("subagents:created", {
           id,
@@ -600,7 +600,7 @@ export function createAgentTool(deps: ToolsDeps) {
           `Type: ${displayName}\n` +
           `Description: ${params.description}\n` +
           (record?.outputFile ? `Output file: ${record.outputFile}\n` : "") +
-          (isQueued ? `Position: queued (max ${deps.context.manager.getMaxConcurrent()} concurrent)\n` : "") +
+          (isQueued ? `Position: queued (max ${deps.services.manager.getMaxConcurrent()} concurrent)\n` : "") +
           `\nYou will be notified when this agent completes.\n` +
           `Use get_subagent_result to retrieve full results, or steer_subagent to send it messages.\n` +
           `Do not duplicate this agent's work.`,
@@ -621,7 +621,7 @@ export function createAgentTool(deps: ToolsDeps) {
         // Spend from the record, everything else from the live tracker. `fgId`
         // is set in onSessionCreated below, which fires before the first
         // assistant message — so nothing is spent while this reads zero.
-        const fgRecord = fgId ? deps.context.manager.getRecord(fgId) : undefined;
+        const fgRecord = fgId ? deps.services.manager.getRecord(fgId) : undefined;
         const details: AgentDetails = {
           ...detailBaseFor(fgRecord),
           toolUses: fgState.toolUses,
@@ -662,19 +662,19 @@ export function createAgentTool(deps: ToolsDeps) {
           queuedAhead = undefined;
           streamUpdate();
         }
-        for (const a of deps.context.manager.listAgents()) {
+        for (const a of deps.services.manager.listAgents()) {
           if (a.session === session) {
             fgId = a.id;
-            deps.context.agentActivity.set(a.id, fgState);
-            deps.context.status.ensureTimer();
-            deps.context.fleet.ensureTimer();
-            deps.context.fleet.update();
+            deps.services.agentActivity.set(a.id, fgState);
+            deps.services.status.ensureTimer();
+            deps.services.fleet.ensureTimer();
+            deps.services.fleet.update();
             break;
           }
         }
         // Stream conversation to output file (foreground agent logging)
         if (fgId) {
-          const rec = deps.context.manager.getRecord(fgId);
+          const rec = deps.services.manager.getRecord(fgId);
           if (rec?.outputFile) {
             rec.outputCleanup = streamToOutputFile(session, rec.outputFile, fgId, ctx.cwd);
           }
@@ -691,7 +691,7 @@ export function createAgentTool(deps: ToolsDeps) {
 
       let record: AgentRecord;
       try {
-        const fgResult = await deps.context.manager.spawnAndWait(deps.pi, ctx, subagentType, params.prompt, {
+        const fgResult = await deps.services.manager.spawnAndWait(deps.pi, ctx, subagentType, params.prompt, {
           description: params.description,
           name: params.name as string | undefined,
           model,
@@ -711,7 +711,7 @@ export function createAgentTool(deps: ToolsDeps) {
         }, (fgAgentId) => {
           // onSpawned: called synchronously after spawn, before onSessionCreated fires.
           // Set up the output file so streamToOutputFile can pick it up.
-          const fgRec = deps.context.manager.getRecord(fgAgentId);
+          const fgRec = deps.services.manager.getRecord(fgAgentId);
           attachTranscript(fgRec, fgAgentId);
         });
         record = fgResult.record;
@@ -721,9 +721,9 @@ export function createAgentTool(deps: ToolsDeps) {
         // ticking or a finished agent on the widget.
         clearInterval(spinnerInterval);
         if (fgId) {
-          deps.context.agentActivity.delete(fgId);
-          deps.context.status.markFinished(fgId);
-          deps.context.fleet.onAgentFinished(fgId);
+          deps.services.agentActivity.delete(fgId);
+          deps.services.status.markFinished(fgId);
+          deps.services.fleet.onAgentFinished(fgId);
         }
       }
 

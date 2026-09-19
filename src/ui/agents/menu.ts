@@ -34,7 +34,7 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
   options.push(`${TOGGLE_PREFIX}${deps.context.fleetViewEnabled ? "on" : "off"}`);
 
   // Running agents entry (only if there are active agents)
-  const agents = deps.context.manager.listAgents().filter(isTopLevelAgent);
+  const agents = deps.services.manager.listAgents().filter(isTopLevelAgent);
   if (agents.length > 0) {
     const running = agents.filter(a => a.status === "running" || a.status === "queued").length;
     const done = agents.filter(a => a.status === "completed" || a.status === "steered").length;
@@ -47,15 +47,15 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
   }
 
   // Scheduled jobs entry (always present when scheduler is active)
-  if (deps.context.scheduler.isActive()) {
-    const jobCount = deps.context.scheduler.list().length;
+  if (deps.services.scheduler.isActive()) {
+    const jobCount = deps.services.scheduler.list().length;
     options.push(`Scheduled jobs (${jobCount})`);
   }
 
   // Workflow runs, on the same terms as scheduled jobs: shown only when the
   // feature is on, so the menu never advertises something switched off.
   if (deps.context.workflowsEnabled) {
-    options.push(`Workflows (${deps.context.workflowTasks.size})`);
+    options.push(`Workflows (${deps.services.workflowTasks.size})`);
   }
 
   // Actions
@@ -92,7 +92,7 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
     await showAllAgentsList(ctx, deps);
     await showAgentsMenu(ctx, deps, workflowMenuDeps);
   } else if (choice.startsWith("Scheduled jobs (")) {
-    await showSchedulesMenu(ctx, deps.context.scheduler);
+    await showSchedulesMenu(ctx, deps.services.scheduler);
     await showAgentsMenu(ctx, deps, workflowMenuDeps);
   } else if (choice.startsWith("Workflows (")) {
     await showWorkflowsMenu(ctx, workflowMenuDeps);
