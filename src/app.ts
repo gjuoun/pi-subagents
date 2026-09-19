@@ -13,10 +13,9 @@
 import { existsSync, readFileSync, } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { isTopLevelAgent, type OnAgentCompact, type OnAgentComplete, type OnAgentStart, type OnAgentUsage } from "./agent/agent-manager.js";
-import type { DeliveryCallback } from "./agent/group-join.js";
+import { isTopLevelAgent } from "./agent/agent-manager.js";
 import { resolveJoinMode } from "./agent/invocation.js";
+import { createManagerCallbacks } from "./agent/manager-callbacks.js";
 import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./agent/mention/mention.js";
 import { runMentionClone } from "./agent/mention/mention-clone.js";
 import { setMaxSubagentDepth } from "./agent/nested-tools.js";
@@ -30,10 +29,8 @@ import { loadCustomAgents } from "./config/registry/custom-agents.js";
 import { applyAndEmitLoaded, loadSettings } from "./config/settings.js";
 import { ActivationContext } from "./extension/context.js";
 import { SUBAGENT_TOOL_NAMES } from "./lib/tool-names.js";
-import { type AgentRecord, type NotificationDetails, } from "./lib/types.js";
-import { formatCost, formatMs, formatTokens, formatTurns } from "./lib/ui/format.js";
+import type { AgentRecord } from "./lib/types.js";
 import type { UICtx } from "./lib/ui/theme.js";
-import { getLifetimeTotal, toReportedUsage } from "./lib/usage.js";
 import { resolveStorePath, ScheduleStore } from "./schedule/schedule-store.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
@@ -47,8 +44,8 @@ import { createActivityTracker } from "./ui/agent-status.js";
 import type { AgentsUiDeps } from "./ui/agents/deps.js";
 import { showAgentsMenu } from "./ui/agents/menu.js";
 import { viewAgentConversation } from "./ui/agents/running.js";
+import { createCompletionNudge } from "./ui/completion-nudge.js";
 import type { FleetUICtx } from "./ui/fleet-list.js";
-import { buildNotificationDetails, formatTaskNotification, } from "./ui/notifications.js";
 import { renderWorkflowEntryCard } from "./ui/workflow/workflow-card.js";
 import { openWorkflowFromFleet, type WorkflowMenuDeps } from "./ui/workflow/workflow-menu.js";
 import { decideWorkflowCollision } from "./workflow/collisions.js";
@@ -60,69 +57,6 @@ export function createExtension(pi: ExtensionAPI): void {
   // The activation's own state — every cluster below reads and writes through this.
   const context = new ActivationContext();
 
-  pi.registerMessageRenderer<NotificationDetails>(
-    "subagent-notification",
-    (message, { expanded }, theme) => {
-      const d = message.details;
-      if (!d) return undefined;
-
-      function renderOne(d: NotificationDetails): string {
-        const isError = d.status === "error" || d.status === "stopped" || d.status === "aborted";
-        const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-        const statusText = isError ? d.status
-          : d.status === "steered" ? "completed (steered)"
-          : "completed";
-
-        // Line 1: icon + agent description + status
-        let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
-
-        // Line 2: stats
-        const parts: string[] = [];
-        if (d.turnCount > 0) parts.push(formatTurns(d.turnCount, d.maxTurns));
-        if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? "" : "s"}`);
-        if (d.totalTokens > 0) parts.push(formatTokens(d.totalTokens));
-        if (context.showCost) {
-          const costText = formatCost(d.totalCost ?? 0);
-          if (costText) parts.push(costText);
-        }
-        if (d.durationMs > 0) parts.push(formatMs(d.durationMs));
-        if (parts.length) {
-          line += "\n  " + parts.map(p => theme.fg("dim", p)).join(" " + theme.fg("dim", "·") + " ");
-        }
-
-        // Line 3: result preview (collapsed) or full (expanded)
-        if (expanded) {
-          const lines = d.resultPreview.split("\n").slice(0, 30);
-          for (const l of lines) line += "\n" + theme.fg("dim", `  ${l}`);
-        } else {
-          const preview = d.resultPreview.split("\n")[0]?.slice(0, 80) ?? "";
-          line += "\n  " + theme.fg("dim", `⎿  ${preview}`);
-        }
-
-        // Line 4: output file link (if present)
-        if (d.outputFile) {
-          line += "\n  " + theme.fg("muted", `transcript: ${d.outputFile}`);
-        }
-
-        return line;
-      }
-
-      const all = [d, ...(d.others ?? [])];
-      const rendered = all.map(renderOne);
-      // A group of agents lands as one notification, and the number a user wants
-      // from it is what the batch cost — not four figures to add up by hand.
-      // Derived from the per-agent details rather than carried alongside them:
-      // one source, so the total can never disagree with the rows above it.
-      if (context.showCost && all.length > 1) {
-        const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
-        if (total) {
-          const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-          rendered.unshift(theme.fg("dim", `${all.length} agents · ${formatTokens(tokens)} · ${total}`));
-        }
-      }
-      return new Text(rendered.join("\n"), 0, 0);
-    }
-  );
 
   // A workflow launched from the CLI flag has no tool call to hang its result
   // card on, so it renders here instead — through the SAME layout the tool
@@ -156,223 +90,39 @@ export function createExtension(pi: ExtensionAPI): void {
   // session on the next unrelated spawn, so every later reload keeps warning.
   reloadCustomAgents(context.strictAgentFiles);
 
-  const NUDGE_HOLD_MS = 200;
-  // A queued result wait must observe completion before its held notification
-  // can fire, so successful waits can still suppress that redundant nudge.
-  const QUEUE_WAIT_POLL_MS = Math.floor(NUDGE_HOLD_MS / 4);
 
-  function scheduleNudge(key: string, send: () => void, delay = NUDGE_HOLD_MS) {
-    cancelNudge(key);
-    services.pendingNudges.set(key, setTimeout(() => {
-      services.pendingNudges.delete(key);
-      try { send(); } catch { /* ignore stale completion side-effect errors */ }
-    }, delay));
-  }
 
-  function cancelNudge(key: string) {
-    const timer = services.pendingNudges.get(key);
-    if (timer != null) {
-      clearTimeout(timer);
-      services.pendingNudges.delete(key);
-    }
-  }
-
-  function emitIndividualNudge(record: AgentRecord) {
-    if (record.resultConsumed) return;  // re-check at send time
-
-    const notification = formatTaskNotification(record, 500, context.showCost);
-    const footer = record.outputFile ? `\nFull transcript available at: ${record.outputFile}` : '';
-
-    pi.sendMessage<NotificationDetails>({
-      customType: "subagent-notification",
-      content: notification + footer,
-      display: true,
-      details: buildNotificationDetails(record, 500, services.agentActivity.get(record.id)),
-    }, { deliverAs: "followUp", triggerTurn: true });
-  }
-
-  function sendIndividualNudge(record: AgentRecord) {
-    services.agentActivity.delete(record.id);
-    services.status.markFinished(record.id);
-    services.fleet.onAgentFinished(record.id);
-    scheduleNudge(record.id, () => emitIndividualNudge(record));
-    services.status.update();
-  }
-
-  /**
-   * The group-join delivery policy: what happens when a joined group of agents settles.
-   * Injected into the joiner that src/bootstrap.ts builds.
-   */
-  const onGroupComplete: DeliveryCallback = (records, partial) => {
-      for (const r of records) { services.agentActivity.delete(r.id); services.status.markFinished(r.id); services.fleet.onAgentFinished(r.id); }
-
-      const groupKey = `group:${records.map(r => r.id).join(",")}`;
-      scheduleNudge(groupKey, () => {
-        // Re-check at send time
-        const unconsumed = records.filter(r => !r.resultConsumed);
-        if (unconsumed.length === 0) { services.status.update(); return; }
-
-        const notifications = unconsumed.map(r => formatTaskNotification(r, 300, context.showCost)).join('\n\n');
-        const label = partial
-          ? `${unconsumed.length} agent(s) finished (partial — others still running)`
-          : `${unconsumed.length} agent(s) finished`;
-
-        const [first, ...rest] = unconsumed;
-        const details = buildNotificationDetails(first, 300, services.agentActivity.get(first.id));
-        if (rest.length > 0) {
-          details.others = rest.map(r => buildNotificationDetails(r, 300, services.agentActivity.get(r.id)));
-        }
-
-        pi.sendMessage<NotificationDetails>({
-          customType: "subagent-notification",
-          content: `Background agent group completed: ${label}\n\n${notifications}\n\nUse get_subagent_result for full output.`,
-          display: true,
-          details,
-        }, { deliverAs: "followUp", triggerTurn: true });
-      });
-      services.status.update();
-  };
-
-  /** Helper: build event data for lifecycle events from an AgentRecord. */
-  function buildEventData(record: AgentRecord) {
-    const durationMs = record.completedAt ? record.completedAt - record.startedAt : Date.now() - record.startedAt;
-    // All three fields are lifetime-accumulated (Σ over every assistant message_end),
-    // so they survive compaction together — input + output ≤ total always.
-    // tokens is omitted when nothing was ever produced (e.g. agent errored before
-    // any message_end fired), preserving prior payload shape.
-    const u = record.lifetimeUsage;
-    const total = getLifetimeTotal(u);
-    const tokens = total > 0
-      ? { input: u.input, output: u.output, total }
-      : undefined;
-    // The whole run's spend as a pi `Usage` — pi's convention for handing spend
-    // to a consumer, so `usage.cost.total` and `usage.cacheRead` are where a
-    // listener already expects them and anything pi adds to `Usage` arrives
-    // without a change here. Omitted when nothing was spent, so "spent nothing"
-    // and "never ran" stay distinguishable. Ungated by `showCost`: that setting
-    // governs what a human is shown, not what the event carries.
-    //
-    // `tokens` above is the other convention, kept as it shipped: a flat view
-    // model like pi's own `SessionStats`, carrying the DISPLAY total, which
-    // excludes cacheRead (#38). The two answer different questions and neither
-    // derives from the other.
-    const usage = toReportedUsage(u);
-    return {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-      result: record.result,
-      error: record.error,
-      status: record.status,
-      toolUses: record.toolUses,
-      durationMs,
-      tokens,
-      usage,
-    };
-  }
-
-  /**
-   * The manager's completion policy: the lifecycle events, the record entry, and the route
-   * through group join or an individual nudge. Injected into the manager that
-   * src/bootstrap.ts builds.
-   */
-  const onAgentComplete: OnAgentComplete = (record) => {
-    // Owned children — nested, or a workflow's — report only through their
-    // owner: the parent's scoped tools, or the workflow's card, notification
-    // and dialog. Keep them out of top-level lifecycle, transcript,
-    // notification, and UI channels.
-    if (!isTopLevelAgent(record)) return;
-
-    const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
-    const eventData = buildEventData(record);
-    if (isError) {
-      pi.events.emit("subagents:failed", eventData);
-    } else {
-      pi.events.emit("subagents:completed", eventData);
-    }
-
-    // Persist final record for cross-extension history reconstruction
-    pi.appendEntry("subagents:record", {
-      id: record.id, type: record.type, description: record.description,
-      status: record.status, result: record.result, error: record.error,
-      startedAt: record.startedAt, completedAt: record.completedAt,
-    });
-
-    // Skip notification if result was already consumed via get_subagent_result
-    if (record.resultConsumed) {
-      services.agentActivity.delete(record.id);
-      services.status.markFinished(record.id);
-      services.fleet.onAgentFinished(record.id);
-      services.status.update();
-      return;
-    }
-
-    // If this agent is pending batch finalization (debounce window still open),
-    // don't send an individual nudge — finalizeBatch will pick it up retroactively.
-    if (context.currentBatchAgents.some(a => a.id === record.id)) {
-      services.status.update();
-      return;
-    }
-
-    const result = services.groupJoin.onAgentComplete(record);
-    if (result === 'pass') {
-      sendIndividualNudge(record);
-    }
-    // 'held' → do nothing, group will fire later
-    // 'delivered' → group callback already fired
-    services.status.update();
-  };
-
-  const onAgentStart: OnAgentStart = (record) => {
-    if (!isTopLevelAgent(record)) return;
-    // Agent-tool spawns refresh these surfaces in their tool handler, but RPC
-    // and scheduler spawns enter through the manager directly.
-    if (context.currentCtx?.hasUI) {
-      services.status.ensureTimer();
-      services.status.update();
-      services.fleet.ensureTimer();
-      services.fleet.update();
-    }
-    // Emit started event when agent transitions to running (including from queue)
-    pi.events.emit("subagents:started", {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-    });
-  };
-
-  const onAgentCompact: OnAgentCompact = (record, info) => {
-    if (!isTopLevelAgent(record)) return;
-    // Emit compacted event when agent's session compacts (preserves count on record).
-    pi.events.emit("subagents:compacted", {
-      id: record.id,
-      type: record.type,
-      description: record.description,
-      reason: info.reason,
-      tokensBefore: info.tokensBefore,
-      compactionCount: record.compactionCount,
-    });
-  };
-
-  const onAgentUsage: OnAgentUsage = (_record, usage) => {
-    // Every assistant message from every agent — nested included, exactly once.
-    // Parked here until a tool result can carry it back to the parent session;
-    // see `PendingUsagePool`. Skipped entirely when the feature is off, so no
-    // pool grows in a session that will never drain it.
-    if (context.reportUsage) services.pendingUsage.add(usage);
-  };
 
   // Every shared handle — the manager, the group joiner, the status row, the fleet list,
   // the scheduler and the four collections they share — is built in one ordered place and
   // frozen. This call supplies the completion policy (the nudge/notification logic above)
   // and is the only place any of them is constructed. See src/bootstrap.ts.
+  // The manager is constructed with the completion policy, and the policy reads the handles the
+  // manager is part of. The hooks it receives are therefore thin bindings, resolved when a run
+  // settles — long after the two lines below — and the policy itself is built immediately after.
   const services = createServices({
     showCost: () => context.showCost,
     viewerMarkdown: () => context.viewerMarkdown,
-    hooks: { onAgentComplete, onAgentStart, onAgentCompact, onAgentUsage, onGroupComplete },
+    hooks: {
+      onAgentComplete: (record) => policy.onAgentComplete(record),
+      onAgentStart: (record) => policy.onAgentStart(record),
+      onAgentCompact: (record, info) => policy.onAgentCompact(record, info),
+      onAgentUsage: (record, usage) => policy.onAgentUsage(record, usage),
+      onGroupComplete: (records, partial) => policy.onGroupComplete(records, partial),
+    },
   });
   // The one handle reference the state class keeps: the surfaces a settings write repaints.
   context.repaint = services;
+
+  /**
+   * The completion policy, owned by the domains it belongs to: the notification surface (which
+   * registers its own message renderer) and the manager's lifecycle callbacks.
+   */
+  const notify = createCompletionNudge({ pi, services, showCost: () => context.showCost });
+  const policy = {
+    ...createManagerCallbacks({ pi, services, context, notify }),
+    onGroupComplete: notify.onGroupComplete,
+  };
 
 
   // Expose manager via Symbol.for() global registry for cross-package access.
@@ -553,7 +303,7 @@ export function createExtension(pi: ExtensionAPI): void {
             if (!record || record.parentAgentId) return false;
             if (record.status === "running" || record.status === "queued") return false;
             record.resultConsumed = true;
-            cancelNudge(record.id);
+            notify.cancelNudge(record.id);
             return true;
           },
         },
@@ -904,7 +654,7 @@ export function createExtension(pi: ExtensionAPI): void {
       for (const { id } of batchAgents) {
         const record = services.manager.getRecord(id);
         if (record?.completedAt != null && !record.resultConsumed) {
-          sendIndividualNudge(record);
+          notify.sendIndividualNudge(record);
         }
       }
     }
@@ -1046,9 +796,9 @@ export function createExtension(pi: ExtensionAPI): void {
     finalizeBatch,
     startBackgroundResume,
     resolveAgentRef,
-    cancelNudge,
-    scheduleNudge,
-    queueWaitPollMs: QUEUE_WAIT_POLL_MS,
+    cancelNudge: notify.cancelNudge,
+    scheduleNudge: notify.scheduleNudge,
+    queueWaitPollMs: notify.queueWaitPollMs,
   };
 
   // Held rather than registered inline: the mention clone reuses this exact object, so the
