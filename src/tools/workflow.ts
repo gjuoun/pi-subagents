@@ -134,7 +134,7 @@ export function createWorkflowTool(deps: ToolsDeps) {
     name: SUBAGENT_TOOL_NAMES.WORKFLOW,
     label: "SubagentWorkflow",
     description: renderToolDescriptionTemplate(fullWorkflowToolDescription, {
-      schedulingEnabled: deps.context.isSchedulingEnabled(),
+      schedulingEnabled: deps.context.schedulingEnabled,
       worktreeIsolation: isWorktreeIsolationEnabled(),
     }),
     promptSnippet: "Run a deterministic script that orchestrates many subagents",

@@ -36,33 +36,30 @@ export interface AgentsUiContext {
   /** The `scopeModels` policy the Settings row reads and writes. */
   modelScope: ModelScope;
 
-  isReportUsageEnabled(): boolean;
+  // Settings, read live by the overlay and written by its rows.
+  reportUsage: boolean;
+  showCost: boolean;
+  showModel: boolean;
+  viewerMarkdown: ViewerMarkdownMode;
+  widgetMode: WidgetMode;
+  fleetViewEnabled: boolean;
+  agentMentionMode: AgentMentionMode;
+  defaultJoinMode: JoinMode;
+  backgroundByDefault: boolean;
+  schedulingEnabled: boolean;
+  workflowsEnabled: boolean;
+  workflowsPinned: boolean;
+  jevEnabled: boolean;
+  toolDescriptionMode: ToolDescriptionMode;
+
+  // The six setters that do more than store the value: a repaint, the usage drain, or
+  // latching the user's answer as their own.
   setReportUsage(b: boolean): void;
-  isShowCostEnabled(): boolean;
   setShowCost(b: boolean): void;
-  isShowModelEnabled(): boolean;
   setShowModel(b: boolean): void;
-  getViewerMarkdown(): ViewerMarkdownMode;
-  setViewerMarkdown(mode: ViewerMarkdownMode): void;
-  getWidgetMode(): WidgetMode;
   setWidgetMode(m: WidgetMode): void;
-  isFleetViewEnabled(): boolean;
   setFleetViewEnabled(b: boolean): void;
-  getAgentMentionMode(): AgentMentionMode;
-  setAgentMentionMode(mode: AgentMentionMode): void;
-  getDefaultJoinMode(): JoinMode;
-  setDefaultJoinMode(mode: JoinMode): void;
-  getBackgroundByDefault(): boolean;
-  setBackgroundByDefault(b: boolean): void;
-  isSchedulingEnabled(): boolean;
-  setSchedulingEnabled(b: boolean): void;
-  isWorkflowsEnabled(): boolean;
-  isWorkflowsPinned(): boolean;
   setWorkflowsEnabled(b: boolean): void;
-  isJevEnabled(): boolean;
-  setJevEnabled(b: boolean): void;
-  getToolDescriptionMode(): ToolDescriptionMode;
-  setToolDescriptionMode(mode: ToolDescriptionMode): void;
 }
 
 /** Everything the `/agents` surfaces need from the extension around them. */

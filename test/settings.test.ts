@@ -7,10 +7,13 @@ import {
   applySettings,
   loadSettings,
   persistToastFor,
-  type SettingsAppliers,
+  type SettingsSurface,
+  type SettingsTarget,
   saveAndEmitChanged,
   saveSettings,
+  type ToolDescriptionMode,
 } from "../src/config/settings.js";
+import type { AgentMentionMode, JoinMode, ViewerMarkdownMode, WidgetMode } from "../src/lib/types.js";
 
 /**
  * Tests for persistent settings. Uses two tmp directories:
@@ -527,101 +530,121 @@ describe("settings persistence", () => {
     });
   });
 
-  describe("applySettings", () => {
-    let appliers: SettingsAppliers;
-
-    beforeEach(() => {
-      appliers = {
-        setMaxConcurrent: vi.fn(),
-        setMaxConcurrentForeground: vi.fn(),
-        setDefaultMaxTurns: vi.fn(),
-        setGraceTurns: vi.fn(),
-        setDefaultJoinMode: vi.fn(),
-        setBackgroundByDefault: vi.fn(),
-        setSchedulingEnabled: vi.fn(),
-        setScopeModels: vi.fn(),
-        setStrictAgentFiles: vi.fn(),
-        setDisableDefaultAgents: vi.fn(),
-        setToolDescriptionMode: vi.fn(),
-        setFleetView: vi.fn(),
-        setAgentMentions: vi.fn(),
+  /**
+   * A target whose context is a plain object, so a field's write is observable as state
+   * where the context owns it and as a call where a module owns the setting.
+   */
+  function makeTarget() {
+    const context = {
+      manager: { setMaxConcurrent: vi.fn(), setMaxConcurrentForeground: vi.fn() },
+      modelScope: { setEnabled: vi.fn() },
+      strictAgentFiles: false,
+      defaultJoinMode: "smart" as JoinMode,
+      backgroundByDefault: true,
+      schedulingEnabled: true,
+      toolDescriptionMode: "full" as ToolDescriptionMode,
+      fleetViewEnabled: true,
+      agentMentionMode: "model" as AgentMentionMode,
+      widgetMode: "background" as WidgetMode,
+      reportUsage: false,
+      showCost: false,
+      showModel: false,
+      viewerMarkdown: "all" as ViewerMarkdownMode,
+      workflowsEnabled: true,
+      jevEnabled: false,
+      setReportUsage: vi.fn(),
+      setShowCost: vi.fn(),
+      setShowModel: vi.fn(),
+      setWidgetMode: vi.fn(),
+      setFleetViewEnabled: vi.fn(),
+      setWorkflowsEnabled: vi.fn(),
+    } satisfies SettingsSurface;
+    const target: SettingsTarget = {
+      context,
+      setDefaultMaxTurns: vi.fn(),
+      setGraceTurns: vi.fn(),
+      setMaxSubagentDepth: vi.fn(),
+      setFallbackSubagent: vi.fn(),
+      setDisableDefaultAgents: vi.fn(),
       setRememberAgents: vi.fn(),
-        setWidgetMode: vi.fn(),
-        setViewerMarkdown: vi.fn(),
-        setOutputTranscript: vi.fn(),
-        setWorktreeIsolation: vi.fn(),
-        setMaxSubagentDepth: vi.fn(),
-        setFallbackSubagent: vi.fn(),
-        setReportUsage: vi.fn(),
-        setShowCost: vi.fn(),
-        setShowModel: vi.fn(),
-      };
-    });
+      setOutputTranscript: vi.fn(),
+      setWorktreeIsolation: vi.fn(),
+    };
+    return { context, target };
+  }
 
-    // 0 is a real value here, so `if (s.x)` truthiness would silently skip it.
+  describe("applySettings", () => {
+    // 0 is a real value here, so truthiness would silently skip it.
     it("applies maxConcurrentForeground, including an explicit 0", () => {
-      applySettings({ maxConcurrentForeground: 3 }, appliers);
-      expect(appliers.setMaxConcurrentForeground).toHaveBeenCalledWith(3);
+      const { context, target } = makeTarget();
+      applySettings({ maxConcurrentForeground: 3 }, target);
+      expect(context.manager.setMaxConcurrentForeground).toHaveBeenCalledWith(3);
 
-      applySettings({ maxConcurrentForeground: 0 }, appliers);
-      expect(appliers.setMaxConcurrentForeground).toHaveBeenCalledWith(0);
+      applySettings({ maxConcurrentForeground: 0 }, target);
+      expect(context.manager.setMaxConcurrentForeground).toHaveBeenLastCalledWith(0);
 
-      vi.mocked(appliers.setMaxConcurrentForeground).mockClear();
-      applySettings({}, appliers);
-      expect(appliers.setMaxConcurrentForeground).not.toHaveBeenCalled();
+      vi.mocked(context.manager.setMaxConcurrentForeground).mockClear();
+      applySettings({}, target);
+      expect(context.manager.setMaxConcurrentForeground).not.toHaveBeenCalled();
     });
 
     it("applies reportUsage and showCost", () => {
-      applySettings({ reportUsage: true, showCost: true }, appliers);
-      expect(appliers.setReportUsage).toHaveBeenCalledWith(true);
-      expect(appliers.setShowCost).toHaveBeenCalledWith(true);
+      const { context, target } = makeTarget();
+      applySettings({ reportUsage: true, showCost: true }, target);
+      expect(context.setReportUsage).toHaveBeenCalledWith(true);
+      expect(context.setShowCost).toHaveBeenCalledWith(true);
 
-      applySettings({ reportUsage: false, showCost: false }, appliers);
-      expect(appliers.setReportUsage).toHaveBeenCalledWith(false);
-      expect(appliers.setShowCost).toHaveBeenCalledWith(false);
+      applySettings({ reportUsage: false, showCost: false }, target);
+      expect(context.setReportUsage).toHaveBeenLastCalledWith(false);
+      expect(context.setShowCost).toHaveBeenLastCalledWith(false);
     });
 
     it("applies showModel", () => {
-      applySettings({ showModel: true }, appliers);
-      expect(appliers.setShowModel).toHaveBeenCalledWith(true);
+      const { context, target } = makeTarget();
+      applySettings({ showModel: true }, target);
+      expect(context.setShowModel).toHaveBeenCalledWith(true);
 
-      applySettings({ showModel: false }, appliers);
-      expect(appliers.setShowModel).toHaveBeenCalledWith(false);
+      applySettings({ showModel: false }, target);
+      expect(context.setShowModel).toHaveBeenLastCalledWith(false);
     });
 
     it("is a no-op on an empty settings object", () => {
-      applySettings({}, appliers);
-      expect(appliers.setReportUsage).not.toHaveBeenCalled();
-      expect(appliers.setShowCost).not.toHaveBeenCalled();
-      expect(appliers.setMaxConcurrent).not.toHaveBeenCalled();
-      expect(appliers.setDefaultMaxTurns).not.toHaveBeenCalled();
-      expect(appliers.setGraceTurns).not.toHaveBeenCalled();
-      expect(appliers.setDefaultJoinMode).not.toHaveBeenCalled();
-      expect(appliers.setSchedulingEnabled).not.toHaveBeenCalled();
-      expect(appliers.setScopeModels).not.toHaveBeenCalled();
-      expect(appliers.setDisableDefaultAgents).not.toHaveBeenCalled();
-      expect(appliers.setToolDescriptionMode).not.toHaveBeenCalled();
+      const { context, target } = makeTarget();
+      applySettings({}, target);
+      expect(context.setReportUsage).not.toHaveBeenCalled();
+      expect(context.setShowCost).not.toHaveBeenCalled();
+      expect(context.manager.setMaxConcurrent).not.toHaveBeenCalled();
+      expect(target.setDefaultMaxTurns).not.toHaveBeenCalled();
+      expect(target.setGraceTurns).not.toHaveBeenCalled();
+      expect(context.defaultJoinMode).toBe("smart");
+      expect(context.schedulingEnabled).toBe(true);
+      expect(context.modelScope.setEnabled).not.toHaveBeenCalled();
+      expect(target.setDisableDefaultAgents).not.toHaveBeenCalled();
+      expect(context.toolDescriptionMode).toBe("full");
     });
 
     it("applies fallbackSubagent through to the registry", () => {
-      // Without this, deleting the applySettings line for this field leaves the
-      // whole suite green while `subagents.json` silently stops working.
-      applySettings({ fallbackSubagent: "none" }, appliers);
-      expect(appliers.setFallbackSubagent).toHaveBeenCalledWith("none");
+      // Without this, dropping the field from the table leaves the whole suite green
+      // while the settings file silently stops working.
+      const { target } = makeTarget();
+      applySettings({ fallbackSubagent: "none" }, target);
+      expect(target.setFallbackSubagent).toHaveBeenCalledWith("none");
     });
 
     it("applies only the fields that are present", () => {
-      applySettings({ maxConcurrent: 4, graceTurns: 3, maxSubagentDepth: 1 }, appliers);
-      expect(appliers.setMaxConcurrent).toHaveBeenCalledWith(4);
-      expect(appliers.setGraceTurns).toHaveBeenCalledWith(3);
-      expect(appliers.setMaxSubagentDepth).toHaveBeenCalledWith(1);
-      expect(appliers.setDefaultMaxTurns).not.toHaveBeenCalled();
-      expect(appliers.setDefaultJoinMode).not.toHaveBeenCalled();
-      expect(appliers.setSchedulingEnabled).not.toHaveBeenCalled();
-      expect(appliers.setScopeModels).not.toHaveBeenCalled();
+      const { context, target } = makeTarget();
+      applySettings({ maxConcurrent: 4, graceTurns: 3, maxSubagentDepth: 1 }, target);
+      expect(context.manager.setMaxConcurrent).toHaveBeenCalledWith(4);
+      expect(target.setGraceTurns).toHaveBeenCalledWith(3);
+      expect(target.setMaxSubagentDepth).toHaveBeenCalledWith(1);
+      expect(target.setDefaultMaxTurns).not.toHaveBeenCalled();
+      expect(context.defaultJoinMode).toBe("smart");
+      expect(context.schedulingEnabled).toBe(true);
+      expect(context.modelScope.setEnabled).not.toHaveBeenCalled();
     });
 
     it("applies all fields when all are present", () => {
+      const { context, target } = makeTarget();
       applySettings(
         {
           maxConcurrent: 8,
@@ -635,130 +658,146 @@ describe("settings persistence", () => {
           fleetView: false,
           widgetMode: "off",
         },
-        appliers,
+        target,
       );
-      expect(appliers.setMaxConcurrent).toHaveBeenCalledWith(8);
-      expect(appliers.setDefaultMaxTurns).toHaveBeenCalledWith(50);
-      expect(appliers.setGraceTurns).toHaveBeenCalledWith(7);
-      expect(appliers.setDefaultJoinMode).toHaveBeenCalledWith("group");
-      expect(appliers.setSchedulingEnabled).toHaveBeenCalledWith(false);
-      expect(appliers.setScopeModels).toHaveBeenCalledWith(true);
-      expect(appliers.setStrictAgentFiles).not.toHaveBeenCalled();  // absent from this snapshot
-      expect(appliers.setDisableDefaultAgents).toHaveBeenCalledWith(true);
-      expect(appliers.setToolDescriptionMode).toHaveBeenCalledWith("compact");
-      expect(appliers.setFleetView).toHaveBeenCalledWith(false);
-      expect(appliers.setWidgetMode).toHaveBeenCalledWith("off");
+      expect(context.manager.setMaxConcurrent).toHaveBeenCalledWith(8);
+      expect(target.setDefaultMaxTurns).toHaveBeenCalledWith(50);
+      expect(target.setGraceTurns).toHaveBeenCalledWith(7);
+      expect(context.defaultJoinMode).toBe("group");
+      expect(context.schedulingEnabled).toBe(false);
+      expect(context.modelScope.setEnabled).toHaveBeenCalledWith(true);
+      expect(context.strictAgentFiles).toBe(false); // absent from this snapshot
+      expect(target.setDisableDefaultAgents).toHaveBeenCalledWith(true);
+      expect(context.toolDescriptionMode).toBe("compact");
+      expect(context.setFleetViewEnabled).toHaveBeenCalledWith(false);
+      expect(context.setWidgetMode).toHaveBeenCalledWith("off");
     });
 
     it("applies strictAgentFiles; skips it when absent", () => {
-      applySettings({ strictAgentFiles: true }, appliers);
-      expect(appliers.setStrictAgentFiles).toHaveBeenCalledWith(true);
-      applySettings({}, appliers);
-      expect(appliers.setStrictAgentFiles).toHaveBeenCalledTimes(1);
+      const { context, target } = makeTarget();
+      applySettings({ strictAgentFiles: true }, target);
+      expect(context.strictAgentFiles).toBe(true);
+
+      context.strictAgentFiles = false;
+      applySettings({}, target);
+      expect(context.strictAgentFiles).toBe(false); // absence is "use default"
     });
 
     it("applies widgetMode; skips it when absent", () => {
-      applySettings({ widgetMode: "off" }, appliers);
-      expect(appliers.setWidgetMode).toHaveBeenCalledWith("off");
-      applySettings({}, appliers);
-      expect(appliers.setWidgetMode).toHaveBeenCalledTimes(1); // absence is "use default"
+      const { context, target } = makeTarget();
+      applySettings({ widgetMode: "off" }, target);
+      expect(context.setWidgetMode).toHaveBeenCalledWith("off");
+      applySettings({}, target);
+      expect(context.setWidgetMode).toHaveBeenCalledTimes(1); // absence is "use default"
     });
 
     it("applies viewerMarkdown; skips it when absent", () => {
-      applySettings({ viewerMarkdown: "all" }, appliers);
-      expect(appliers.setViewerMarkdown).toHaveBeenCalledWith("all");
-      applySettings({}, appliers);
-      expect(appliers.setViewerMarkdown).toHaveBeenCalledTimes(1); // absence is "use default"
+      const { context, target } = makeTarget();
+      applySettings({ viewerMarkdown: "assistant" }, target);
+      expect(context.viewerMarkdown).toBe("assistant");
+      applySettings({}, target);
+      expect(context.viewerMarkdown).toBe("assistant"); // absence is "use default"
     });
 
     it("applies fleetView (true and false); skips it when absent", () => {
-      applySettings({ fleetView: true }, appliers);
-      expect(appliers.setFleetView).toHaveBeenCalledWith(true);
-      applySettings({}, appliers);
-      expect(appliers.setFleetView).toHaveBeenCalledTimes(1); // absence is "use default"
+      const { context, target } = makeTarget();
+      applySettings({ fleetView: false }, target);
+      expect(context.setFleetViewEnabled).toHaveBeenCalledWith(false);
+      applySettings({}, target);
+      expect(context.setFleetViewEnabled).toHaveBeenCalledTimes(1); // absence is "use default"
     });
 
     it("applies agentMentions; skips it when absent", () => {
-      applySettings({ agentMentions: "direct" }, appliers);
-      expect(appliers.setAgentMentions).toHaveBeenCalledWith("direct");
-      applySettings({}, appliers);
-      expect(appliers.setAgentMentions).toHaveBeenCalledTimes(1); // absence is "use default"
+      const { context, target } = makeTarget();
+      applySettings({ agentMentions: "direct" }, target);
+      expect(context.agentMentionMode).toBe("direct");
+      applySettings({}, target);
+      expect(context.agentMentionMode).toBe("direct"); // absence is "use default"
     });
 
     it("applies rememberAgents; skips it when absent", () => {
-      applySettings({ rememberAgents: false }, appliers);
-      expect(appliers.setRememberAgents).toHaveBeenCalledWith(false);
-      applySettings({}, appliers);
-      expect(appliers.setRememberAgents).toHaveBeenCalledTimes(1); // absence is "use default"
+      const { target } = makeTarget();
+      applySettings({ rememberAgents: false }, target);
+      expect(target.setRememberAgents).toHaveBeenCalledWith(false);
+      applySettings({}, target);
+      expect(target.setRememberAgents).toHaveBeenCalledTimes(1); // absence is "use default"
     });
 
     it("applies scopeModels: false", () => {
-      applySettings({ scopeModels: false }, appliers);
-      expect(appliers.setScopeModels).toHaveBeenCalledWith(false);
+      const { context, target } = makeTarget();
+      applySettings({ scopeModels: false }, target);
+      expect(context.modelScope.setEnabled).toHaveBeenCalledWith(false);
     });
 
     it("applies disableDefaultAgents: false", () => {
-      applySettings({ disableDefaultAgents: false }, appliers);
-      expect(appliers.setDisableDefaultAgents).toHaveBeenCalledWith(false);
+      const { target } = makeTarget();
+      applySettings({ disableDefaultAgents: false }, target);
+      expect(target.setDisableDefaultAgents).toHaveBeenCalledWith(false);
     });
 
     it("applies toolDescriptionMode", () => {
-      applySettings({ toolDescriptionMode: "full" }, appliers);
-      expect(appliers.setToolDescriptionMode).toHaveBeenCalledWith("full");
+      const { context, target } = makeTarget();
+      applySettings({ toolDescriptionMode: "custom" }, target);
+      expect(context.toolDescriptionMode).toBe("custom");
     });
 
     it("applies outputTranscript (both true and false)", () => {
-      applySettings({ outputTranscript: false }, appliers);
-      expect(appliers.setOutputTranscript).toHaveBeenCalledWith(false);
-      applySettings({ outputTranscript: true }, appliers);
-      expect(appliers.setOutputTranscript).toHaveBeenCalledWith(true);
+      const { target } = makeTarget();
+      applySettings({ outputTranscript: false }, target);
+      expect(target.setOutputTranscript).toHaveBeenCalledWith(false);
+      applySettings({ outputTranscript: true }, target);
+      expect(target.setOutputTranscript).toHaveBeenLastCalledWith(true);
     });
 
     it("applies worktreeIsolation (both true and false)", () => {
-      applySettings({ worktreeIsolation: false }, appliers);
-      expect(appliers.setWorktreeIsolation).toHaveBeenCalledWith(false);
-      applySettings({ worktreeIsolation: true }, appliers);
-      expect(appliers.setWorktreeIsolation).toHaveBeenCalledWith(true);
+      const { target } = makeTarget();
+      applySettings({ worktreeIsolation: false }, target);
+      expect(target.setWorktreeIsolation).toHaveBeenCalledWith(false);
+      applySettings({ worktreeIsolation: true }, target);
+      expect(target.setWorktreeIsolation).toHaveBeenLastCalledWith(true);
     });
 
     it("applies defaultMaxTurns: 0 as the explicit unlimited marker", () => {
-      applySettings({ defaultMaxTurns: 0 }, appliers);
-      expect(appliers.setDefaultMaxTurns).toHaveBeenCalledWith(0);
+      const { target } = makeTarget();
+      applySettings({ defaultMaxTurns: 0 }, target);
+      expect(target.setDefaultMaxTurns).toHaveBeenCalledWith(0);
     });
 
-    it("calls setBackgroundByDefault with either boolean", () => {
-      applySettings({ backgroundByDefault: false }, appliers);
-      expect(appliers.setBackgroundByDefault).toHaveBeenCalledWith(false);
-      applySettings({ backgroundByDefault: true }, appliers);
-      expect(appliers.setBackgroundByDefault).toHaveBeenCalledWith(true);
+    it("applies backgroundByDefault with either boolean; skips it when absent", () => {
+      const { context, target } = makeTarget();
+      applySettings({ backgroundByDefault: false }, target);
+      expect(context.backgroundByDefault).toBe(false);
+      applySettings({ backgroundByDefault: true }, target);
+      expect(context.backgroundByDefault).toBe(true);
+
+      // Absence must leave the in-memory default (background) alone — writing
+      // undefined would read as foreground at the spawn site.
+      context.backgroundByDefault = false;
+      applySettings({ maxConcurrent: 4 }, target);
+      expect(context.backgroundByDefault).toBe(false);
     });
 
-    // Absence must leave the in-memory default (background) alone — calling
-    // the applier with `undefined` would read as foreground at the spawn site.
-    it("does not call setBackgroundByDefault when the field is absent", () => {
-      applySettings({ maxConcurrent: 4 }, appliers);
-      expect(appliers.setBackgroundByDefault).not.toHaveBeenCalled();
+    // Wiring tests for the master switch — the parsed field has to reach the
+    // in-memory flag index.ts reads at spawn time.
+    it("applies schedulingEnabled(true) when schedulingEnabled is true", () => {
+      const { context, target } = makeTarget();
+      context.schedulingEnabled = false;
+      applySettings({ schedulingEnabled: true }, target);
+      expect(context.schedulingEnabled).toBe(true);
     });
 
-    // Wiring tests for the master switch — ensures the schedulingEnabled
-    // field flows from the parsed settings into the applier callback that
-    // sets the in-memory flag in index.ts.
-    it("calls setSchedulingEnabled(true) when schedulingEnabled is true", () => {
-      applySettings({ schedulingEnabled: true }, appliers);
-      expect(appliers.setSchedulingEnabled).toHaveBeenCalledWith(true);
+    it("applies schedulingEnabled(false) when schedulingEnabled is false", () => {
+      const { context, target } = makeTarget();
+      applySettings({ schedulingEnabled: false }, target);
+      expect(context.schedulingEnabled).toBe(false);
     });
 
-    it("calls setSchedulingEnabled(false) when schedulingEnabled is false", () => {
-      applySettings({ schedulingEnabled: false }, appliers);
-      expect(appliers.setSchedulingEnabled).toHaveBeenCalledWith(false);
-    });
-
-    // Absence preserves the in-memory default — the applier must NOT be
-    // called, otherwise loading a settings file without the field would
-    // overwrite the runtime default with `undefined`.
-    it("does not call setSchedulingEnabled when the field is absent", () => {
-      applySettings({ maxConcurrent: 4 }, appliers);
-      expect(appliers.setSchedulingEnabled).not.toHaveBeenCalled();
+    // Absence preserves the in-memory default, otherwise loading a settings file
+    // without the field would overwrite the runtime default.
+    it("leaves schedulingEnabled alone when the field is absent", () => {
+      const { context, target } = makeTarget();
+      applySettings({ maxConcurrent: 4 }, target);
+      expect(context.schedulingEnabled).toBe(true);
     });
   });
 
@@ -779,47 +818,18 @@ describe("settings persistence", () => {
   });
 
   describe("applyAndEmitLoaded", () => {
-    let appliers: SettingsAppliers;
-
-    beforeEach(() => {
-      appliers = {
-        setMaxConcurrent: vi.fn(),
-        setMaxConcurrentForeground: vi.fn(),
-        setDefaultMaxTurns: vi.fn(),
-        setGraceTurns: vi.fn(),
-        setDefaultJoinMode: vi.fn(),
-        setBackgroundByDefault: vi.fn(),
-        setSchedulingEnabled: vi.fn(),
-        setScopeModels: vi.fn(),
-        setStrictAgentFiles: vi.fn(),
-        setDisableDefaultAgents: vi.fn(),
-        setToolDescriptionMode: vi.fn(),
-        setFleetView: vi.fn(),
-        setAgentMentions: vi.fn(),
-      setRememberAgents: vi.fn(),
-        setWidgetMode: vi.fn(),
-        setViewerMarkdown: vi.fn(),
-        setOutputTranscript: vi.fn(),
-        setWorktreeIsolation: vi.fn(),
-        setMaxSubagentDepth: vi.fn(),
-        setFallbackSubagent: vi.fn(),
-        setReportUsage: vi.fn(),
-        setShowCost: vi.fn(),
-        setShowModel: vi.fn(),
-      };
-    });
-
     it("loads, applies, and emits subagents:settings_loaded with merged settings", () => {
       writeGlobal({ maxConcurrent: 16 });
       writeProject({ graceTurns: 7 });
+      const { context, target } = makeTarget();
       const emit = vi.fn();
 
-      const result = applyAndEmitLoaded(appliers, emit, projectDir);
+      const result = applyAndEmitLoaded(target, emit, projectDir);
 
-      expect(appliers.setMaxConcurrent).toHaveBeenCalledWith(16);
-      expect(appliers.setGraceTurns).toHaveBeenCalledWith(7);
-      expect(appliers.setDefaultMaxTurns).not.toHaveBeenCalled();
-      expect(appliers.setDefaultJoinMode).not.toHaveBeenCalled();
+      expect(context.manager.setMaxConcurrent).toHaveBeenCalledWith(16);
+      expect(target.setGraceTurns).toHaveBeenCalledWith(7);
+      expect(target.setDefaultMaxTurns).not.toHaveBeenCalled();
+      expect(context.defaultJoinMode).toBe("smart"); // absent -> the runtime default
 
       expect(emit).toHaveBeenCalledTimes(1);
       expect(emit).toHaveBeenCalledWith("subagents:settings_loaded", {
@@ -829,17 +839,18 @@ describe("settings persistence", () => {
     });
 
     it("still emits the event when both files are missing (payload carries {})", () => {
+      const { context, target } = makeTarget();
       const emit = vi.fn();
 
-      const result = applyAndEmitLoaded(appliers, emit, projectDir);
+      const result = applyAndEmitLoaded(target, emit, projectDir);
 
       expect(emit).toHaveBeenCalledWith("subagents:settings_loaded", { settings: {} });
       expect(result).toEqual({});
-      // No setters fired — defaults preserved
-      expect(appliers.setMaxConcurrent).not.toHaveBeenCalled();
-      expect(appliers.setDefaultMaxTurns).not.toHaveBeenCalled();
-      expect(appliers.setGraceTurns).not.toHaveBeenCalled();
-      expect(appliers.setDefaultJoinMode).not.toHaveBeenCalled();
+      // No writes fired — defaults preserved
+      expect(context.manager.setMaxConcurrent).not.toHaveBeenCalled();
+      expect(target.setDefaultMaxTurns).not.toHaveBeenCalled();
+      expect(target.setGraceTurns).not.toHaveBeenCalled();
+      expect(context.defaultJoinMode).toBe("smart");
     });
   });
 

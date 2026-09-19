@@ -31,7 +31,7 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
   // must not need a keypress first — so the toggle is a row here rather than a hidden setting.
   // Same `fleetView` key and the same save path as the Settings row, so the two cannot drift.
   const TOGGLE_PREFIX = "Agent view: ";
-  options.push(`${TOGGLE_PREFIX}${deps.context.isFleetViewEnabled() ? "on" : "off"}`);
+  options.push(`${TOGGLE_PREFIX}${deps.context.fleetViewEnabled ? "on" : "off"}`);
 
   // Running agents entry (only if there are active agents)
   const agents = deps.context.manager.listAgents().filter(isTopLevelAgent);
@@ -54,7 +54,7 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
 
   // Workflow runs, on the same terms as scheduled jobs: shown only when the
   // feature is on, so the menu never advertises something switched off.
-  if (deps.context.isWorkflowsEnabled()) {
+  if (deps.context.workflowsEnabled) {
     options.push(`Workflows (${deps.context.workflowTasks.size})`);
   }
 
@@ -76,7 +76,7 @@ export async function showAgentsMenu(ctx: ExtensionCommandContext, deps: AgentsU
   if (!choice) return;
 
   if (choice.startsWith(TOGGLE_PREFIX)) {
-    const next = !deps.context.isFleetViewEnabled();
+    const next = !deps.context.fleetViewEnabled;
     deps.context.setFleetViewEnabled(next);
     const { message, level } = saveAndEmitChanged(
       snapshotSettings(deps),

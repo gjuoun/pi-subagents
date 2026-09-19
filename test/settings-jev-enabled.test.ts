@@ -7,40 +7,50 @@
  * `_NoMissingSettingsKeys` guards at compile time).
  */
 import { describe, expect, it, vi } from "vitest";
-import { applySettings, type SettingsAppliers, type SubagentsSettings } from "../src/config/settings.js";
+import { applySettings, type SettingsSurface, type SettingsTarget, type SubagentsSettings } from "../src/config/settings.js";
 import { ActivationContext } from "../src/extension/context.js";
 import { ModelScope } from "../src/model/model-scope.js";
 import type { AgentsUiDeps } from "../src/ui/agents/deps.js";
 import { snapshotSettings } from "../src/ui/agents/settings-overlay.js";
 
-function makeAppliers(): SettingsAppliers {
-  return {
-    setMaxConcurrent: vi.fn(),
-    setMaxConcurrentForeground: vi.fn(),
-    setDefaultMaxTurns: vi.fn(),
-    setGraceTurns: vi.fn(),
-    setDefaultJoinMode: vi.fn(),
-    setBackgroundByDefault: vi.fn(),
-    setSchedulingEnabled: vi.fn(),
-    setScopeModels: vi.fn(),
-    setStrictAgentFiles: vi.fn(),
-    setDisableDefaultAgents: vi.fn(),
-    setToolDescriptionMode: vi.fn(),
-    setFleetView: vi.fn(),
-    setAgentMentions: vi.fn(),
-    setRememberAgents: vi.fn(),
-    setWidgetMode: vi.fn(),
-    setOutputTranscript: vi.fn(),
-    setWorktreeIsolation: vi.fn(),
-    setWorkflowsEnabled: vi.fn(),
-    setJevEnabled: vi.fn(),
-    setMaxSubagentDepth: vi.fn(),
-    setFallbackSubagent: vi.fn(),
+/** A target whose context is a plain object, so every write is observable. */
+function makeTarget(): { context: SettingsSurface; target: SettingsTarget } {
+  const context = {
+    manager: { setMaxConcurrent: vi.fn(), setMaxConcurrentForeground: vi.fn() },
+    modelScope: { setEnabled: vi.fn() },
+    strictAgentFiles: false,
+    defaultJoinMode: "smart",
+    backgroundByDefault: true,
+    schedulingEnabled: true,
+    toolDescriptionMode: "full",
+    fleetViewEnabled: true,
+    agentMentionMode: "model",
+    widgetMode: "background",
+    reportUsage: false,
+    showCost: false,
+    showModel: false,
+    viewerMarkdown: "all",
+    workflowsEnabled: true,
+    jevEnabled: false,
     setReportUsage: vi.fn(),
     setShowCost: vi.fn(),
     setShowModel: vi.fn(),
-    setViewerMarkdown: vi.fn(),
+    setWidgetMode: vi.fn(),
+    setFleetViewEnabled: vi.fn(),
+    setWorkflowsEnabled: vi.fn(),
+  } satisfies SettingsSurface;
+  const target: SettingsTarget = {
+    context,
+    setDefaultMaxTurns: vi.fn(),
+    setGraceTurns: vi.fn(),
+    setMaxSubagentDepth: vi.fn(),
+    setFallbackSubagent: vi.fn(),
+    setDisableDefaultAgents: vi.fn(),
+    setRememberAgents: vi.fn(),
+    setOutputTranscript: vi.fn(),
+    setWorktreeIsolation: vi.fn(),
   };
+  return { context, target };
 }
 
 /** Minimal deps for snapshotSettings — real context, one stub for the un-assigned manager. */
@@ -58,30 +68,30 @@ function makeDeps(context: ActivationContext): AgentsUiDeps {
 describe("jevEnabled", () => {
   it("defaults to off — the tool is opt-in, it costs an API call per use", () => {
     const context = new ActivationContext();
-    expect(context.isJevEnabled()).toBe(false);
+    expect(context.jevEnabled).toBe(false);
   });
 
-  it("applySettings wires the persisted value to the applier, both directions", () => {
-    const appliers = makeAppliers();
-    applySettings({ jevEnabled: true } as SubagentsSettings, appliers);
-    expect(appliers.setJevEnabled).toHaveBeenCalledWith(true);
+  it("applySettings wires the persisted value to the context, both directions", () => {
+    const { context, target } = makeTarget();
+    applySettings({ jevEnabled: true } as SubagentsSettings, target);
+    expect(context.jevEnabled).toBe(true);
 
-    vi.mocked(appliers.setJevEnabled).mockClear();
-    applySettings({ jevEnabled: false } as SubagentsSettings, appliers);
-    expect(appliers.setJevEnabled).toHaveBeenCalledWith(false);
+    applySettings({ jevEnabled: false } as SubagentsSettings, target);
+    expect(context.jevEnabled).toBe(false);
   });
 
   it("applySettings ignores an absent jevEnabled", () => {
-    const appliers = makeAppliers();
-    applySettings({} as SubagentsSettings, appliers);
-    expect(appliers.setJevEnabled).not.toHaveBeenCalled();
+    const { context, target } = makeTarget();
+    context.jevEnabled = true;
+    applySettings({} as SubagentsSettings, target);
+    expect(context.jevEnabled).toBe(true);
   });
 
   it("snapshotSettings round-trips the context value (missing here erases it from subagents.json)", () => {
     const context = new ActivationContext();
     expect(snapshotSettings(makeDeps(context)).jevEnabled).toBe(false);
 
-    context.setJevEnabled(true);
+    context.jevEnabled = true;
     expect(snapshotSettings(makeDeps(context)).jevEnabled).toBe(true);
   });
 });
