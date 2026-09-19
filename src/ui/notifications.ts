@@ -15,7 +15,7 @@
  */
 
 import { getStatusNote } from "../agent/session/status-note.js";
-import type { AgentRecord, NotificationDetails } from "../lib/types.js";
+import { AgentRecord } from "../lib/types.js";
 import type { AgentActivity, AgentDetails } from "../lib/ui/theme.js";
 import { getLifetimeCost, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "../lib/usage.js";
 import { escapeXml } from "../lib/xml.js";
@@ -108,4 +108,27 @@ export function buildNotificationDetails(record: AgentRecord, resultMaxLen: numb
         : record.result
       : "No output.",
   };
+}
+
+/** Details attached to custom notification messages for visual rendering. */
+export interface NotificationDetails {
+  id: string;
+  description: string;
+  status: string;
+  toolUses: number;
+  turnCount: number;
+  maxTurns?: number;
+  totalTokens: number;
+  /**
+   * Estimated cost in USD, from pi's per-message `usage.cost.total`. Always
+   * populated (0 when the model has no pricing); the renderer decides whether
+   * to show it, per the `showCost` setting.
+   */
+  totalCost?: number;
+  durationMs: number;
+  outputFile?: string;
+  error?: string;
+  resultPreview: string;
+  /** Additional agents in a group notification. */
+  others?: NotificationDetails[];
 }

@@ -22,9 +22,9 @@ import { nanoid } from "nanoid";
 import type { AgentManager } from "../agent/agent-manager.js";
 import { normalizeMaxTurns } from "../agent/run-limits.js";
 import { resolveSpawnType } from "../config/registry/agent-types.js";
-import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "../lib/types.js";
+import { IsolationMode, SubagentType, ThinkingLevel } from "../lib/types.js";
 import { resolveModel } from "../model/model-resolver.js";
-import type { ScheduleStore } from "./schedule-store.js";
+import type { ScheduledSubagent, ScheduleStore } from "./schedule-store.js";
 
 /** Event emitted on `pi.events` for cross-extension consumers. */
 export type ScheduleChangeEvent =

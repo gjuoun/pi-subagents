@@ -13,9 +13,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import type { DeliveryCallback } from "../agent/group-join.js";
-import type { AgentRecord, JoinMode, NotificationDetails } from "../lib/types.js";
+import { AgentRecord, JoinMode } from "../lib/types.js";
 import { formatCost, formatMs, formatTokens, formatTurns } from "../lib/ui/format.js";
 import type { AgentActivity } from "../lib/ui/theme.js";
+import type { NotificationDetails } from "./notifications.js";
 import { buildNotificationDetails, formatTaskNotification } from "./notifications.js";
 
 /** The handles this policy reads. Structural, like every slice: the wiring layer owns the objects. */
