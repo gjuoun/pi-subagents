@@ -118,7 +118,7 @@ export function createExtension(pi: ExtensionAPI): void {
    * The completion policy, owned by the domains it belongs to: the notification surface (which
    * registers its own message renderer) and the manager's lifecycle callbacks.
    */
-  const notify = createCompletionNudge({ pi, services, showCost: () => context.showCost });
+  const notify = createCompletionNudge({ pi, services, showCost: () => context.showCost, batch: context });
   const policy = {
     ...createManagerCallbacks({ pi, services, context, notify }),
     onGroupComplete: notify.onGroupComplete,
@@ -278,39 +278,6 @@ export function createExtension(pi: ExtensionAPI): void {
     setDefaultsDisabled(b);
     reloadCustomAgents(); // re-register with new setting
   }
-  /** Finalize the current batch: if 2+ smart-mode agents, register as a group. */
-  function finalizeBatch() {
-    context.batchFinalizeTimer = undefined;
-    const batchAgents = [...context.currentBatchAgents];
-    context.currentBatchAgents = [];
-
-    const smartAgents = batchAgents.filter(a => a.joinMode === 'smart' || a.joinMode === 'group');
-    if (smartAgents.length >= 2) {
-      const groupId = `batch-${++context.batchCounter}`;
-      const ids = smartAgents.map(a => a.id);
-      services.groupJoin.registerGroup(groupId, ids);
-      // Retroactively process agents that already completed during the debounce window.
-      // Their onComplete fired but was deferred (agent was in currentBatchAgents),
-      // so we feed them into the group now.
-      for (const id of ids) {
-        const record = services.manager.getRecord(id);
-        if (!record) continue;
-        record.groupId = groupId;
-        if (record.completedAt != null && !record.resultConsumed) {
-          services.groupJoin.onAgentComplete(record);
-        }
-      }
-    } else {
-      // No group formed — send individual nudges for any agents that completed
-      // during the debounce window and had their notification deferred.
-      for (const { id } of batchAgents) {
-        const record = services.manager.getRecord(id);
-        if (record?.completedAt != null && !record.resultConsumed) {
-          notify.sendIndividualNudge(record);
-        }
-      }
-    }
-  }
 
   /**
    * Launch a detached resume of an existing agent and wire everything a
@@ -379,7 +346,7 @@ export function createExtension(pi: ExtensionAPI): void {
     if (joinMode != null && joinMode !== 'async') {
       context.currentBatchAgents.push({ id, joinMode });
       if (context.batchFinalizeTimer) clearTimeout(context.batchFinalizeTimer);
-      context.batchFinalizeTimer = setTimeout(finalizeBatch, 100);
+      context.batchFinalizeTimer = setTimeout(notify.finalizeBatch, 100);
     }
 
     services.agentActivity.set(id, bgState);
@@ -445,7 +412,7 @@ export function createExtension(pi: ExtensionAPI): void {
     services,
     context,
     reloadCustomAgents,
-    finalizeBatch,
+    finalizeBatch: notify.finalizeBatch,
     startBackgroundResume,
     resolveAgentRef,
     cancelNudge: notify.cancelNudge,
