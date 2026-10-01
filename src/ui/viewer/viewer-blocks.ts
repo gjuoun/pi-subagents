@@ -111,10 +111,10 @@ function resultLineCount(result: ViewerToolResult | undefined): number {
 }
 
 
-/** `✔` ok · `✘` failed · `⟳` still running. */
+/** `✅` ok · `❌` failed · `⏳` still running. */
 function mark(result: ViewerToolResult | undefined): string {
-  if (!result) return "⟳";
-  return result.isError ? "✘" : "✔";
+  if (!result) return "⏳";
+  return result.isError ? "❌" : "✅";
 }
 
 /** `<path>` with a `:offset-end` range when the call asked for one. */
@@ -233,7 +233,7 @@ function bodyFor(call: ViewerToolCall, result: ViewerToolResult | undefined, opt
   // body already carried the message (a `bash` failure prints its error as its output).
   if (result?.isError) {
     const error = resultText(result).split("\n")[0] ?? "";
-    if (error && !lines.some(line => line.includes(error))) lines.push(`✘ ${error}`);
+    if (error && !lines.some(line => line.includes(error))) lines.push(`❌ ${error}`);
   }
 
   return lines
@@ -277,12 +277,12 @@ export function renderToolBlock(call: ViewerToolCall, result: ViewerToolResult |
  * The background a block's head takes, following pi's own tool-block tints.
  *
  * Lives here because the marks do: the viewer can paint the tint but must not have to
- * re-derive what `⟳`/`✔`/`✘` mean in order to do it.
+ * re-derive what `⏳`/`✅`/`❌` mean in order to do it.
  */
 export function blockTint(head: string): "toolPendingBg" | "toolSuccessBg" | "toolErrorBg" {
   const mark = head.trimStart()[0];
-  if (mark === "✘") return "toolErrorBg";
-  return mark === "⟳" ? "toolPendingBg" : "toolSuccessBg";
+  if (mark === "❌") return "toolErrorBg";
+  return mark === "⏳" ? "toolPendingBg" : "toolSuccessBg";
 }
 
 /**
@@ -301,7 +301,7 @@ export function renderResultBlock(toolName: string, result: ViewerToolResult | u
   const lines = text ? take(text.split("\n"), cap, !expanded) : [];
   if (result?.isError) {
     const error = text.split("\n")[0] ?? "";
-    if (error && !lines.some(line => line.includes(error))) lines.push(`✘ ${error}`);
+    if (error && !lines.some(line => line.includes(error))) lines.push(`❌ ${error}`);
   }
   return [
     truncateToWidth(`${mark(result)} ${toolName}`, Math.max(0, width)),

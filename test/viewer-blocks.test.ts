@@ -75,13 +75,13 @@ describe("built-in tool shapes", () => {
   it("read is a single line naming the file, its range and its line count", () => {
     const lines = render(call("read", { path: "src/auth.ts", offset: 1, limit: 120 }), result("c1", "x", { details: { truncation: { totalLines: 120 } } }));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("✔ read src/auth.ts:1-120 · 120 lines");
+    expect(lines[0]).toContain("✅ read src/auth.ts:1-120 · 120 lines");
   });
 
   it("read without a range names only the path", () => {
     const lines = render(call("read", { path: "src/auth.ts" }), result("c1", "a\nb\nc"));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("✔ read src/auth.ts · 3 lines");
+    expect(lines[0]).toContain("✅ read src/auth.ts · 3 lines");
   });
 
   it("read shows the body only when expanded", () => {
@@ -94,7 +94,7 @@ describe("built-in tool shapes", () => {
     const diff = "  context\n- old\n+ new\n+ more";
     const r = result("c1", "Edited", { details: { diff } });
     const lines = render(call("edit", { path: "src/a.ts", edits: [{ oldText: "a", newText: "b" }] }), r);
-    expect(lines[0]).toContain("✔ edit src/a.ts · 1 replacement");
+    expect(lines[0]).toContain("✅ edit src/a.ts · 1 replacement");
     expect(plain(lines.slice(1))).toEqual(["context", "- old", "+ new", "+ more"]);
   });
 
@@ -126,7 +126,7 @@ describe("built-in tool shapes", () => {
 
   it("bash shows live partial output while the tool is still running", () => {
     const lines = render(call("bash", { command: "sleep 5" }), undefined, { partial: "tick1\ntick2" });
-    expect(lines[0].trimStart().startsWith("⟳")).toBe(true);
+    expect(lines[0].trimStart().startsWith("⏳")).toBe(true);
     expect(plain(lines.slice(1))).toEqual(["tick1", "tick2"]);
   });
 
@@ -137,7 +137,7 @@ describe("built-in tool shapes", () => {
   it("write shows the last line being written while it runs", () => {
     const content = "# Title\n\nfirst body line\nlast written line\n";
     const lines = render(call("write", { path: "docs/n.md", content }), undefined);
-    expect(lines[0]).toContain("⟳ write docs/n.md · 5 lines");
+    expect(lines[0]).toContain("⏳ write docs/n.md · 5 lines");
     expect(plain(lines.slice(1))).toEqual(["⎿ last written line"]);
   });
 
@@ -154,7 +154,7 @@ describe("built-in tool shapes", () => {
   ])("%s inlines its parameters on one line", (name, args, expected) => {
     const lines = render(call(name, args), result("c1", "match 1\nmatch 2"));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(`✔ ${expected}`);
+    expect(lines[0]).toContain(`✅ ${expected}`);
   });
 
   it("expansion reveals a search's matches", () => {
@@ -166,7 +166,7 @@ describe("built-in tool shapes", () => {
 describe("unshaped tools render their parameters", () => {
   it("shows parameters under the threshold in full", () => {
     const lines = render(call("custom_tool", { alpha: 1, beta: "two" }), result("c1", "ok"));
-    expect(lines[0].trimEnd()).toBe("✔ custom_tool");
+    expect(lines[0].trimEnd()).toBe("✅ custom_tool");
     expect(lines.join("\n")).toContain('"alpha": 1');
   });
 
@@ -181,7 +181,7 @@ describe("unshaped tools render their parameters", () => {
   it("folds parameters over the threshold and leaks none of them", () => {
     const script = Array.from({ length: 24 }, (_, i) => `await tools.bash({ command: 'echo ${i}' });`).join("\n");
     const lines = render(call("jun_code", { code: script }), result("c1", "ok"));
-    expect(lines[0]).toContain(`✔ jun_code ${PARAMS_FOLDED}`);
+    expect(lines[0]).toContain(`✅ jun_code ${PARAMS_FOLDED}`);
     expect(lines.join("\n")).not.toContain("tools.bash");
   });
 
@@ -199,20 +199,20 @@ describe("unshaped tools render their parameters", () => {
 
   it("a tool with no parameters is just its name", () => {
     expect(render(call("ping", {}), result("c1", "pong"))).toHaveLength(1);
-    expect(head(call("ping", {}), result("c1", "pong"))).toContain("✔ ping");
+    expect(head(call("ping", {}), result("c1", "pong"))).toContain("✅ ping");
   });
 });
 
 describe("marks", () => {
   it("marks a call with no result as still running", () => {
-    expect(head(call("read", { path: "a.ts" }), undefined).trimStart().startsWith("⟳")).toBe(true);
+    expect(head(call("read", { path: "a.ts" }), undefined).trimStart().startsWith("⏳")).toBe(true);
   });
 
   it("says why a tool nobody shaped failed", () => {
     const failed = { toolCallId: "c1", toolName: "custom_tool", isError: true, content: [{ type: "text", text: "Error: no such endpoint" }], details: {} };
     const lines = render(call("custom_tool", { alpha: 1 }), failed);
-    expect(lines[0].trimStart().startsWith("✘")).toBe(true);
-    expect(plain(lines.slice(1))).toContain("✘ Error: no such endpoint");
+    expect(lines[0].trimStart().startsWith("❌")).toBe(true);
+    expect(plain(lines.slice(1))).toContain("❌ Error: no such endpoint");
   });
 
   it("does not say it twice when the tool output already is the error", () => {
@@ -226,8 +226,8 @@ describe("marks", () => {
   it("keeps the tool's own shape on failure", () => {
     const failed = { toolCallId: "c1", toolName: "read", isError: true, content: [{ type: "text", text: "ENOENT" }], details: {} };
     const lines = render(call("read", { path: "gone.ts" }), failed);
-    expect(lines[0]).toContain("✘ read gone.ts");
-    expect(plain(lines.slice(1))).toEqual(["✘ ENOENT"]);
+    expect(lines[0]).toContain("❌ read gone.ts");
+    expect(plain(lines.slice(1))).toEqual(["❌ ENOENT"]);
   });
 });
 

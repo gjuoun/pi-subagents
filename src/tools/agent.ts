@@ -192,7 +192,7 @@ export function createAgentTool(deps: ToolsDeps) {
       if (details.status === "completed" || details.status === "steered") {
         const duration = formatMs(details.durationMs);
         const isSteered = details.status === "steered";
-        const icon = isSteered ? theme.fg("warning", "✓") : theme.fg("success", "✓");
+        const icon = "✅";
         const s = stats(details);
         let line = icon + (s ? " " + s : "");
         line += " " + theme.fg("dim", "·") + " " + theme.fg("dim", duration);
@@ -217,7 +217,7 @@ export function createAgentTool(deps: ToolsDeps) {
 
       if (details.status === "stopped") {
         const s = stats(details);
-        let line = theme.fg("dim", "■") + (s ? " " + s : "");
+        let line = "🛑" + (s ? " " + s : "");
         line += "\n" + theme.fg("dim", "  ⎿  Stopped");
         return row(line);
       }
@@ -229,7 +229,7 @@ export function createAgentTool(deps: ToolsDeps) {
       }
 
       const s = stats(details);
-      let line = theme.fg("error", "✗") + (s ? " " + s : "");
+      let line = "❌" + (s ? " " + s : "");
 
       if (details.status === "error") {
         line += "\n" + theme.fg("error", `  ⎿  Error: ${details.error ?? "unknown"}`);

@@ -118,8 +118,9 @@ export interface WorkflowDialogGlyphs {
 }
 
 export const UNICODE_DIALOG_GLYPHS: WorkflowDialogGlyphs = {
-  tick: UNICODE_GLYPHS.tick,
-  cross: UNICODE_GLYPHS.cross,
+  // Literal marks, not the card's emoji: the dialog is a bordered layout and keeps single-width glyphs.
+  tick: "✔",
+  cross: "✘",
   queued: "◌",
   pointer: "❯",
   focus: UNICODE_GLYPHS.pointer,

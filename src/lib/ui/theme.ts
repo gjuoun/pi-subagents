@@ -27,6 +27,8 @@ export type Theme = {
    * double that only implements `fg`/`bold` renders no tint rather than failing.
    */
   bg?(color: string, text: string): string;
+  /** The opening escape of a background color, for rows whose own codes would end a `bg` wrap. */
+  getBgAnsi?(color: string): string;
 };
 
 export type UICtx = {

@@ -144,7 +144,7 @@ export function createCompletionNudge({ pi, services, showCost, batch }: Complet
 
       function renderOne(d: NotificationDetails): string {
         const isError = d.status === "error" || d.status === "stopped" || d.status === "aborted";
-        const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+        const icon = isError ? "❌" : "✅";
         const statusText = isError ? d.status
           : d.status === "steered" ? "completed (steered)"
           : "completed";

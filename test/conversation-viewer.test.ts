@@ -239,7 +239,7 @@ describe("ConversationViewer", () => {
       const inner = line.slice(start, line.indexOf("\x1b[0m", start));
 
       expect(visibleWidth(inner)).toBe(76);
-      expect(inner.startsWith("✔ read src/a.ts")).toBe(true);
+      expect(inner.startsWith("✅ read src/a.ts")).toBe(true);
     });
 
     /**
@@ -265,20 +265,38 @@ describe("ConversationViewer", () => {
       expect(viewer.render(80).join("\n")).toContain("\x1b[48;5;1m");
     });
 
-    it("does not dim the body it sits above", () => {
+    const bodyLinesOf = (status: "done" | "error" | "running", text: string, theme: any) => {
       const messages = [
         { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "bash", arguments: { command: "echo hi" } }] },
-        { role: "toolResult", toolCallId: "c1", toolName: "bash", isError: false, content: [{ type: "text", text: "hi" }], details: {} },
+        ...(status === "running"
+          ? []
+          : [{ role: "toolResult", toolCallId: "c1", toolName: "bash", isError: status === "error", content: [{ type: "text", text }], details: {} }]),
       ];
       const viewer = new ConversationViewer(
         mockTui(30, 80), mockSession(messages), mockRecord({ status: "running" }), undefined,
-        bgTheme() as any, vi.fn(),
+        theme, vi.fn(),
       );
-      const lines = (viewer as any).buildContentLines(76) as string[];
-      const body = lines.find(l => l.trim() === "hi");
+      return (viewer as any).buildContentLines(76) as string[];
+    };
 
-      expect(body).toBeDefined();
-      expect(body).not.toContain("\x1b[48;5;");
+    it("tints the body rows with the same background as the head, padded to the row", () => {
+      for (const [status, code] of [["done", 2], ["error", 3]] as const) {
+        const lines = bodyLinesOf(status, "hi", bgTheme());
+        const body = lines.find(l => l.includes("hi") && !l.includes("echo"));
+
+        expect(body).toBeDefined();
+        expect(body).toContain(`\x1b[48;5;${code}m`);
+        expect(visibleWidth(body!)).toBe(76);
+      }
+    });
+
+    it("keeps the tint across the resets a body line carries", () => {
+      const ansi = { ...bgTheme(), getBgAnsi: (c: string) => `\x1b[48;5;${BG_CODES[c]}m` };
+      const lines = bodyLinesOf("done", "a \x1b[1mbold\x1b[0m tail", ansi);
+      const body = lines.find(l => l.includes("tail"))!;
+
+      expect(body).toContain("\x1b[0m\x1b[48;5;2m tail");
+      expect(body.endsWith("\x1b[49m")).toBe(true);
     });
 
     it("renders no tint at all for a theme that cannot paint one", () => {
