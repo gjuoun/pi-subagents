@@ -10,7 +10,6 @@ import {
   type FleetUICtx,
   type FleetWorkflow,
   formatFleetElapsed,
-  formatFleetTokens,
 } from "../src/ui/fleet-list.js";
 
 // ---- Key sequences (see node_modules/@earendil-works/pi-tui/dist/keys.js) ----
@@ -195,14 +194,6 @@ describe("formatFleetElapsed", () => {
   });
 });
 
-describe("formatFleetTokens", () => {
-  it("prefixes a down-arrow and uses plural 'tokens'", () => {
-    expect(formatFleetTokens(13_100)).toBe("↓ 13.1k tokens");
-    expect(formatFleetTokens(950)).toBe("↓ 950 tokens");
-    expect(formatFleetTokens(1_200_000)).toBe("↓ 1.2M tokens");
-  });
-});
-
 describe("FleetList navigation", () => {
   it("does not register a widget when there are no agents", () => {
     const h = harness([]);
@@ -223,8 +214,8 @@ describe("FleetList navigation", () => {
     const h = harness([makeRecord()]);
     const res = h.press(DOWN);
     expect(res).toEqual({ consume: true });
-    // main selected, list active → nav hint shown
-    expect(h.render().some(l => l.includes("enter view"))).toBe(true);
+    // prompt slot selected, list active → it consumes the arrow keys
+    expect(h.press(UP)).toEqual({ consume: true }); // the list owns the arrows now
   });
 
   it("also activates on ← (matches the '← for agents' hint)", () => {
@@ -243,13 +234,13 @@ describe("FleetList navigation", () => {
       makeRecord({ id: "a1", description: "one" }),
       makeRecord({ id: "a2", description: "two" }),
     ]);
-    h.press(DOWN);          // activate → selection on main (idx 0)
+    h.press(DOWN);          // activate → selection on the prompt slot (idx 0)
     h.press(DOWN_RELEASE);  // release half of the SAME tap — must be a no-op
-    expect(h.render().find(l => l.includes("main"))).toContain("●");
+    expect(h.render().some(l => l.includes("●"))).toBe(false); // still on the prompt slot
     h.press(DOWN);          // a real second tap → first agent
     h.press(DOWN_RELEASE);
     expect(h.render().find(l => l.includes("one"))).toContain("●");
-    expect(h.render().find(l => l.includes("two"))).toContain("○");
+    expect(h.render().find(l => l.includes("two"))).not.toContain("●");
   });
 
   it("renders the whole selected row in the theme's primary text color (#230)", () => {
@@ -263,13 +254,14 @@ describe("FleetList navigation", () => {
     // Selection marker keeps accent color; row content uses primary text color.
     expect(selected).toContain("<accent>●</accent>");
     expect(selected).toContain("<text>one</text>");
-    expect(selected).toMatch(/<text>\d+s · ↓ [\d.]+k? tokens<\/text>/);
+    // The clock keeps its status color on a selected row — color is what says "running".
+    expect(selected).toMatch(/<warning>\s*\d+s<\/warning>/);
     // Agent display name rendered with the text token too (this type has no badge).
     expect(selected).toContain(`<text>${getDisplayName("general-purpose")}</text>`);
     // Inactive rows keep the muted/dim treatment.
     const unselected = h.render().find(l => l.includes("two"))!;
-    expect(unselected).toContain("<dim>○</dim>");
-    expect(unselected).toMatch(/<dim>\d+s · ↓ [\d.]+k? tokens<\/dim>/);
+    expect(unselected).not.toContain("●");
+    expect(unselected).toMatch(/<warning>\s*\d+s<\/warning>/);
     expect(unselected).not.toContain("<text>");
   });
 
@@ -310,29 +302,29 @@ describe("FleetList navigation", () => {
     h.press(DOWN); // → 2 (a2)
     h.press(DOWN); // clamp at 2
     expect(h.render().find(l => l.includes("two"))).toContain("●");
-    expect(h.render().find(l => l.includes("one"))).toContain("○");
+    expect(h.render().find(l => l.includes("one"))).not.toContain("●");
   });
 
-  it("↑ above 'main' deactivates (returns to the prompt)", () => {
+  it("↑ above the first row deactivates (returns to the prompt)", () => {
     const h = harness([makeRecord()]);
     h.press(DOWN); // activate, index 0
     expect(h.press(UP)).toEqual({ consume: true });
-    // back to inactive hint
-    expect(h.render().some(l => l.includes("← for agents"))).toBe(true);
+    // back to idle: no key hint
+    expect(h.press(UP)).toBeUndefined(); // idle again: arrows flow back to the editor
   });
 
   it("Esc deactivates", () => {
     const h = harness([makeRecord()]);
     h.press(DOWN);
     expect(h.press(ESC)).toEqual({ consume: true });
-    expect(h.render().some(l => l.includes("← for agents"))).toBe(true);
+    expect(h.press(UP)).toBeUndefined(); // idle again: arrows flow back to the editor
   });
 
   it("passes non-nav keys through and cancels navigation", () => {
     const h = harness([makeRecord()]);
     h.press(DOWN);
     expect(h.press(RIGHT)).toBeUndefined();
-    expect(h.render().some(l => l.includes("← for agents"))).toBe(true);
+    expect(h.press(UP)).toBeUndefined(); // idle again: arrows flow back to the editor
   });
 
   it("ignores all input while disabled and hides the widget", () => {
@@ -393,7 +385,7 @@ describe("FleetList liveness (a session that attaches after the spawn)", () => {
     const h = harness([makeRecord({ description: "the only one" })]);
     const lines = h.render();
     expect(lines.some(l => l.includes("the only one"))).toBe(true);
-    expect(lines[0]).toContain("← for agents"); // the inactive hint: no key activated it
+    expect(lines).toHaveLength(1); // just the row: no hint, no `main`, until a key activates the list
   });
 
   it("keeps no timer at all while no agent is live (an idle session stays quiet)", () => {
@@ -451,8 +443,8 @@ describe("FleetList vs other focused components (#123)", () => {
     expect(h.press(DOWN)).toBeUndefined();
     expect(h.press(ENTER)).toBeUndefined();
     expect(h.press(ESC)).toBeUndefined();
-    // and the list dropped back to its inactive hint
-    expect(h.render().some(l => l.includes("← for agents"))).toBe(true);
+    // and the list dropped back to idle: no key hint
+    expect(h.press(UP)).toBeUndefined(); // idle again: arrows flow back to the editor
   });
 
   it("still activates when the prompt editor has focus", () => {
@@ -469,17 +461,17 @@ describe("FleetList vs other focused components (#123)", () => {
 });
 
 describe("FleetList rendering", () => {
-  it("renders main + agent rows with markers, type, description and right-aligned stats", () => {
+  it("renders agent rows with status, clock, type, description and right-aligned stats", () => {
     const h = harness([makeRecord({ description: "Sleep then report 1" })]);
     const lines = h.render(120);
-    // hint + blank + main + one agent
-    expect(lines[0]).toContain("← for agents");
-    expect(lines.find(l => l.includes("main"))).toContain("●"); // main selected by default
-    const agentLine = lines.find(l => l.includes("Sleep then report 1"))!;
-    expect(agentLine).toContain("○");
+    // Idle: the row alone — no hint line, no `main` row, no cursor.
+    expect(lines).toHaveLength(1);
+    expect(lines.join("\n")).not.toContain("main");
+    const agentLine = lines[0];
+    expect(agentLine).not.toContain("●");
     expect(agentLine).toContain(getDisplayName("general-purpose"));
-    expect(agentLine).toContain("↓ 13.1k tokens");
-    expect(agentLine).toMatch(/\d+s · ↓/); // "<seconds>s · ↓ ..." (timing-agnostic)
+    expect(agentLine).toMatch(/⏳ <warning>\s*\d+s<\/warning>/); // status, then clock (timing-agnostic)
+    expect(agentLine).not.toContain("tokens"); // tokens are not a row field
   });
 
   it("orders agents earliest-launched first (top)", () => {
@@ -538,12 +530,12 @@ describe("FleetList rendering", () => {
 });
 
 describe("FleetList overlay lifecycle", () => {
-  it("Enter on 'main' just deactivates (no overlay)", () => {
+  it("Enter on the prompt slot (no row selected) just deactivates (no overlay)", () => {
     const h = harness([makeRecord()]);
-    h.press(DOWN); // active, index 0 (main)
+    h.press(DOWN); // active, index 0 (the prompt slot — no row marked)
     h.press(ENTER);
     expect(h.overlayOpened()).toBe(false); // never opened an overlay
-    expect(h.render().some(l => l.includes("← for agents"))).toBe(true);
+    expect(h.press(UP)).toBeUndefined(); // idle again: arrows flow back to the editor
   });
 
   it("keeps the cursor on the viewed agent after closing, even if the list reordered", async () => {
@@ -563,7 +555,7 @@ describe("FleetList overlay lifecycle", () => {
     await h.closeOverlay();
     // Selection follows a2 ("two") to its new position, not whatever is at idx 2 now.
     expect(h.render().find(l => l.includes("two"))).toContain("●");
-    expect(h.render().find(l => l.includes("three"))).toContain("○");
+    expect(h.render().find(l => l.includes("three"))).not.toContain("●");
   });
 
   it("wires the viewer's steer composer to manager.steer with the agent id", () => {
@@ -622,6 +614,97 @@ describe("FleetList overlay lifecycle", () => {
   });
 });
 
+describe("FleetList status row", () => {
+  const NOW = Date.now();
+  const rowFor = (record: AgentRecord, activity?: Map<string, AgentActivity>): string => {
+    const fleet = new FleetList(fakeManager([record]), activity ?? new Map());
+    let factory: any;
+    fleet.setUICtx({
+      setWidget: (_k: string, c: any) => { factory = c; },
+      onTerminalInput: () => () => {},
+      getEditorText: () => "",
+      notify: () => {},
+      custom: (() => new Promise(() => {})) as any,
+    } as any);
+    fleet.update();
+    // Wide on purpose: this theme's <color> tags count as visible width, which real escapes do not.
+    const lines: string[] = factory({ requestRender: () => {}, terminal: { columns: 400, rows: 40 } }, theme).render(400);
+    return lines.find(l => l.includes(record.description))!;
+  };
+  const withContext = (percent: number | null): Map<string, AgentActivity> => new Map([["a1", {
+    activeTools: new Map(), toolUses: 0, responseText: "", turnCount: 1,
+    session: { getSessionStats: () => ({ tokens: { input: 0, output: 0, cacheWrite: 0 }, contextUsage: { percent } }) },
+  } as unknown as AgentActivity]]);
+
+  it.each([
+    ["queued", "🕒", "dim"],
+    ["running", "⏳", "warning"],
+    ["completed", "✅", "success"],
+    ["steered", "✅", "success"],
+    ["error", "❌", "error"],
+    ["aborted", "🛑", "error"],
+    ["stopped", "🛑", "dim"],
+  ] as const)("shows %s as %s with a %s clock", (status, icon, color) => {
+    const finished = status !== "running" && status !== "queued";
+    const line = rowFor(makeRecord({ status, startedAt: NOW - 8_000, completedAt: finished ? NOW : undefined }));
+    expect(line).toContain(icon + " <" + color + ">");
+  });
+
+  it("puts status and time before the agent name, and the model and context after the description", () => {
+    const line = plain(rowFor(
+      makeRecord({ startedAt: NOW - 15_000, invocation: { modelName: "glm-5.3-flash" } }),
+      withContext(9),
+    ));
+    expect(line.indexOf("⏳")).toBeLessThan(line.indexOf("15s"));
+    expect(line.indexOf("15s")).toBeLessThan(line.indexOf(getDisplayName("general-purpose")));
+    expect(line.indexOf("Sleep then report 1")).toBeLessThan(line.indexOf("glm-5.3-flash"));
+    expect(line).toMatch(/glm-5\.3-flash · 9%\s*$/);
+  });
+
+  it("colours context by pressure: dim, then amber from 60%, then red from 85%", () => {
+    const ctx = (percent: number) => rowFor(makeRecord({ invocation: { modelName: "m" } }), withContext(percent));
+    expect(ctx(59)).toContain("<dim>59%</dim>");
+    expect(ctx(60)).toContain("<warning>60%</warning>");
+    expect(ctx(84)).toContain("<warning>84%</warning>");
+    expect(ctx(85)).toContain("<error>85%</error>");
+  });
+
+  it("omits the model and context fields when the session reports neither", () => {
+    const line = plain(rowFor(makeRecord({ description: "bare" })));
+    expect(line).not.toContain("%");
+    expect(line).not.toContain(" · ");
+  });
+
+  it("on a narrow terminal drops the description, then context, then model — never status, clock or name", () => {
+    // Zero-width colours, like a real terminal: only the text counts against the width.
+    const bare = { fg: (_c: string, s: string) => s, bold: (s: string) => s };
+    const at = (width: number): string => {
+      const fleet = new FleetList(fakeManager([makeRecord({ invocation: { modelName: "glm-5.3-flash" } })]), withContext(9));
+      let factory: any;
+      fleet.setUICtx({
+        setWidget: (_k: string, c: any) => { factory = c; },
+        onTerminalInput: () => () => {},
+        getEditorText: () => "",
+        notify: () => {},
+        custom: (() => new Promise(() => {})) as any,
+      } as any);
+      fleet.update();
+      const lines: string[] = factory({ requestRender: () => {}, terminal: { columns: width, rows: 40 } }, bare).render(width);
+      for (const l of lines) expect(visibleWidth(l)).toBeLessThanOrEqual(width);
+      return lines.find(l => l.includes("⏳"))!;
+    };
+    expect(at(120)).toMatch(/glm-5\.3-flash · 9%$/);
+    const tight = at(34); // room for the lead and a model, not for the description
+    expect(tight).toMatch(/⏳\s+\d+s/);
+    expect(tight).toContain(getDisplayName("general-purpose"));
+    expect(tight).not.toContain("Sleep");
+    const tighter = at(24); // no room for any field: the lead alone
+    expect(tighter).toMatch(/⏳\s+\d+s/);
+    expect(tighter).not.toContain("glm");
+    expect(tighter).not.toContain("%");
+  });
+});
+
 describe("FleetList cost display", () => {
   const theme = { fg: (_c: string, s: string) => s, bold: (s: string) => s };
 
@@ -640,9 +723,9 @@ describe("FleetList cost display", () => {
     return factory({ requestRender: () => {}, terminal: { columns: 120, rows: 40 } }, theme).render(120).join("\n");
   }
 
-  it("appends the cost after the token count when enabled", () => {
+  it("appends the cost to the right-hand stats when enabled", () => {
     const out = row(true, 0.0042);
-    expect(out).toContain("13.1k tokens");
+    expect(out).not.toContain("tokens");
     expect(out).toContain("~$0.0042");
   });
 
@@ -721,7 +804,8 @@ describe("FleetList workflow rows", () => {
     const agent = rows.findIndex(row => row.includes("one"));
     expect(run).toContain("workflow");
     expect(run).toContain("1/3 agents");
-    expect(run).toContain("26.4k tokens");
+    expect(run).not.toContain("tokens");
+    expect(run).toMatch(/⏳\s+\d+s/);
     // A run owns most of the agents under it, so the container comes first.
     expect(rows.findIndex(row => row.includes("audit-src"))).toBeLessThan(agent);
   });
@@ -729,7 +813,7 @@ describe("FleetList workflow rows", () => {
   it("agrees with itself about a single-agent run", () => {
     const h = harness([]);
     h.setWorkflows([makeWorkflow({ doneCount: 1, totalCount: 1 })]);
-    expect(h.render().map(plain).join("\n")).toContain("1/1 agent ");
+    expect(h.render().map(plain).some(row => /1\/1 agent\s*$/.test(row))).toBe(true); // singular, not "agents"
   });
 
   it("hides the run's own agents — the run is the row that represents them", () => {

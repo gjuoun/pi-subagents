@@ -1,7 +1,7 @@
 /**
  * fleet-list.ts — Claude Code-style "FleetView" list rendered below the editor.
  *
- * Shows `main` + each running/queued subagent as a navigable list. Pressing ↓ (or
+ * Shows each running/queued subagent as a navigable list. Pressing ↓ (or
  * ←) at an empty prompt activates the list; ↑/↓ move the selection (filled ● marker),
  * Enter opens the selected agent's live conversation overlay, Esc returns to the prompt.
  * A viewer stays open when its agent finishes; finished agents linger briefly in the list.
@@ -16,7 +16,7 @@ import { type AgentManager, isTopLevelAgent } from "../agent/agent-manager.js";
 import type { AgentRecord, ViewerMarkdownMode } from "../lib/types.js";
 import { formatCost } from "../lib/ui/format.js";
 import type { AgentActivity, Theme } from "../lib/ui/theme.js";
-import { getLifetimeCost, getLifetimeTotal } from "../lib/usage.js";
+import { getLifetimeCost, getSessionContextPercent } from "../lib/usage.js";
 import { hasAgentBadge, renderAgentName } from "./agent-color.js";
 import { ConversationViewer, VIEWER_OVERLAY } from "./viewer/conversation-viewer.js";
 
@@ -24,7 +24,7 @@ import { ConversationViewer, VIEWER_OVERLAY } from "./viewer/conversation-viewer
 const FLEET_KEY = "fleet";
 /** Max agent rows shown at once; extras collapse into a "↓ N more" indicator. */
 const MAX_AGENT_ROWS = 5;
-/** Re-render cadence so elapsed/token stats tick while agents run. */
+/** Re-render cadence so the elapsed clocks tick while agents run. */
 const TICK_MS = 200;
 /** How long a finished agent lingers in the list before it drops out. */
 const FINISHED_LINGER_MS = 4000;
@@ -75,13 +75,43 @@ export function formatFleetElapsed(ms: number): string {
   return `${Math.max(0, Math.round(ms / 1000))}s`;
 }
 
-/** `↓ 13.1k tokens` — down-arrow prefix, compact magnitude, plural "tokens". */
-export function formatFleetTokens(count: number): string {
-  let compact: string;
-  if (count >= 1_000_000) compact = `${(count / 1_000_000).toFixed(1)}M`;
-  else if (count >= 1_000) compact = `${(count / 1_000).toFixed(1)}k`;
-  else compact = `${count}`;
-  return `↓ ${compact} tokens`;
+/** Context pressure at which the figure turns amber / red. */
+const CONTEXT_WARN_PERCENT = 60;
+const CONTEXT_CRITICAL_PERCENT = 85;
+
+type StatusLook = { icon: string; color: string };
+
+/** One emoji and one theme color per state; the color paints the elapsed time. */
+const AGENT_STATUS: Record<AgentRecord["status"], StatusLook> = {
+  queued: { icon: "🕒", color: "dim" },
+  running: { icon: "⏳", color: "warning" },
+  completed: { icon: "✅", color: "success" },
+  steered: { icon: "✅", color: "success" },
+  error: { icon: "❌", color: "error" },
+  aborted: { icon: "🛑", color: "error" },
+  stopped: { icon: "🛑", color: "dim" },
+};
+
+const WORKFLOW_STATUS: Record<FleetWorkflow["status"], StatusLook> = {
+  running: { icon: "⏳", color: "warning" },
+  paused: { icon: "🕒", color: "dim" },
+  completed: { icon: "✅", color: "success" },
+  failed: { icon: "❌", color: "error" },
+  killed: { icon: "🛑", color: "dim" },
+};
+
+/** `12s`, padded so the name column does not shift as a clock ticks past 9s / 99s. */
+function elapsedCell(ms: number): string {
+  return formatFleetElapsed(ms).padStart(4);
+}
+
+/** `9%` in dim / amber / red by pressure, or "" when the session reports none. */
+function contextCell(percent: number | null, baseColor: string, theme: Theme): string {
+  if (percent == null) return "";
+  const color = percent >= CONTEXT_CRITICAL_PERCENT ? "error"
+    : percent >= CONTEXT_WARN_PERCENT ? "warning"
+    : baseColor;
+  return theme.fg(color, `${Math.round(percent)}%`);
 }
 
 /**
@@ -471,13 +501,9 @@ export class FleetList {
     // (e.g. on terminal resize) never loses the selection marker.
     const sel = Math.min(this.selectedIndex, rows.length);
 
-    const hint = this.active
-      ? "↑↓ select · enter view · esc back"
-      : "esc to interrupt · ← for agents · ↓ to manage";
+    // Just the rows: no key-hint line and no `main` row. `main` is roster slot 0 ("back to the
+    // prompt"); with no row of its own, the cursor sits on none of them while it is selected.
     const lines: string[] = [];
-    lines.push(truncateToWidth("  " + theme.fg("dim", hint), width));
-    lines.push("");
-    lines.push(truncateToWidth(`  ${this.bullet(0, sel, theme)} main`, width));
 
     // Window the rows so the selected one stays visible.
     const visible = Math.min(MAX_AGENT_ROWS, rows.length);
@@ -499,14 +525,14 @@ export class FleetList {
     return lines;
   }
 
-  private bullet(rosterIndex: number, sel: number, theme: Theme): string {
+  /** Selection marker: a filled dot on the selected row, an empty one on the rest. */
+  private cursor(rosterIndex: number, sel: number, theme: Theme): string {
     return rosterIndex === sel ? theme.fg("accent", "●") : theme.fg("dim", "○");
   }
 
   /**
-   * A run's row. Shaped like an agent's — bullet, kind, name, stats flush right
-   * — so the two read as one list, with the agent count where an agent has its
-   * description and the same elapsed/token tail.
+   * A run's row, shaped like an agent's: cursor, status, clock, kind, name, then the
+   * agent count flush right.
    */
   private renderWorkflowRow(
     rosterIndex: number,
@@ -516,14 +542,14 @@ export class FleetList {
     theme: Theme,
   ): string {
     const selected = rosterIndex === sel;
-    const kind = theme.fg(selected ? "text" : "muted", "workflow");
-    const name = selected ? theme.fg("text", workflow.name) : workflow.name;
-    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${kind}  ${name}`;
+    const look = WORKFLOW_STATUS[workflow.status];
     // Frozen once the run settles, exactly as an agent's clock is.
     const elapsed = (workflow.completedAt ?? Date.now()) - workflow.startedAt;
+    const kind = theme.fg(selected ? "text" : "muted", "workflow");
+    const name = selected ? theme.fg("text", workflow.name) : workflow.name;
+    const left = `  ${this.cursor(rosterIndex, sel, theme)} ${look.icon} ${theme.fg(look.color, elapsedCell(elapsed))}  ${kind}  ${name}`;
     const agents = `${workflow.doneCount}/${workflow.totalCount} agent${workflow.totalCount === 1 ? "" : "s"}`;
-    const stats = `${agents} · ${formatFleetElapsed(elapsed)} · ${formatFleetTokens(workflow.tokens)}`;
-    return rightAlign(left, selected ? theme.fg("text", stats) : theme.fg("dim", stats), width);
+    return rightAlign(left, theme.fg(selected ? "text" : "dim", agents), width);
   }
 
   private renderAgentRow(rosterIndex: number, sel: number, record: AgentRecord, width: number, theme: Theme): string {
@@ -532,19 +558,35 @@ export class FleetList {
     // keeps the agent color on the selected row too and only bolds it — which also
     // keeps the row's width fixed as the selection moves.
     const selected = rosterIndex === sel;
+    const base = selected ? "text" : "dim";
+    const look = AGENT_STATUS[record.status];
     const name = renderAgentName(record.type, theme, selected
       ? { fallbackColor: "text", bold: hasAgentBadge(record.type) }
       : { fallbackColor: "muted" });
     const description = selected ? theme.fg("text", record.description) : record.description;
-    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${name}  ${description}`;
-    // The record, not the activity tracker — see the note in AgentWidget's
-    // running line: only the record carries a nested child's spend, and only it
-    // outlives the agent.
-    const tokens = getLifetimeTotal(record.lifetimeUsage);
     const elapsedMs = (record.completedAt ?? Date.now()) - record.startedAt; // freezes once finished
-    const cost = this.showCost() ? formatCost(getLifetimeCost(record.lifetimeUsage)) : "";
-    const stats = `${formatFleetElapsed(elapsedMs)} · ${formatFleetTokens(tokens)}${cost ? ` · ${cost}` : ""}`;
-    const right = selected ? theme.fg("text", stats) : theme.fg("dim", stats);
-    return rightAlign(left, right, width);
+    const lead = `  ${this.cursor(rosterIndex, sel, theme)} ${look.icon} ${theme.fg(look.color, elapsedCell(elapsedMs))}  ${name}`;
+    const left = `${lead}  ${description}`;
+
+    // Right edge: which model, how full its window is. Each is dropped when unknown, and the
+    // spend is opt-in — the row is a status line, not an invoice.
+    const parts: string[] = [];
+    const model = record.invocation?.modelName;
+    if (model) parts.push(theme.fg(base, model));
+    const context = contextCell(getSessionContextPercent(this.agentActivity.get(record.id)?.session), base, theme);
+    if (context) parts.push(context);
+    if (this.showCost()) {
+      const cost = formatCost(getLifetimeCost(record.lifetimeUsage));
+      if (cost) parts.push(theme.fg(base, cost));
+    }
+    // Narrow terminal: the description is cut first (rightAlign), then the fields go from the
+    // far end — cost, context, model — so the status, clock and name always survive.
+    const sep = theme.fg(base, " · ");
+    while (parts.length > 0 && width - visibleWidth(parts.join(sep)) - 1 < visibleWidth(lead)) parts.pop();
+    const right = parts.join(sep);
+    // A description with no room left is dropped whole: cut to a sliver, its ellipsis would eat
+    // into the name beside it.
+    const room = width - visibleWidth(right) - 1 - visibleWidth(lead) - 2;
+    return rightAlign(room >= 2 ? left : lead, right, width);
   }
 }
