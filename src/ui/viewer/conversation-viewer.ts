@@ -362,11 +362,11 @@ export class ConversationViewer implements Component {
     const modeLabel = getPromptModeLabel(this.record.type);
     const modeTag = modeLabel ? ` ${th.fg("dim", `(${modeLabel})`)}` : "";
     const statusIcon = this.record.status === "running"
-      ? th.fg("accent", "●")
+      ? "⏳"
       : this.record.status === "completed"
-        ? th.fg("success", "✓")
+        ? "✅"
         : this.record.status === "error"
-          ? th.fg("error", "✗")
+          ? "❌"
           : th.fg("dim", "○");
     const duration = formatDuration(this.record.startedAt, this.record.completedAt);
 
@@ -682,8 +682,8 @@ export class ConversationViewer implements Component {
               const text = resultText(capped.result);
               if (text) block = [block[0], ...this.markdownLines(capped.result, text, width, true).map(l => `  ${l}`)];
             }
-            block = [this.tintedHead(block[0], width), ...block.slice(1)];
             if (capped?.elided) block.push(truncateToWidth(th.fg("dim", truncationNote(capped.elided)), width));
+            block = this.tintedBlock(block, width);
             push(block);
           }
         }
@@ -702,8 +702,8 @@ export class ConversationViewer implements Component {
           const text = resultText(capped.result);
           if (text) block = [block[0], ...this.markdownLines(capped.result, text, width, true).map(l => `  ${l}`)];
         }
-        block = [this.tintedHead(block[0], width), ...block.slice(1)];
         if (capped.elided) block.push(truncateToWidth(th.fg("dim", truncationNote(capped.elided)), width));
+        block = this.tintedBlock(block, width);
         push(block);
         continue;
       }
@@ -724,25 +724,36 @@ export class ConversationViewer implements Component {
 
     // No trailing activity line. It echoed the run's own prose back ("▍ I'll start with batched
     // discovery…") directly under the message it came from, and what it added — which tool is
-    // running — is already the last block's own `⟳` head.
+    // running — is already the last block's own `⏳` head.
 
     return lines.map(l => truncateToWidth(l, width));
   }
 
   /**
-   * A block's head, painted with pi's own tool-block background and padded to the full row.
+   * A whole tool block — head and body — painted with pi's own tool-block background and
+   * padded to the full row.
    *
    * The padding is the point: a background that stops at the last character outlines the text
-   * instead of marking the row. The tint is what makes a tool call read as one unit at a
-   * glance without dimming the body underneath it, which is the part worth reading.
+   * instead of marking the row. The tint covers the body too, so a call reads as one unit: a
+   * head-only tint made the arguments and output look like loose text under a coloured title.
+   * Colour follows the head's mark (running / ok / failed) for every row of the block.
    */
-  private tintedHead(head: string, width: number): string {
+  private tintedBlock(block: string[], width: number): string[] {
     const theme = this.theme;
-    // Called on the theme, never destructured: pi's `bg` is a class method that reads its own
-    // color table off `this`, so an unbound call throws on the first render of a tool call.
-    if (typeof theme.bg !== "function") return head;
-    const padded = head + " ".repeat(Math.max(0, width - visibleWidth(head)));
-    return theme.bg(blockTint(head), padded);
+    const tint = blockTint(block[0] ?? "");
+    // Called on the theme, never destructured: pi's `bg` and `getBgAnsi` are class methods that
+    // read their own color table off `this`, so an unbound call throws on the first render.
+    const open = typeof theme.getBgAnsi === "function" ? theme.getBgAnsi(tint) : undefined;
+    if (!open && typeof theme.bg !== "function") return block;
+    const paint = (text: string) => theme.bg!(tint, text);
+    return block.map(line => {
+      const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
+      if (!open) return paint(padded);
+      // Body text carries its own fg/bold/reset codes: a full reset (or a bare bg reset) inside
+      // the row would end the tint mid-line, so it is re-opened after each one.
+      const held = padded.replaceAll("\x1b[0m", "\x1b[0m" + open).replaceAll("\x1b[49m", "\x1b[49m" + open);
+      return open + held + "\x1b[49m";
+    });
   }
 
   /**

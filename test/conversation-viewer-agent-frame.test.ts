@@ -102,7 +102,7 @@ describe("ConversationViewer frame colour", () => {
         for (const line of render(CODED_TYPE, width)) {
           expect(FRAME_GLYPHS.test(line), `every line is part of the frame: ${JSON.stringify(line)}`).toBe(true);
           expect(visibleWidth(line), `ANSI-aware width at ${width}: ${JSON.stringify(line)}`).toBe(width);
-          expect(strip(line).length, `stripped width at ${width}: ${JSON.stringify(line)}`).toBe(width);
+          expect(visibleWidth(strip(line)), `stripped width at ${width}: ${JSON.stringify(line)}`).toBe(width);
         }
       }
     } finally {

@@ -58,10 +58,10 @@ describe("inline glyph mapping", () => {
 
   it("keys off the raw entry state, not the display state", () => {
     const rows = treeRows(card({ progress })).slice(1);
-    expect(rows[0]).toContain("✔ done");
-    expect(rows[1]).toContain("✘ failed");
-    expect(rows[2]).toContain("⟳ started");
-    expect(rows[3]).toContain("⟳ progressing");
+    expect(rows[0]).toContain("✅ done");
+    expect(rows[1]).toContain("❌ failed");
+    expect(rows[2]).toContain("⏳ started");
+    expect(rows[3]).toContain("⏳ progressing");
   });
 
   it("does not use the /workflows dialog's queued glyph for a queued agent", () => {
@@ -69,7 +69,7 @@ describe("inline glyph mapping", () => {
       progress: [agentEntry({ index: 0, label: "waiting", state: "start", queuedAt: START })],
     });
     expect(lines.join("\n")).not.toContain("◌");
-    expect(treeRows(lines)[1]).toContain("⟳ waiting");
+    expect(treeRows(lines)[1]).toContain("⏳ waiting");
   });
 
   it("says a replayed agent came from the resume journal", () => {
@@ -101,8 +101,8 @@ describe("inline glyph mapping", () => {
       ],
     });
     const rows = treeRows(lines).slice(1);
-    expect(rows[0]).toContain("✘ skipped");
-    expect(rows[1]).toContain("✘ blocked");
+    expect(rows[0]).toContain("❌ skipped");
+    expect(rows[1]).toContain("❌ blocked");
   });
 
   it("colours done success, error error, and leaves a running row at the terminal default", () => {
@@ -114,11 +114,11 @@ describe("inline glyph mapping", () => {
       }),
       theme,
     );
-    expect(styled.find(l => l.includes("done"))).toContain("<success>✔</success>");
-    expect(styled.find(l => l.includes("failed"))).toContain("<error>✘</error>");
+    expect(styled.find(l => l.includes("done"))).toContain("<success>✅</success>");
+    expect(styled.find(l => l.includes("failed"))).toContain("<error>❌</error>");
     const running = styled.find(l => l.includes("started")) ?? "";
-    expect(running).toContain("⟳");
-    expect(running).not.toContain(">⟳<");
+    expect(running).toContain("⏳");
+    expect(running).not.toContain(">⏳<");
   });
 });
 
@@ -184,8 +184,8 @@ describe("tree branches", () => {
       }),
     );
     expect(rows[0]).toBe("╰─ Agents");
-    expect(rows[1]).toMatch(/^ {2}├─ ⟳ solo/);
-    expect(rows[2]).toMatch(/^ {2}└─ ⟳ solo2/);
+    expect(rows[1]).toMatch(/^ {2}├─ ⏳ solo/);
+    expect(rows[2]).toMatch(/^ {2}└─ ⏳ solo2/);
   });
 });
 
@@ -283,7 +283,7 @@ describe("stat segments", () => {
         ],
       }),
     );
-    expect(rows[1].trimEnd()).toBe("  └─ ✔ review:bugs · Explore · haiku · 18.4k · 12 tool calls · 42s");
+    expect(rows[1].trimEnd()).toBe("  └─ ✅ review:bugs · Explore · haiku · 18.4k · 12 tool calls · 42s");
   });
 
   it("aligns stats into one column across groups", () => {
@@ -315,8 +315,8 @@ describe("ASCII fallback tier", () => {
     const joined = lines.join("\n");
     expect(joined).toContain("√ done");
     expect(joined).toContain("× failed");
-    expect(joined).not.toContain("✔");
-    expect(joined).not.toContain("✘");
+    expect(joined).not.toContain("✅");
+    expect(joined).not.toContain("❌");
   });
 
   it("swaps the box drawing too, keeping each glyph's column width", () => {
@@ -324,7 +324,7 @@ describe("ASCII fallback tier", () => {
       ascii: true,
       progress: [agentEntry({ index: 0, label: "x" })],
     }).join("\n");
-    expect(joined).not.toMatch(/[╭╰├└│⎿▸⟳]/);
+    expect(joined).not.toMatch(/[╭╰├└│⎿▸⏳]/);
     for (const key of ["groupTop", "groupBottom", "branch", "lastBranch", "running", "tick", "cross"] as const) {
       expect(visibleWidth(ASCII_GLYPHS[key])).toBeGreaterThan(0);
     }
@@ -485,6 +485,6 @@ describe("component rendering", () => {
     expect(rendered).toHaveLength(layoutWorkflowCard(input).length);
     expect(rendered[0]).toContain("<toolTitle>*review-changes*</toolTitle>");
     expect(rendered[0]).toContain("<dim>1/1 agent · 42s · done</dim>");
-    expect(rendered.join("\n")).toContain("<success>✔</success>");
+    expect(rendered.join("\n")).toContain("<success>✅</success>");
   });
 });

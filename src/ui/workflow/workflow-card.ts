@@ -65,9 +65,9 @@ export interface WorkflowGlyphs {
 
 export const UNICODE_GLYPHS: WorkflowGlyphs = {
   pointer: "▸",
-  tick: "✔",
-  cross: "✘",
-  running: "⟳",
+  tick: "✅",
+  cross: "❌",
+  running: "⏳",
   groupTop: "╭─",
   groupMid: "├─",
   groupBottom: "╰─",
