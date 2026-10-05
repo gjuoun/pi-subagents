@@ -23,8 +23,6 @@ import { buildNotificationDetails, formatTaskNotification } from "./notification
 export interface NudgeServices {
   /** Live per-agent activity, cleared as each agent is announced. */
   agentActivity: Map<string, AgentActivity>;
-  /** The status row: the finished mark, then the repaint. */
-  status: { markFinished(id: string): void; update(): void };
   /** The below-editor list, told which agent finished. */
   fleet: { onAgentFinished(id: string): void };
   /** Notifications held briefly, so a result fetched in time can cancel them. */
@@ -96,10 +94,8 @@ export function createCompletionNudge({ pi, services, showCost, batch }: Complet
 
   function sendIndividualNudge(record: AgentRecord) {
     services.agentActivity.delete(record.id);
-    services.status.markFinished(record.id);
     services.fleet.onAgentFinished(record.id);
     scheduleNudge(record.id, () => emitIndividualNudge(record));
-    services.status.update();
   }
 
   /**
@@ -107,13 +103,13 @@ export function createCompletionNudge({ pi, services, showCost, batch }: Complet
    * Injected into the joiner that src/bootstrap.ts builds.
    */
   const onGroupComplete: DeliveryCallback = (records, partial) => {
-      for (const r of records) { services.agentActivity.delete(r.id); services.status.markFinished(r.id); services.fleet.onAgentFinished(r.id); }
+      for (const r of records) { services.agentActivity.delete(r.id); services.fleet.onAgentFinished(r.id); }
 
       const groupKey = `group:${records.map(r => r.id).join(",")}`;
       scheduleNudge(groupKey, () => {
         // Re-check at send time
         const unconsumed = records.filter(r => !r.resultConsumed);
-        if (unconsumed.length === 0) { services.status.update(); return; }
+        if (unconsumed.length === 0) return;
 
         const notifications = unconsumed.map(r => formatTaskNotification(r, 300, showCost())).join('\n\n');
         const label = partial
@@ -133,7 +129,6 @@ export function createCompletionNudge({ pi, services, showCost, batch }: Complet
           details,
         }, { deliverAs: "followUp", triggerTurn: true });
       });
-      services.status.update();
   };
 
   pi.registerMessageRenderer<NotificationDetails>(

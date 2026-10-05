@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { ok } from "neverthrow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -143,6 +144,7 @@ import {
 } from "../src/agent/session/extension-scope.js";
 import { compileJsonSchema } from "../src/lib/json-schema.js";
 import { SUBAGENT_TOOL_NAMES } from "../src/lib/tool-names.js";
+import { ModelScope } from "../src/model/model-scope.js";
 
 /** The most recent session built by `createSession` — read by `lastToolsPassed()`. */
 let lastSession: ReturnType<typeof createSession>["session"] | undefined;
@@ -158,7 +160,7 @@ function createSession(finalText: string) {
       listeners.push(listener);
       return () => {};
     }),
-    prompt: vi.fn(async () => {
+    prompt: vi.fn(async (_message?: string) => {
       session.messages.push({
         role: "assistant",
         content: [{ type: "text", text: finalText }],
@@ -300,7 +302,7 @@ describe("agent-runner final output capture", () => {
     await runAgent(ctx, "Explore", "List the files", {
       pi,
       workflow: true,
-      structuredOutput: { schema: { type: "object" }, check: () => true },
+      structuredOutput: { schema: { type: "object" }, check: () => ok(true) },
     });
     expect(vi.mocked(buildAgentPrompt).mock.lastCall![4]).not.toHaveProperty("workflowChild");
   });
@@ -1072,7 +1074,7 @@ describe("agent-runner master tool allowlist", () => {
 
     await runAgent(ctx, "Explore", "go", {
       pi,
-      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
     });
 
     expect(createNestedSubagentTools).not.toHaveBeenCalled();
@@ -1092,7 +1094,7 @@ describe("agent-runner master tool allowlist", () => {
 
     await runAgent(ctx, "Explore", "go", {
       pi,
-      nestedRuntime: { manager, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3 },
+      nestedRuntime: { manager, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3, modelScope: new ModelScope() },
     });
 
     expect(createNestedSubagentTools).toHaveBeenCalledWith(expect.objectContaining({
@@ -1124,7 +1126,7 @@ describe("agent-runner master tool allowlist", () => {
 
     await runAgent(ctx, "Explore", "go", {
       pi,
-      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
     });
 
     const opts = createAgentSession.mock.calls[0][0];
@@ -1155,7 +1157,7 @@ describe("agent-runner master tool allowlist", () => {
 
       await runAgent(ctx, "Explore", "go", {
         pi,
-        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
       });
 
       const tools = lastToolsPassed();
@@ -1176,7 +1178,7 @@ describe("agent-runner master tool allowlist", () => {
 
       await runAgent(ctx, "Explore", "go", {
         pi,
-        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
       });
 
       expect(createAgentSession.mock.calls[0][0].excludeTools ?? []).toContain("Agent");
@@ -1198,7 +1200,7 @@ describe("agent-runner master tool allowlist", () => {
 
       await runAgent(ctx, "Explore", "go", {
         pi,
-        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
       });
 
       await expect(
@@ -1409,7 +1411,7 @@ describe("agent-runner master tool allowlist", () => {
 
       await runAgent(ctx, "Explore", "go", {
         pi,
-        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3 },
+        nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3, modelScope: new ModelScope() },
       });
 
       const tools = lastToolsPassed();
@@ -1450,7 +1452,7 @@ describe("agent-runner master tool allowlist", () => {
     await runAgent(ctx, "Explore", "go", {
       pi,
       isolated: true,
-      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1 },
+      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, modelScope: new ModelScope() },
     });
 
     expect(createNestedSubagentTools).not.toHaveBeenCalled();
@@ -1468,7 +1470,7 @@ describe("agent-runner master tool allowlist", () => {
     );
     await runAgent(ctx, "Explore", "go", {
       pi,
-      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3 },
+      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 3, modelScope: new ModelScope() },
     });
     expect(createNestedSubagentTools).toHaveBeenLastCalledWith(expect.objectContaining({ maxSubagentDepth: 3 }));
   });
@@ -1486,7 +1488,7 @@ describe("agent-runner master tool allowlist", () => {
 
     await runAgent(ctx, "Explore", "go", {
       pi,
-      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 1 },
+      nestedRuntime: { manager: {} as any, parentAgentId: "parent", depth: 1, maxSubagentDepth: 1, modelScope: new ModelScope() },
     });
 
     expect(createNestedSubagentTools).not.toHaveBeenCalled();

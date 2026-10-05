@@ -64,7 +64,6 @@ export function fleetWorkflows(deps: ToolsDeps): FleetWorkflow[] {
  * triggers a turn, rendered by the existing `subagent-notification` renderer.
  */
 function notifyWorkflowFinished(deps: ToolsDeps, task: WorkflowTask) {
-  deps.services.status.update();
   deps.services.fleet.update();
   const result = workflowResultText(task);
   deps.scheduleNudge(task.id, () => {
@@ -239,10 +238,9 @@ export function createWorkflowTool(deps: ToolsDeps) {
       });
       deps.services.workflowTasks.set(runId, task);
       // The run's own row has to appear now, not when it settles. Its agents
-      // are owned by it, so their lifecycle callbacks no longer refresh these
-      // surfaces — nothing else would register the widget for a run whose
+      // are owned by it, so their lifecycle callbacks no longer refresh the list
+      // — nothing else would register the widget for a run whose
       // first agent has not started yet.
-      deps.services.status.update();
       deps.services.fleet.update();
 
       // Background, like Claude Code: the id comes back now and the run keeps

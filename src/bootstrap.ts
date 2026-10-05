@@ -1,11 +1,11 @@
 /**
  * bootstrap.ts — the activation's shared handles: built once, in order, and frozen.
  *
- * Why this file exists. These ten objects are the activation's cross-cutting singletons:
+ * Why this file exists. These nine objects are the activation's cross-cutting singletons:
  * every domain reads them, no domain owns them. They used to be constructed at ten points
  * spread over a thousand lines of the entrypoint, interleaved with the logic that reads
- * them, so the construction order that actually matters — the status row and the fleet
- * list take the manager, the manager's own callbacks read the status row — was invisible.
+ * them, so the construction order that actually matters — the fleet list takes the
+ * manager, the manager's own callbacks read the fleet list — was invisible.
  *
  * The shape is the Hono starter template's bootstrap(): one place builds the shared
  * handles, everything they need arrives as an argument rather than being reached for, and
@@ -25,7 +25,6 @@
 
 import {
   AgentManager,
-  isTopLevelAgent,
   type OnAgentCompact,
   type OnAgentComplete,
   type OnAgentStart,
@@ -37,7 +36,6 @@ import type { AgentActivity } from "./lib/ui/theme.js";
 import { PendingUsagePool } from "./lib/usage.js";
 import { ModelScope } from "./model/model-scope.js";
 import { SubagentScheduler } from "./schedule/schedule.js";
-import { AgentStatusBar } from "./ui/agent-status-row.js";
 import { FleetList } from "./ui/fleet-list.js";
 import type { WorkflowTask } from "./workflow/run/task.js";
 
@@ -107,21 +105,11 @@ export function createServices(args: ServicesArgs) {
 
   const scheduler = new SubagentScheduler();
 
-  const status = new AgentStatusBar({
-    // listAgents() is newest-first, so mapping straight through put the agent launched FIRST
-    // on the far RIGHT of the row. Earliest launch first, the same order the FleetView rows use.
-    listAgents: () => manager.listAgents()
-      .filter(isTopLevelAgent)
-      .sort((a, b) => a.startedAt - b.startedAt)
-      .map((record) => ({ id: record.id, type: record.type, status: record.status })),
-  });
-
   const fleet = new FleetList(manager, agentActivity, showCost, viewerMarkdown);
 
   return Object.freeze({
     manager,
     groupJoin,
-    status,
     fleet,
     scheduler,
     agentActivity,

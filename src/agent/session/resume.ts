@@ -2,7 +2,7 @@
  * resume.ts — launching a detached resume of an agent that already has a session.
  *
  * Everything a re-running agent needs: transcript anchoring, activity tracking, join-mode
- * batching, the status/fleet refresh and the `subagents:created` event. Shared by the Agent
+ * batching, the fleet refresh and the `subagents:created` event. Shared by the Agent
  * tool's `resume` + `run_in_background` branch and the mention path — they differ only in how they
  * report the outcome.
  *
@@ -26,8 +26,7 @@ export interface BackgroundResumeDeps {
   manager: AgentManager;
   /** Live activity per agent id. A resume has no `onSessionCreated`, so its state is seeded here. */
   agentActivity: Map<string, AgentActivity>;
-  /** The status row and the fleet list, both told the run started. */
-  status: { markRunning(id: string): void; ensureTimer(): void; update(): void };
+  /** The below-editor agent list, told the run started. */
   fleet: { update(): void; ensureTimer(): void };
   /** Read live: the setting can change between two resumes. */
   defaultJoinMode(): JoinMode;
@@ -39,7 +38,7 @@ export function createBackgroundResume(deps: BackgroundResumeDeps) {
   /**
    * Launch a detached resume of an existing agent and wire everything a
    * re-running agent needs: transcript anchoring, activity tracking, join-mode
-   * batching, the widget/fleet refresh, and the `subagents:created` event.
+   * batching, the FleetView refresh, and the `subagents:created` event.
    *
    * Shared by the Agent tool's `resume` + `run_in_background` branch and the
    * `@handle message` prompt mention — they differ only in how they report the
@@ -103,12 +102,6 @@ export function createBackgroundResume(deps: BackgroundResumeDeps) {
     if (joinMode != null && joinMode !== 'async') deps.joinBatch(id, joinMode);
 
     deps.agentActivity.set(id, bgState);
-    // This agent already finished once, so the status row holds a finished-age
-    // for it that is past the linger limit — without clearing it, the
-    // resumed run's ✓/✗ line never renders and the agent just vanishes.
-    deps.status.markRunning(id);
-    deps.status.ensureTimer();
-    deps.status.update();
     // The FleetView is the only agent surface now, so a run started on this path has to refresh
     // it here — otherwise the agent stays invisible until some later event repaints the list.
     deps.fleet.update();

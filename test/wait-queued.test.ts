@@ -123,7 +123,7 @@ describe("get_subagent_result wait:true on a queued agent", () => {
     let settled = false;
     void waitPromise.then(() => { settled = true; });
     for (let i = 0; i < 40 && !settled; i++) {
-      while (resolvers.length > 0) resolvers.shift()!();
+      while (resolvers.length > 0) resolvers.shift()!(undefined);
       await flush();
       await new Promise((r) => setTimeout(r, 100)); // outlive one 250ms poll tick
     }
@@ -222,7 +222,7 @@ describe("get_subagent_result wait:true on a queued agent", () => {
 
     let completedResult: any;
     for (let i = 0; i < 40 && !completedResult; i++) {
-      while (resolvers.length > 0) resolvers.shift()!();
+      while (resolvers.length > 0) resolvers.shift()!(undefined);
       await flush();
       const result = await tools
         .get("get_subagent_result")

@@ -27,8 +27,7 @@ export interface WorkflowHostDeps {
   services: {
     /** Every run this session has, by id. */
     workflowTasks: Map<string, WorkflowTask>;
-    /** Repainted when a detached run settles. */
-    status: { update(): void };
+    /** Repainted when a detached run settles or starts. */
     fleet: { update(): void };
   };
   context: {
@@ -94,7 +93,6 @@ export function createWorkflowHosts(deps: WorkflowHostDeps) {
       }
 
       deps.context.workflowsEnabled = false; // not setWorkflowsEnabled: this is not the user pinning it
-      deps.services.status.update();
       deps.services.fleet.update();
       warn(verdict.message);
 
@@ -168,7 +166,6 @@ export function createWorkflowHosts(deps: WorkflowHostDeps) {
 
     const task = createWorkflowTask({ id: workflowRunId(), script, scriptPath: path, meta });
     deps.services.workflowTasks.set(task.id, task);
-    deps.services.status.update();
     deps.services.fleet.update();
     report(`Running workflow ${meta.name}…`, "info");
 
@@ -184,7 +181,6 @@ export function createWorkflowHosts(deps: WorkflowHostDeps) {
         content: formatWorkflowNotification(task),
         display: false,
       }, { deliverAs: "nextTurn" });
-      deps.services.status.update();
       deps.services.fleet.update();
     });
   }

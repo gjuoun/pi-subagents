@@ -156,14 +156,20 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     expect(reply![1].data.id).toBeTruthy();
   });
 
-  it("renders an RPC-spawned agent on the status row while it is running", async () => {
+  it("registers the FleetView for an RPC-spawned agent while it is running", async () => {
     const { pi, lifecycle, busHandlers } = makePi();
     const activeCtx = ctx(true);
     subagentsExtension(pi);
 
     await lifecycle.get("session_start")({}, activeCtx);
 
-    vi.mocked(runAgent).mockImplementation(() => new Promise(() => {}) as any); // keep agent running
+    vi.mocked(runAgent).mockImplementation((_ctx: any, _type: any, _prompt: any, options: any) => {
+      // The FleetView draws no row for an agent whose session has not landed (`roster()` requires
+      // one), and this mock is the only thing that would ever attach it — so the run has to hand
+      // its session over, or the surface this test is about stays empty by construction.
+      options.onSessionCreated?.({ subscribe: () => vi.fn() });
+      return new Promise(() => {}) as any; // keep the agent running
+    });
     try {
       await busHandlers.get("subagents:rpc:spawn")!({
         requestId: "req-widget",
@@ -173,13 +179,13 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
       });
 
       await vi.waitFor(() => {
-        // The above-editor widget is gone (one Agent View); the status row is the surface that
-        // proves the agent is visible while it runs — one mark per running agent, drawing whichever
-        // glyph of the run cycle (RUN_PHASE_GLYPHS) its phase owns. This harness configures no
-        // colour for the type, so the mark here is bare.
-        expect(activeCtx.ui.setStatus).toHaveBeenCalledWith(
-          "subagents",
-          expect.stringMatching(/[▪■□]/),
+        // The above-editor widget and the extension status row are both gone; the FleetView is the
+        // surface that proves an agent is visible while it runs. No Agent tool call happens on this
+        // path, so nothing else would register its widget.
+        expect(activeCtx.ui.setWidget).toHaveBeenCalledWith(
+          "fleet",
+          expect.any(Function),
+          { placement: "belowEditor" },
         );
       });
     } finally {
@@ -191,8 +197,8 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     const { pi, lifecycle, busHandlers } = makePi();
     // The activity LINE renders in the FleetView now; whether that list registers on this path
     // is settled live (plan Step 7 captures a pane), not by this unit harness — what is pinned
-    // here is the wiring below it: the RPC spawn creates a tracker, and the agent reaches the
-    // surviving surface as a mark on the status row.
+    // here is the wiring below it: the RPC spawn creates a tracker and hands the run its
+    // callbacks. The surface itself is the sibling test above.
     const setWidget = vi.fn();
     const extensionCtx = ctx(true, setWidget);
     let onToolActivity: ((activity: { type: "start" | "end"; toolName: string }) => void) | undefined;
@@ -215,12 +221,6 @@ describe("issue #142: RPC handlers + subagents:ready are gated on session_start"
     });
     await vi.waitFor(() => expect(onToolActivity).toBeTypeOf("function"));
     onToolActivity!({ type: "start", toolName: "bash" });
-
-    // Any phase of the run cycle — see RUN_PHASE_GLYPHS.
-    expect(extensionCtx.ui.setStatus).toHaveBeenCalledWith(
-      "subagents",
-      expect.stringMatching(/[▪■□]/),
-    );
   });
 
   it("is idempotent — a second session_start does not re-advertise or double-register", async () => {

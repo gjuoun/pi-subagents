@@ -136,8 +136,9 @@ describe("showSchedulesMenu", () => {
 
       await showSchedulesMenu(ctx, scheduler);
 
-      expect(confirm.mock.calls[0][0]).toContain(NAME_B);
-      expect(confirm.mock.calls[0][0]).not.toContain(NAME_A);
+      const message = confirm.mock.calls[0]![0];
+      expect(message).toContain(NAME_B);
+      expect(message).not.toContain(NAME_A);
     });
 
     it("cancels the right job past the single-digit boundary", async () => {

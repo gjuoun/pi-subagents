@@ -123,7 +123,7 @@ describe("ConversationViewer header stats", () => {
     expect(header({
       modelName: "sonnet 4.6",
       modelId: "anthropic/claude-sonnet-4-6",
-      thinking: "high",
+      thinking: "high" as const,
       maxTurns: 60,
     })).toContain("anthropic/claude-sonnet-4-6 · thinking: high · max turns: 60");
   });
@@ -504,7 +504,7 @@ describe("ConversationViewer", () => {
     ) {
       return new ConversationViewer(
         mockTui(rows, 80), mockSession(messages), mockRecord({ status: "completed" }), undefined,
-        ansiTheme(), vi.fn(), undefined, undefined, undefined,
+        ansiTheme(), vi.fn(), undefined, undefined,
         mode ? () => mode : undefined, onMode,
       );
     }

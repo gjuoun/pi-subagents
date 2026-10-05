@@ -19,9 +19,7 @@ import { isTopLevelAgent, type OnAgentCompact, type OnAgentComplete, type OnAgen
 export interface CallbackServices {
   /** Live per-agent activity, cleared when an agent is announced or consumed. */
   agentActivity: Map<string, AgentActivity>;
-  /** The status row, refreshed as runs start and settle. */
-  status: { markFinished(id: string): void; update(): void; ensureTimer(): void };
-  /** The below-editor list, refreshed alongside it. */
+  /** The below-editor agent list, refreshed as runs start and settle. */
   fleet: { onAgentFinished(id: string): void; update(): void; ensureTimer(): void };
   /** Spend accumulated for the parent session. */
   pendingUsage: { add(usage: LifetimeUsage): void };
@@ -119,16 +117,13 @@ export function createManagerCallbacks({ pi, services, context, notify }: Manage
     // Skip notification if result was already consumed via get_subagent_result
     if (record.resultConsumed) {
       services.agentActivity.delete(record.id);
-      services.status.markFinished(record.id);
       services.fleet.onAgentFinished(record.id);
-      services.status.update();
       return;
     }
 
     // If this agent is pending batch finalization (debounce window still open),
     // don't send an individual nudge — finalizeBatch will pick it up retroactively.
     if (context.currentBatchAgents.some(a => a.id === record.id)) {
-      services.status.update();
       return;
     }
 
@@ -138,7 +133,6 @@ export function createManagerCallbacks({ pi, services, context, notify }: Manage
     }
     // 'held' → do nothing, group will fire later
     // 'delivered' → group callback already fired
-    services.status.update();
   };
 
   const onAgentStart: OnAgentStart = (record) => {
@@ -146,8 +140,6 @@ export function createManagerCallbacks({ pi, services, context, notify }: Manage
     // Agent-tool spawns refresh these surfaces in their tool handler, but RPC
     // and scheduler spawns enter through the manager directly.
     if (context.currentCtx?.hasUI) {
-      services.status.ensureTimer();
-      services.status.update();
       services.fleet.ensureTimer();
       services.fleet.update();
     }

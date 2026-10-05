@@ -471,7 +471,7 @@ export async function showSettings(ctx: ExtensionCommandContext, deps: AgentsUiD
       setRememberAgents(enabled);
       notifyApplied(ctx, `Remember agents ${enabled ? "enabled" : "disabled"}`);
     } else if (id === "widgetMode") {
-      deps.context.setWidgetMode(value as WidgetMode);
+      deps.context.widgetMode = value as WidgetMode;
       notifyApplied(ctx, `Widget set to ${value}`);
     }
   }

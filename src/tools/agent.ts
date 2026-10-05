@@ -25,7 +25,7 @@ import { THINKING_LEVELS } from "../lib/agent-meta.js";
 import { SUBAGENT_TOOL_NAMES } from "../lib/tool-names.js";
 import type { AgentInvocation, AgentRecord } from "../lib/types.js";
 import { describeActivity, fgPreservingNestedStyles, formatCost, formatMs, formatTurns } from "../lib/ui/format.js";
-import { type AgentDetails, type UICtx } from "../lib/ui/theme.js";
+import { type AgentDetails } from "../lib/ui/theme.js";
 import { getLifetimeCost } from "../lib/usage.js";
 import { describeModel, resolveModel } from "../model/model-resolver.js";
 import { renderAgentName } from "../ui/agent-color.js";
@@ -242,9 +242,6 @@ export function createAgentTool(deps: ToolsDeps) {
 
 
     execute: async (toolCallId, params, signal, onUpdate, ctx) => {
-      // Ensure we have UI context for widget rendering
-      deps.services.status.setUICtx(ctx.ui as UICtx);
-
       // Reload custom agents so new project/global .md files are picked up without restart
       deps.reloadCustomAgents();
 
@@ -581,8 +578,6 @@ export function createAgentTool(deps: ToolsDeps) {
         }
 
         deps.services.agentActivity.set(id, bgState);
-        deps.services.status.ensureTimer();
-        deps.services.status.update();
         deps.services.fleet.ensureTimer();
         deps.services.fleet.update();
 
@@ -666,7 +661,6 @@ export function createAgentTool(deps: ToolsDeps) {
           if (a.session === session) {
             fgId = a.id;
             deps.services.agentActivity.set(a.id, fgState);
-            deps.services.status.ensureTimer();
             deps.services.fleet.ensureTimer();
             deps.services.fleet.update();
             break;
@@ -722,7 +716,6 @@ export function createAgentTool(deps: ToolsDeps) {
         clearInterval(spinnerInterval);
         if (fgId) {
           deps.services.agentActivity.delete(fgId);
-          deps.services.status.markFinished(fgId);
           deps.services.fleet.onAgentFinished(fgId);
         }
       }

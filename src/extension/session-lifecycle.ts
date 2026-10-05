@@ -20,7 +20,6 @@ import type { AgentRecord } from "../lib/types.js";
 import type { ModelScope } from "../model/model-scope.js";
 import type { SubagentScheduler } from "../schedule/schedule.js";
 import { createMentionProvider, mentionRoster, type TypeInfo } from "../ui/agent-mention.js";
-import type { AgentStatusBar } from "../ui/agent-status-row.js";
 import type { FleetList } from "../ui/fleet-list.js";
 import type { WorkflowTask } from "../workflow/run/task.js";
 import type { ActivationContext } from "./context.js";
@@ -31,7 +30,6 @@ export interface SessionLifecycleDeps {
   context: ActivationContext;
   /** Structural, like every slice: `services` belongs to the wiring layer, which `extension/` cannot name. */
   services: {
-    status: Pick<AgentStatusBar, "setUICtx">;
     fleet: Pick<FleetList, "setUICtx" | "dispose">;
     manager: AgentManager;
     modelScope: ModelScope;
@@ -72,7 +70,6 @@ export function registerSessionLifecycle(deps: SessionLifecycleDeps): void {
     const ownSessionId = ctx.sessionManager?.getSessionId?.();
     if (ownSessionId) sessionManagers.set(ownSessionId, registry.registryEntry);
     if (ctx.hasUI) {
-      services.status.setUICtx(ctx.ui);
       services.fleet.setUICtx(ctx.ui as any);
     }
     services.manager.clearCompleted(true);

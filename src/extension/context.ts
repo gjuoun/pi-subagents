@@ -7,9 +7,9 @@
  * read and write sites, same initialization order.
  *
  * The settings live here as plain public fields, so a cluster lifted out of `index.ts`
- * reads and writes them directly. Only the six setters whose assignment does something
+ * reads and writes them directly. Only the setters whose assignment does something
  * beyond storing the value survive as methods — a repaint (`setShowCost`, `setShowModel`,
- * `setWidgetMode`, `setFleetViewEnabled`), draining the usage pool (`setReportUsage`), and
+ * `setFleetViewEnabled`), draining the usage pool (`setReportUsage`), and
  * latching the user's own answer (`setWorkflowsEnabled`). Every mutation path still funnels
  * through one of those or through a field write.
  *
@@ -39,22 +39,21 @@ export class ActivationContext {
 
   /** Show `~$X` next to token counts in the subagent surfaces. */
   showCost = false;
-  setShowCost(b: boolean): void { this.showCost = b; this.repaint.status.update(); this.repaint.fleet.update(); }
+  setShowCost(b: boolean): void { this.showCost = b; this.repaint.fleet.update(); }
 
   /** Name the model and thinking level on the widget's running rows. */
   showModel = false;
-  setShowModel(b: boolean): void { this.showModel = b; this.repaint.status.update(); }
+  setShowModel(b: boolean): void { this.showModel = b; this.repaint.fleet.update(); }
 
   /** How much of the conversation viewer renders as Markdown. */
   viewerMarkdown: ViewerMarkdownMode = "all";
 
   /**
-   * What the above-editor widget shows: "all" = every agent; "background" = hide foreground
-   * (they already render inline as the Agent tool result, so showing them here too is a
-   * duplicate, #118); "off" = hide the widget entirely. Read live at render time.
+   * Legacy, like the setting key that writes it: the above-editor widget this mode selected was
+   * deleted (the below-editor FleetView is the only agent list), so nothing reads it. Kept as a
+   * plain field so an older `subagents.json` round-trips its value instead of losing it.
    */
   widgetMode: WidgetMode = "background";
-  setWidgetMode(m: WidgetMode): void { this.widgetMode = m; this.repaint.status.update(); }
 
   /** Whether the below-editor FleetView is drawn at all. */
   fleetViewEnabled = true;
@@ -144,7 +143,6 @@ export class ActivationContext {
    * to prevent, so the repaint cannot be pushed out to the callers.
    */
   repaint!: {
-    status: { update(): void };
     fleet: { update(): void; setEnabled(enabled: boolean): void };
     pendingUsage: { drain(): void };
   };

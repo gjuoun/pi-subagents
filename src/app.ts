@@ -28,7 +28,6 @@ import { setFallbackSubagent } from "./config/registry/fallback.js";
 import { applyAndEmitLoaded, loadSettings } from "./config/settings.js";
 import { ActivationContext } from "./extension/context.js";
 import { registerSessionLifecycle } from "./extension/session-lifecycle.js";
-import type { UICtx } from "./lib/ui/theme.js";
 import { startScheduler } from "./schedule/start.js";
 import { createAgentTool } from "./tools/agent.js";
 import type { ToolsDeps } from "./tools/deps.js";
@@ -150,7 +149,6 @@ export function createExtension(pi: ExtensionAPI): void {
     pi,
     manager: services.manager,
     agentActivity: services.agentActivity,
-    status: services.status,
     fleet: services.fleet,
     defaultJoinMode: () => context.defaultJoinMode,
     joinBatch: (id, joinMode) => {
@@ -161,11 +159,9 @@ export function createExtension(pi: ExtensionAPI): void {
   };
   const startBackgroundResume = createBackgroundResume(backgroundResumeDeps);
 
-  // Grab UI context from first tool execution + clear lingering widget on new turn
+  // Grab UI context from the first tool execution, so the FleetView can register its widget.
   pi.on("tool_execution_start", async (_event, ctx) => {
-    services.status.setUICtx(ctx.ui as UICtx);
     services.fleet.setUICtx(ctx.ui as unknown as FleetUICtx);
-    services.status.onTurnStart();
   });
 
 

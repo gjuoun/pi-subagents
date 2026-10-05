@@ -38,7 +38,6 @@ function makeTarget(): { context: SettingsSurface; services: SettingsTarget["ser
     setReportUsage: vi.fn(),
     setShowCost: vi.fn(),
     setShowModel: vi.fn(),
-    setWidgetMode: vi.fn(),
     setFleetViewEnabled: vi.fn(),
     setWorkflowsEnabled: vi.fn(),
   } satisfies SettingsSurface;
