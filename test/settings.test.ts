@@ -541,7 +541,7 @@ describe("settings persistence", () => {
       manager: { setMaxConcurrent: vi.fn(), setMaxConcurrentForeground: vi.fn() },
       modelScope: { setEnabled: vi.fn() },
     };
-    const context = {
+    const context: SettingsSurface = {
       strictAgentFiles: false,
       defaultJoinMode: "smart" as JoinMode,
       backgroundByDefault: true,
@@ -559,10 +559,9 @@ describe("settings persistence", () => {
       setReportUsage: vi.fn(),
       setShowCost: vi.fn(),
       setShowModel: vi.fn(),
-      setWidgetMode: vi.fn(),
       setFleetViewEnabled: vi.fn(),
       setWorkflowsEnabled: vi.fn(),
-    } satisfies SettingsSurface;
+    };
     const target: SettingsTarget = {
       services,
       context,
@@ -675,7 +674,7 @@ const { context, services, target } = makeTarget();
       expect(target.setDisableDefaultAgents).toHaveBeenCalledWith(true);
       expect(context.toolDescriptionMode).toBe("compact");
       expect(context.setFleetViewEnabled).toHaveBeenCalledWith(false);
-      expect(context.setWidgetMode).toHaveBeenCalledWith("off");
+      expect(context.widgetMode).toBe("off");
     });
 
     it("applies strictAgentFiles; skips it when absent", () => {
@@ -691,9 +690,12 @@ const { context, target } = makeTarget();
     it("applies widgetMode; skips it when absent", () => {
 const { context, target } = makeTarget();
       applySettings({ widgetMode: "off" }, target);
-      expect(context.setWidgetMode).toHaveBeenCalledWith("off");
+      expect(context.widgetMode).toBe("off");
+      // A legacy key with no surface behind it: the value is stored, and absence leaves whatever
+      // is stored alone.
+      context.widgetMode = "background";
       applySettings({}, target);
-      expect(context.setWidgetMode).toHaveBeenCalledTimes(1); // absence is "use default"
+      expect(context.widgetMode).toBe("background"); // absence is "use default"
     });
 
     it("applies viewerMarkdown; skips it when absent", () => {

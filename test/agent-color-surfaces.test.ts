@@ -3,7 +3,6 @@ import { registerAgents } from "../src/config/registry/agent-types.js";
 import subagentsExtension from "../src/index.js";
 import type { AgentConfig, AgentRecord } from "../src/lib/types.js";
 import type { AgentActivity } from "../src/lib/ui/theme.js";
-import { formatAgentStatusLine } from "../src/ui/agent-marks.js";
 import { FleetList, type FleetUICtx } from "../src/ui/fleet-list.js";
 import { ConversationViewer } from "../src/ui/viewer/conversation-viewer.js";
 
@@ -61,7 +60,6 @@ function makeRecord(): AgentRecord {
       messages: [],
       subscribe: vi.fn(() => vi.fn()),
     } as unknown as AgentRecord["session"],
-    lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
     compactionCount: 0,
   };
 }
@@ -151,18 +149,6 @@ describe("custom agent color runtime surfaces", () => {
     } finally {
       await handlers.get("session_shutdown")?.({}, { hasUI: false, ui: {} });
     }
-  });
-
-  it("renders the status-row mark in the agent’s configured color", () => {
-    // The above-editor widget is gone; the status row is the surface that still paints an
-    // agent's configured colour, and it paints it as a literal truecolor mark.
-    // Re-registered here: an earlier test in this file deliberately registers it colourless.
-    registerAgents(new Map([[TYPE, config]]));
-    const line = formatAgentStatusLine([{ id: "status-row", type: TYPE, status: "running" }], 0);
-
-    // Phase 0 of the glyph cycle, in the type's own colour: see RUN_PHASE_GLYPHS.
-    expect(line).toContain("\u001b[38;2;130;125;189m\u25aa");
-    expect(line).toContain("\u001b[39m");
   });
 
   it("renders the FleetView row with the display name and color", () => {

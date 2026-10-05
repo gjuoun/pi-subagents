@@ -153,14 +153,10 @@ export interface SubagentsSettings {
    */
   rememberAgents?: boolean;
   /**
-   * Display mode for the persistent above-editor agent widget:
-   *   - `all`: show every agent (foreground + background).
-   *   - `background`: hide foreground agents — they already render inline as the
-   *     Agent tool result, so the widget would otherwise double-render them
-   *     (#118); everything else (background, queued, scheduled, RPC) stays.
-   *   - `off`: hide the widget entirely.
-   * Defaults to `background`. Pure-UI and applied live (toggling refreshes the
-   * widget).
+   * Legacy: the above-editor widget this mode selected has been deleted (the
+   * below-editor FleetView is the only agent list), so no surface reads the
+   * value. Kept so an older `subagents.json` round-trips it instead of having it
+   * dropped on the next settings write.
    */
   widgetMode?: WidgetMode;
   /**
@@ -340,7 +336,6 @@ export interface SettingsSurface {
   setReportUsage(b: boolean): void;
   setShowCost(b: boolean): void;
   setShowModel(b: boolean): void;
-  setWidgetMode(m: WidgetMode): void;
   setFleetViewEnabled(b: boolean): void;
   setWorkflowsEnabled(b: boolean): void;
 }
@@ -531,9 +526,11 @@ const FIELDS: Record<keyof SubagentsSettings, SettingsField> = {
   },
   widgetMode: {
     parse: oneOf<WidgetMode>(VALID_WIDGET_MODES),
+    // Legacy key, written straight to the field: no surface reads the mode any more (the
+    // above-editor widget it selected is gone), so there is nothing to repaint.
     apply: (t, s) =>
       when(s.widgetMode, (v) => {
-        t.context.setWidgetMode(v);
+        t.context.widgetMode = v;
       }),
   },
   outputTranscript: {

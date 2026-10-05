@@ -1,7 +1,7 @@
 /**
  * theme.ts — the shared UI contract every widget surface draws against.
  *
- * `Theme`/`UICtx` are pi's rendering surface, not this extension's. Four sibling files
+ * `Theme` is pi's rendering surface, not this extension's. Four sibling files
  * (`fleet-list`, `workflow-card`, `workflow-dialog`, `conversation-viewer`) used to import
  * `ui/agent-widget.ts` — a 666-line component — purely to borrow the two-method type.
  *
@@ -29,15 +29,6 @@ export type Theme = {
   bg?(color: string, text: string): string;
   /** The opening escape of a background color, for rows whose own codes would end a `bg` wrap. */
   getBgAnsi?(color: string): string;
-};
-
-export type UICtx = {
-  setStatus(key: string, text: string | undefined): void;
-  setWidget(
-    key: string,
-    content: undefined | ((tui: any, theme: Theme) => { render(): string[]; invalidate(): void }),
-    options?: { placement?: "aboveEditor" | "belowEditor" },
-  ): void;
 };
 
 /** Per-agent live activity state. */

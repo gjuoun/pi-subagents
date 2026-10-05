@@ -43,7 +43,6 @@ vi.mock("@earendil-works/pi-tui", async (importOriginal) => {
 });
 
 // After the mock, so the subjects bind the counting versions.
-const { AgentStatusBar } = await import("../../src/ui/agent-status-row.js");
 const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
 const { makeActivity, makeFleet, makeSession, mountViewer, perfTheme, perfTui } = await import(
   "../helpers/perf-fixtures.js"
@@ -100,35 +99,5 @@ describe("ConversationViewer — cost stays linear in transcript length", () => 
     viewer.render(120);
 
     expect(counts.markdownNew).toBe(afterFirst);
-  });
-});
-
-describe("AgentStatusBar — one update does not rescan per agent", () => {
-  /** Runs one update over `n` agents; returns how often the agent list was asked for. */
-  function listCallsPerUpdate(n: number): number {
-    const records = makeFleet({ running: n });
-    let listAgentsCalls = 0;
-    const bar = new AgentStatusBar({
-      listAgents: () => {
-        listAgentsCalls++;
-        return records.map((r: any) => ({ id: r.id, type: r.type, status: r.status }));
-      },
-      resolveColor: () => undefined,
-    });
-    bar.setUICtx({ setStatus: () => {} });
-    listAgentsCalls = 0;
-    bar.update();
-    bar.dispose();
-    return listAgentsCalls;
-  }
-
-  // Today a render is exactly one scan (`update()` does the other). The bound is
-  // "a constant, and the same constant at 100 agents as at 1" — a per-agent
-  // lookup added to the row builder would break it, and collapsing the two
-  // remaining scans into one would not.
-  it("asks for the agent list a constant number of times", () => {
-    expect(listCallsPerUpdate(1)).toBeLessThanOrEqual(2);
-    expect(listCallsPerUpdate(100)).toBeLessThanOrEqual(2);
-    expect(listCallsPerUpdate(100)).toBe(listCallsPerUpdate(1));
   });
 });

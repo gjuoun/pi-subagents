@@ -28,7 +28,6 @@ export interface WorkflowRunDeps {
     /** Handed to the host: which model a step resolves to. */
     modelScope: ModelScope;
     /** Repainted when the run starts and when it settles. */
-    status: { update(): void };
     fleet: { update(): void };
   };
 }

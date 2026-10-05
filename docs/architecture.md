@@ -39,7 +39,7 @@ src/                  # Layered by domain. A file may import only from the layer
   app.ts              # The composition root: the activation's state, every tool, command,
                       # event and renderer registration, and the wiring between domains —
                       # the file to read to see what this extension exposes.
-  bootstrap.ts        # The shared handles — manager, status row, fleet list, scheduler and
+  bootstrap.ts        # The shared handles — manager, fleet list, scheduler and
                       # the collections they share — built in one ordered place and frozen
 
   lib/                # Shared code and types. Imports nothing from another layer.
@@ -53,7 +53,7 @@ src/                  # Layered by domain. A file may import only from the layer
     xml.ts                # escapeXml, shared by the notification builders
     abortable.ts          # Race a wait against Esc without cancelling the background child
     child-context.ts      # AsyncLocalStorage flag marking work done for a child session
-    ui/theme.ts           # The widgets' shared UI contract (Theme, UICtx, AgentActivity, ...)
+    ui/theme.ts           # The widgets' shared UI contract (Theme, AgentActivity, ...)
     ui/format.ts          # Pure formatters: tokens, cost, duration, turns
 
   config/             # Declared and persisted agent configuration
@@ -117,8 +117,6 @@ src/                  # Layered by domain. A file may import only from the layer
     tool-description.ts # Model-facing description carrying the orchestration patterns
 
   ui/                 # TUI surfaces. Only the wiring layer may import these.
-    agent-status-row.ts # The status row: its text, the turn-based aging of marks, the clock
-    agent-marks.ts # The row's marks: one coloured glyph per agent (pure, timer-free)
     agent-display.ts  # Agent-identity adapters: display name, prompt mode, invocation tags
     agent-result-status.ts   # The Agent tool's transcript row: result container and activity tracker
     notifications.ts  # Task-notification text, details payloads, tool-result envelopes

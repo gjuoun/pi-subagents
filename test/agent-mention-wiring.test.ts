@@ -462,21 +462,22 @@ describe("mentioning an agent that has never run", () => {
   });
 
   it("puts a mentioned agent on the surviving agent surface (#181)", async () => {
-    // This used to render the above-editor widget and assert its `↻1≤9` turn cap. That surface
-    // is gone with the single-Agent-View change, and the FleetView row does not render the cap,
-    // so the assertion moved down to what still exists: the marked status row. Restoring the cap
-    // as a visible field is a new row feature, not a test retarget.
+    // This used to render the above-editor widget and assert its `↻1≤9` turn cap; the cap then
+    // moved down to the marked status row, and the status row is now gone too. The FleetView is
+    // the only agent surface left, so what is pinned here is that a mention spawn reaches it:
+    // nothing else would register its widget on this path, and an unregistered list is an
+    // invisible agent.
     const prevMax = getDefaultMaxTurns();
     try {
       const { lifecycle } = bootDirect({ defaultMaxTurns: 9 });
       heldRun(fakeSession());
-      const setStatus = vi.fn();
+      const setWidget = vi.fn();
       const uiCtx = ctx({
         hasUI: true,
         ui: {
-          setStatus, notify: vi.fn(), addAutocompleteProvider: vi.fn(),
+          notify: vi.fn(), addAutocompleteProvider: vi.fn(),
           onTerminalInput: vi.fn(() => vi.fn()), getEditorText: vi.fn(() => ""), custom: vi.fn(),
-          setWidget: vi.fn(),
+          setWidget,
         },
       });
       await lifecycle.get("session_start")({}, uiCtx);
@@ -484,11 +485,15 @@ describe("mentioning an agent that has never run", () => {
       await lifecycle.get("input")({ type: "input", text: "@explore go", source: "interactive" }, uiCtx);
       await flush();
 
-      // Any phase of the run cycle — see RUN_PHASE_GLYPHS.
-      expect(setStatus).toHaveBeenCalledWith(
-        "subagents",
-        expect.stringMatching(/[▪■□]/),
-      );
+      // The list hides an agent until its session has landed (`roster()` requires one), so the
+      // registration arrives on a later tick of the list's own clock rather than on this line.
+      await vi.waitFor(() => {
+        expect(setWidget).toHaveBeenCalledWith(
+          "fleet",
+          expect.any(Function),
+          { placement: "belowEditor" },
+        );
+      });
     } finally {
       setDefaultMaxTurns(prevMax);
     }
