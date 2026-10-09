@@ -36,7 +36,7 @@ vi.mock("node:fs", async (importOriginal) => {
 // The AgentWidget frame case left with the widget (single Agent View); the status row is a pure
 // string builder with no render pipeline, so it has no frame to police here.
 const { ConversationViewer } = await import("../../src/ui/viewer/conversation-viewer.js");
-const { makeFleet, makeSession, mountViewer, mountWidget } = await import("../helpers/perf-fixtures.js");
+const { makeSession, mountViewer } = await import("../helpers/perf-fixtures.js");
 
 describe("a rendered frame touches no filesystem", () => {
 
