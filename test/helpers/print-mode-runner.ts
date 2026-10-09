@@ -53,7 +53,10 @@ import {
   fauxAssistantMessage,
   fauxText,
   fauxToolCall,
+  getCurrentSystemPrompt,
+  getCurrentTools,
   type Model,
+  type Tool,
   type ToolCall,
 } from "@earendil-works/pi-ai";
 import {
@@ -204,13 +207,27 @@ function resolveReply(
  *   - SUBAGENT (no `Agent` tool): `subagent`.
  * Each route may be a value or a `(ctx) => value` function.
  */
+/**
+ * The tools a model call was offered. Pi 1.x declares them in the transcript's
+ * system messages and leaves `context.tools` empty, so a responder that reads the
+ * field sees no tools at all and cannot tell the parent from a child.
+ */
+export function contextTools(context: Context): Tool[] {
+  return getCurrentTools(context.messages);
+}
+
+/** The system prompt a model call carried; `context.systemPrompt` is empty on Pi 1.x for the same reason. */
+export function contextSystemPrompt(context: Context): string {
+  return getCurrentSystemPrompt(context.messages);
+}
+
 export function routeBySession(routes: {
   parentInitial: FauxReply | ((ctx: Context) => FauxReply);
   parentFinal?: FauxReply | ((ctx: Context) => FauxReply);
   subagent: FauxReply | ((ctx: Context) => FauxReply);
 }): FauxResponder {
   return (context) => {
-    const isParent = (context.tools ?? []).some((t) => t.name === "Agent");
+    const isParent = contextTools(context).some((t) => t.name === "Agent");
     if (!isParent) return resolveReply(routes.subagent, context);
     const spawned = context.messages.some(
       (m) => m.role === "toolResult" && (m as { toolName?: string }).toolName === "Agent",

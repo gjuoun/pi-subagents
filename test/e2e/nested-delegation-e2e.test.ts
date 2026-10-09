@@ -26,6 +26,7 @@ import { registerAgents } from "../../src/config/registry/agent-types.js";
 import { loadCustomAgents } from "../../src/config/registry/custom-agents.js";
 import {
   agentCall,
+  contextTools,
   type FauxReply,
   type PrintModeRun,
   runPrintMode,
@@ -101,7 +102,7 @@ describe("nested delegation e2e (real pi-mono, faux model)", () => {
 
     const respond = (context: Context): FauxReply => {
       const text = firstUserText(context);
-      const names = (context.tools ?? []).map((t) => t.name);
+      const names = contextTools(context).map((t) => t.name);
 
       // Leaf: no nested tools (it never opted in) — just answer.
       if (text.includes("Do the leaf work")) {
@@ -201,7 +202,7 @@ describe("nested delegation e2e (real pi-mono, faux model)", () => {
         if (spawned) {
           const id = /Agent ID:\s*(\S+)/.exec(spawned)?.[1];
           expect(id).toBeTruthy();
-          return fauxToolCall("get_subagent_result", { agent_id: id, wait: true });
+          return fauxToolCall("get_subagent_result", { agent_id: id as string, wait: true });
         }
         return agentCall({
           subagent_type: "worker",

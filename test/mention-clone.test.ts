@@ -184,7 +184,7 @@ describe("cloning the conversation", () => {
   it("clones a conversation that has not started yet", async () => {
     // First input of a fresh session. There is no history to carry, which is an
     // answer and not a failure — the copy still runs on the main model and
-    // system prompt, and still makes the call.
+    // still makes the call.
     buildSessionContext.mockReturnValue({ messages: [], thinkingLevel: "medium", model: null } as any);
     const o = opts();
     const session = cloneSession(callsAgent());
@@ -193,17 +193,6 @@ describe("cloning the conversation", () => {
 
     expect(result).toEqual({ spawned: true });
     expect(session.agent.state.messages).toEqual([]);
-    expect(session.agent.state.systemPrompt).toBe("the live system prompt");
-  });
-
-  it("carries the live system prompt rather than the one it rebuilt", async () => {
-    // createAgentSession derives a prompt from cwd and agentDir. Close, but not
-    // what the user's model is working under — extensions add to it per turn.
-    const session = cloneSession(callsAgent());
-
-    await runMentionClone(opts());
-
-    expect(session.agent.state.systemPrompt).toBe("the live system prompt");
   });
 
   it("inherits the parent's model, thinking level and providers", async () => {

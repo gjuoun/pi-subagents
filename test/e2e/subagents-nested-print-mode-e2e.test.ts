@@ -22,6 +22,7 @@ import { registerAgents } from "../../src/config/registry/agent-types.js";
 import { loadCustomAgents } from "../../src/config/registry/custom-agents.js";
 import {
   agentCall,
+  contextTools,
   type FauxResponder,
   type PrintModeRun,
   runPrintMode,
@@ -47,7 +48,7 @@ function userPrompt(ctx: Context): string {
 }
 
 function tools(ctx: Context): string[] {
-  return (ctx.tools ?? []).map((tool) => tool.name);
+  return contextTools(ctx).map((tool) => tool.name);
 }
 
 function toolResults(ctx: Context, name: string): string[] {

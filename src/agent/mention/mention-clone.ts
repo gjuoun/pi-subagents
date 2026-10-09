@@ -17,8 +17,12 @@ import type { Model } from "@earendil-works/pi-ai";
 import {
   buildSessionContext,
   createAgentSession,
+  DefaultResourceLoader,
   type ExtensionContext,
+  type ExtensionToolContext,
+  getAgentDir,
   SessionManager,
+  SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { runInChildSessionContext } from "../../lib/child-context.js";
@@ -77,7 +81,11 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
         { ...(params as Record<string, unknown>), run_in_background: true } as typeof params,
         signal,
         onUpdate,
-        ctx,
+        // Pi 1.x types `execute`'s context as ExtensionToolContext, which adds
+        // `tools` and `executeTool` for nested calls. The Agent handler uses
+        // neither, and the main session has no tool call in flight to hang
+        // nested calls on, so the plain context goes through unchanged.
+        ctx as ExtensionToolContext,
       );
     },
   };
@@ -98,9 +106,40 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
     // the settings level instead, which is what a session that never ran
     // `/think` is on anyway. Same shim shape as `modelRuntime` below.
     const thinkingLevel = (ctx as { thinkingLevel?: ThinkingLevel }).thinkingLevel;
+    // The clone rebuilds a system prompt from cwd and agentDir, which is close
+    // but not the live one — extensions contribute to it per turn. Pi 1.x made
+    // `agent.state.systemPrompt` a read-only replay of the transcript, and the
+    // transcript has no system message until the first `prompt()`, so the live
+    // text cannot be written in beforehand. The supported route is a
+    // `before_agent_start` handler returning `systemPrompt`, which replaces the
+    // whole prompt for the turn; it rides in on an inline extension so the copy
+    // reasons under the instructions the user's model is actually working under.
+    const agentDir = getAgentDir();
+    const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+    const livePrompt = ctx.getSystemPrompt?.();
+    const resourceLoader = new DefaultResourceLoader({
+      cwd: ctx.cwd,
+      agentDir,
+      settingsManager,
+      extensionFactories: livePrompt
+        ? [
+            {
+              name: "mention-clone-system-prompt",
+              hidden: true,
+              factory: (pi) => {
+                pi.on("before_agent_start", () => ({ systemPrompt: livePrompt }));
+              },
+            },
+          ]
+        : [],
+    });
+    await runInChildSessionContext(() => resourceLoader.reload());
     const created = await runInChildSessionContext(() =>
       createAgentSession({
         cwd: ctx.cwd,
+        agentDir,
+        settingsManager,
+        resourceLoader,
         // Nothing about the copy is worth persisting, and an in-memory manager
         // is also what keeps the real session untouched.
         sessionManager: SessionManager.inMemory(ctx.cwd),
@@ -121,13 +160,6 @@ export async function runMentionClone(opts: MentionCloneOptions): Promise<Mentio
       } as Parameters<typeof createAgentSession>[0]),
     );
     session = created.session;
-
-    // The clone rebuilds a system prompt from cwd and agentDir, which is close
-    // but not the live one — extensions contribute to it per turn. Copy the
-    // real thing, so the copy reasons under the instructions the user's model
-    // is actually working under.
-    const systemPrompt = ctx.getSystemPrompt?.();
-    if (systemPrompt) session.agent.state.systemPrompt = systemPrompt;
 
     // The conversation itself. Pushed rather than assigned so the array the
     // session was built around stays the one it goes on using.
