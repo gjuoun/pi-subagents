@@ -18,7 +18,7 @@ vi.mock("../src/agent/session/worktree.js", () => ({
   isWorktreeIsolationEnabled: vi.fn(() => true),
 }));
 
-import { resumeAgent, runAgent, type RunResult } from "../src/agent/agent-runner.js";
+import { type RunResult, resumeAgent, runAgent } from "../src/agent/agent-runner.js";
 import { isWorktreeIsolationEnabled } from "../src/agent/session/worktree.js";
 import { addUsage } from "../src/lib/usage.js";
 
