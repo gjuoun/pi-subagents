@@ -8,7 +8,7 @@ import type { V2Error } from "../domain/errors.js";
 import type { AppRuntime } from "../layers.js";
 import { AgentRegistry, type AgentRegistryShape } from "../services/agent-registry.js";
 import { AgentTypeCatalog } from "../services/agent-type-catalog.js";
-import { ParentContext, type ParentContextShape } from "../services/parent-context.js";
+import { ParentContext, type ParentContextShape } from "../services/parent-context.service.js";
 import { runTool } from "./boundary.js";
 
 /**

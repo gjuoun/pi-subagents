@@ -4,7 +4,7 @@ import type { AgentType } from "../domain/agent-type.js";
 import { type AgentNotFound, RegistryError, renderSessionError, type SessionError, type V2Error } from "../domain/errors.js";
 import { SubagentResultMessage } from "../domain/subagent-result.js";
 import { IdGenerator } from "./id-generator.js";
-import type { ParentContext } from "./parent-context.js";
+import type { ParentContext } from "./parent-context.service.js";
 import { ResultNotifier } from "./result-notifier.js";
 import { SessionFactory } from "./session-factory.js";
 

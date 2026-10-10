@@ -1,7 +1,7 @@
 import { Context, type Effect } from "effect";
 import type { ChildSession, SpawnSpec } from "../domain/child-session.js";
 import type { SessionError } from "../domain/errors.js";
-import type { ParentContext } from "./parent-context.js";
+import type { ParentContext } from "./parent-context.service.js";
 
 /**
  * session-factory.ts — the port that opens a child session.

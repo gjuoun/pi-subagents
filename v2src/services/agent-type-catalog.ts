@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Context, Effect, Option } from "effect";
 import { type AgentType, GENERAL_PURPOSE, parseAgentTypeMarkdown } from "../domain/agent-type.js";
 import { CatalogError } from "../domain/errors.js";
-import { ParentContext, type ParentContextShape } from "./parent-context.js";
+import { ParentContext, type ParentContextShape } from "./parent-context.service.js";
 
 /**
  * agent-type-catalog.ts — resolve a subagent_type to its prompt/tools/model.

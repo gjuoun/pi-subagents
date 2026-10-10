@@ -2,7 +2,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { Context } from "effect";
 
 /**
- * parent-context.ts — the per-call view of the parent session.
+ * parent-context.service.ts — the per-call view of the parent session.
  *
  * AgentTool builds one from the pi extension context and provides it for the duration of a
  * single Agent call; SessionFactory.live reads it instead of threading `ctx` below the tool.

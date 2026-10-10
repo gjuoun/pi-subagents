@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect";
 import type { ChildSession } from "../../v2src/domain/child-session.js";
-import { ParentContext, type ParentContextShape } from "../../v2src/services/parent-context.js";
+import { ParentContext, type ParentContextShape } from "../../v2src/services/parent-context.service.js";
 import { SessionFactory, type SessionFactoryShape } from "../../v2src/services/session-factory.js";
 
 /**
