@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "croner": "^10.0.1",
+    "effect": "^4.0.2",
     "nanoid": "^5.1.16",
     "neverthrow": "^8.2.0"
   },
@@ -42,8 +43,8 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run test/e2e --reporter=verbose",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
-    "lint": "biome check src/ test/",
-    "lint:fix": "biome check --fix src/ test/",
+    "lint": "biome check src/ test/ v2src/ v2test/",
+    "lint:fix": "biome check --fix src/ test/ v2src/ v2test/",
     "check": "npm run lint && npm run typecheck && npm run test",
     "test:coverage": "vitest run --coverage",
     "bench": "vitest bench",
