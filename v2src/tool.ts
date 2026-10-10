@@ -5,12 +5,12 @@ import { type Static, Type } from "@sinclair/typebox";
 import { Effect, FiberMap } from "effect";
 import { GENERAL_PURPOSE_NAME, resolveType } from "./agent-types.js";
 import { runTool } from "./boundary.js";
+import { ChildSession } from "./child-session.js";
 import { AgentBusy, AgentNotFound, type V2Error } from "./errors.js";
 import { notifyResult } from "./notify.js";
 import { type AgentRecord, Registry, type RegistryShape } from "./registry.js";
 import { runOnce } from "./run.js";
 import type { AppRuntime, PiHostShape } from "./runtime.js";
-import { spawn } from "./spawn.js";
 
 /**
  * tool.ts — the single Agent tool.
@@ -84,7 +84,7 @@ export function agentProgram(
     const agentType = yield* resolveType(ctx.cwd ?? process.cwd(), params.subagent_type ?? GENERAL_PURPOSE_NAME);
     const id = randomBytes(4).toString("hex");
 
-    const session = yield* spawn(ctx, {
+    const child = yield* ChildSession.open(ctx, {
       id,
       type: agentType.name,
       systemPrompt: agentType.systemPrompt,
@@ -104,9 +104,9 @@ export function agentProgram(
       toolUses: 0,
     };
     yield* registry.putRecord(record);
-    yield* registry.putEntry(id, { session });
+    yield* registry.putEntry(id, { session: child.session });
 
-    return yield* runAgentRun(registry, id, session, params);
+    return yield* runAgentRun(registry, id, child.session, params);
   });
 }
 

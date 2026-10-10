@@ -6,9 +6,9 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ChildSession } from "./child-session.js";
 import { SUBAGENT_RESULT_TYPE, type SubagentResultDetails } from "./notify.js";
 import { type AppRuntime, makeRuntime } from "./runtime.js";
-import { inChildSessionContext } from "./spawn.js";
 import { createAgentTool } from "./tool.js";
 import { renderResultMessage } from "./ui/result-message.js";
 import { installWidget } from "./ui/widget.js";
@@ -64,6 +64,6 @@ export function createV2Extension(pi: ExtensionAPI): V2ExtensionHandle {
 
 export default function v2Extension(pi: ExtensionAPI): void {
   // A child session loads the same extensions; re-entering would nest a runtime.
-  if (inChildSessionContext()) return;
+  if (ChildSession.isChildContext()) return;
   createV2Extension(pi);
 }
