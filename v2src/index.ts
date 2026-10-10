@@ -10,7 +10,7 @@ import { ChildSession } from "./child-session.js";
 import { type AppRuntime, makeRuntime } from "./runtime.js";
 import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./subagent-result-message.js";
 import { createAgentTool } from "./tool.js";
-import { installWidget } from "./ui/widget.js";
+import { AgentWidget } from "./ui/agent-widget.js";
 
 export interface V2ExtensionHandle {
   /** The current runtime, or undefined between shutdown and the next session_start. */
@@ -38,7 +38,7 @@ export function createV2Extension(pi: ExtensionAPI): V2ExtensionHandle {
   // disposed), and the next session starts clean.
   pi.on("session_start", (_event, ctx) => {
     if (runtime === undefined) runtime = makeRuntime(pi);
-    if (ctx.hasUI) installWidget(runtime, ctx.ui);
+    if (ctx.hasUI) runtime.runFork(new AgentWidget(ctx.ui).run);
   });
   pi.on("session_shutdown", () => {
     const previous = runtime;
