@@ -1,24 +1,26 @@
-import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import { Effect, Stream } from "effect";
 import type { AgentSnapshot } from "../domain/agent.js";
 import { SubagentResultMessage } from "../domain/subagent-result.js";
 import { AgentRegistry } from "../services/agent-registry.js";
 
 /**
- * agent-widget.ts — the pure widget renderer plus its thin pi wiring.
+ * agent-widget.ts — the pure widget renderer plus its thin pi-tui wiring.
  *
  * One line per running agent, then agents that finished in the last few seconds; capped,
  * with a "+N more" tail. Lines are truncated to the pane width. run is an Effect requiring
  * AgentRegistry that repaints on every change and on a 1s clock; it dies with the runtime on
- * session_shutdown.
+ * session_shutdown. The UI is a structural port so this layer never imports pi-coding-agent.
  */
 
 export const WIDGET_KEY = "pi-subagents-v2";
 const LIMIT = 5;
 const RECENT_MS = 5000;
 
-type TuiLike = { requestRender?: () => void };
+/** The slice of the pi UI the widget drives. */
+export interface AgentWidgetUi {
+  setWidget(key: string, content: ((tui: TUI) => Component) | undefined): void;
+}
 
 function formatElapsed(ms: number): string {
   if (ms < 1000) return "0s";
@@ -27,10 +29,10 @@ function formatElapsed(ms: number): string {
 }
 
 export class AgentWidget {
-  readonly #ui: ExtensionUIContext;
-  #tui: TuiLike | undefined;
+  readonly #ui: AgentWidgetUi;
+  #tui: TUI | undefined;
 
-  constructor(ui: ExtensionUIContext) {
+  constructor(ui: AgentWidgetUi) {
     this.#ui = ui;
   }
 
@@ -72,7 +74,7 @@ export class AgentWidget {
         this.#ui.setWidget(WIDGET_KEY, undefined);
         return;
       }
-      this.#ui.setWidget(WIDGET_KEY, (tui: TuiLike) => {
+      this.#ui.setWidget(WIDGET_KEY, (tui) => {
         this.#tui = tui;
         return {
           render: (width: number) => AgentWidget.render(snapshots, Date.now(), width),

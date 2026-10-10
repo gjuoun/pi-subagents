@@ -3,18 +3,13 @@
  *
  * v2src is organised in four layers plus the composition root. This test walks every
  * v2src .ts file, resolves each static import/export-from to its layer, and fails on any
- * edge the Layer rules forbid. Edges that later steps remove are listed in
- * KNOWN_VIOLATIONS: the test fails on a violation not in the list AND on a list entry
- * that no longer occurs, so the list can only shrink.
+ * edge the Layer rules forbid. There are no exceptions.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const V2SRC = resolve(__dirname, "..", "v2src");
-
-/** Edges the current tree still has that a later step removes. Keep sorted. */
-const KNOWN_VIOLATIONS: string[] = [];
 
 type Target =
   | { readonly kind: "effect" }
@@ -145,11 +140,8 @@ function collectViolations(): string[] {
 }
 
 const violations = collectViolations();
-const unexpected = violations.filter((v) => !KNOWN_VIOLATIONS.includes(v));
-const stale = KNOWN_VIOLATIONS.filter((v) => !violations.includes(v));
-
 describe("v2 layer fence", () => {
-  it(`has no unallowlisted import violations (${violations.length} allowlisted remaining)`, () => {
-    expect({ unexpected, stale }).toEqual({ unexpected: [], stale: [] });
+  it("has no import violations", () => {
+    expect(violations).toEqual([]);
   });
 });

@@ -6,12 +6,10 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Layer } from "effect";
 import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./domain/subagent-result.js";
-import { type AppRuntime, makeRuntime } from "./layers.js";
+import { type AppOverrides, type AppRuntime, makeRuntime } from "./layers.js";
 import { AgentTool } from "./pi/agent-tool.js";
 import { isChildContext } from "./pi/pi-child-session.js";
-import type { SessionFactory } from "./services/session-factory.js";
 import { AgentWidget } from "./ui/agent-widget.js";
 import { ResultMessageView } from "./ui/result-message-view.js";
 
@@ -22,13 +20,13 @@ import { ResultMessageView } from "./ui/result-message-view.js";
  */
 export class V2Extension {
   readonly #pi: ExtensionAPI;
-  /** Test seam: a stub SessionFactory the runtime is built with instead of the live one. */
-  readonly #sessionFactory: Layer.Layer<SessionFactory> | undefined;
+  /** Test seam: a layer merged over the default deps so a test swaps SessionFactory etc. */
+  readonly #overrides: AppOverrides | undefined;
   #runtime: AppRuntime | undefined;
 
-  constructor(pi: ExtensionAPI, sessionFactory?: Layer.Layer<SessionFactory>) {
+  constructor(pi: ExtensionAPI, overrides?: AppOverrides) {
     this.#pi = pi;
-    this.#sessionFactory = sessionFactory;
+    this.#overrides = overrides;
   }
 
   register(): void {
@@ -59,12 +57,12 @@ export class V2Extension {
   }
 
   #ensure(): AppRuntime {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#sessionFactory);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#overrides);
     return this.#runtime;
   }
 
   #onSessionStart(_event: unknown, ctx: ExtensionContext): void {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#sessionFactory);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#overrides);
     if (ctx.hasUI) this.#runtime.runFork(new AgentWidget(ctx.ui).run);
   }
 
