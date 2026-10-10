@@ -4,7 +4,7 @@ import type { Context } from "@earendil-works/pi-ai";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { hermeticDir } from "../test/helpers/boot-extension.js";
-import { loadAgentTypes } from "../v2src/agent-types.js";
+import { AgentTypeCatalog } from "../v2src/agent-type-catalog.js";
 import { agentCall, agentToolResults, routeBySession, runV2, type V2Run } from "./helpers/v2-runner.js";
 
 const SCOUT_TOOLS_READ = "---\nname: scout\ndescription: A scout\ntools: read\n---\nSCOUT-BODY-TEXT";
@@ -89,8 +89,8 @@ describe("v2 agent types from .md", () => {
         broken: "---\nname: [unclosed\n---\nbroken body",
       },
     });
-    const types = await Effect.runPromise(loadAgentTypes(hermetic.dir));
-    const names = types.map((t) => t.name);
+    const catalog = await Effect.runPromise(AgentTypeCatalog.load(hermetic.dir));
+    const names = [...catalog.names()];
     expect(names).toContain("general-purpose");
     expect(names).toContain("scout");
     expect(names).not.toContain("broken");

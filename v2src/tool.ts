@@ -4,7 +4,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { Effect } from "effect";
 import type { Agent } from "./agent.js";
 import { AgentRegistry, type AgentRegistryShape } from "./agent-registry.js";
-import { GENERAL_PURPOSE_NAME, resolveType } from "./agent-types.js";
+import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "./agent-type-catalog.js";
 import { runTool } from "./boundary.js";
 import type { V2Error } from "./errors.js";
 import type { AppRuntime, PiHostShape } from "./runtime.js";
@@ -71,7 +71,8 @@ export function agentProgram(
       return yield* runAgent(registry, agent, params);
     }
 
-    const agentType = yield* resolveType(ctx.cwd ?? process.cwd(), params.subagent_type ?? GENERAL_PURPOSE_NAME);
+    const catalog = yield* AgentTypeCatalog.load(ctx.cwd ?? process.cwd());
+    const agentType = yield* catalog.resolve(params.subagent_type ?? GENERAL_PURPOSE_NAME);
     const agent = yield* registry.create(ctx, agentType, params.description);
     return yield* runAgent(registry, agent, params);
   });

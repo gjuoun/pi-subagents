@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, FiberMap, Layer, Ref, Scope, Stream, SubscriptionRef } from "effect";
 import { Agent, type AgentSnapshot } from "./agent.js";
-import type { AgentType } from "./agent-types.js";
+import type { AgentType } from "./agent-type-catalog.js";
 import { ChildSession } from "./child-session.js";
 import { AgentBusy, AgentNotFound, type SpawnFailed, type V2Error } from "./errors.js";
 import { notifyResult } from "./notify.js";
