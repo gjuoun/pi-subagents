@@ -11,7 +11,7 @@ import type { PiHost } from "./pi-host.js";
 import type { AppRuntime } from "./runtime.js";
 
 /**
- * tool.ts — the single Agent tool.
+ * agent-tool.ts — the single Agent tool.
  *
  * The execute boundary is the only place a Promise meets an Effect here: the effectful
  * program is handed to runTool, which folds the Exit back into an AgentToolResult.
@@ -39,46 +39,6 @@ const AgentParams = Type.Object({
 });
 type AgentArgs = Static<typeof AgentParams>;
 
-export const createAgentTool = (
-  getRuntime: () => AppRuntime,
-): ToolDefinition<typeof AgentParams, undefined> =>
-  defineTool({
-    name: AGENT_TOOL_NAME,
-    label: "Agent",
-    description: AGENT_TOOL_DESCRIPTION,
-    parameters: AgentParams,
-    execute: async (
-      _toolCallId: string,
-      params: AgentArgs,
-      signal: AbortSignal | undefined,
-      _onUpdate: unknown,
-      ctx: ExtensionContext,
-    ) => {
-      const program = agentProgram(ctx, params);
-      return runTool(getRuntime(), program, signal);
-    },
-  });
-
-/** The resolve -> create/find -> run program for one Agent call. */
-export function agentProgram(
-  ctx: ExtensionContext,
-  params: AgentArgs,
-): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
-  return Effect.gen(function* () {
-    const registry = yield* AgentRegistry;
-
-    if (params.resume !== undefined) {
-      const agent = yield* registry.find(params.resume);
-      return yield* runAgent(registry, agent, params);
-    }
-
-    const catalog = yield* AgentTypeCatalog.load(ctx.cwd ?? process.cwd());
-    const agentType = yield* catalog.resolve(params.subagent_type ?? GENERAL_PURPOSE_NAME);
-    const agent = yield* registry.create(ctx, agentType, params.description);
-    return yield* runAgent(registry, agent, params);
-  });
-}
-
 /** Run once on a fresh or resumed agent; fork it when run_in_background is set. */
 function runAgent(
   registry: AgentRegistryShape,
@@ -88,4 +48,47 @@ function runAgent(
   return params.run_in_background === true
     ? registry.runInBackground(agent, params.prompt)
     : agent.run(params.prompt);
+}
+
+export class AgentTool {
+  readonly #getRuntime: () => AppRuntime;
+
+  constructor(getRuntime: () => AppRuntime) {
+    this.#getRuntime = getRuntime;
+  }
+
+  get definition(): ToolDefinition<typeof AgentParams, undefined> {
+    return defineTool({
+      name: AGENT_TOOL_NAME,
+      label: "Agent",
+      description: AGENT_TOOL_DESCRIPTION,
+      parameters: AgentParams,
+      execute: async (
+        _toolCallId: string,
+        params: AgentArgs,
+        signal: AbortSignal | undefined,
+        _onUpdate: unknown,
+        ctx: ExtensionContext,
+      ) => {
+        return runTool(this.#getRuntime(), this.program(ctx, params), signal);
+      },
+    });
+  }
+
+  /** The resolve -> create/find -> run program for one Agent call. */
+  private program(ctx: ExtensionContext, params: AgentArgs): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
+    return Effect.gen(function* () {
+      const registry = yield* AgentRegistry;
+
+      if (params.resume !== undefined) {
+        const agent = yield* registry.find(params.resume);
+        return yield* runAgent(registry, agent, params);
+      }
+
+      const catalog = yield* AgentTypeCatalog.load(ctx.cwd ?? process.cwd());
+      const agentType = yield* catalog.resolve(params.subagent_type ?? GENERAL_PURPOSE_NAME);
+      const agent = yield* registry.create(ctx, agentType, params.description);
+      return yield* runAgent(registry, agent, params);
+    });
+  }
 }
