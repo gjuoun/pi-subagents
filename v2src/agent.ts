@@ -114,10 +114,12 @@ export class Agent {
    */
   run(prompt: string): Effect.Effect<string, RunFailed | AgentBusy> {
     return Effect.gen({ self: this }, function* () {
-      if (yield* Ref.get(this.#active)) {
+      // Atomic claim: getAndSet flips the latch and returns the previous value in one step, so
+      // two fibers resuming the same agent cannot both pass the guard. On a loss the latch was
+      // already true — leave it for the in-flight run to clear.
+      if (yield* Ref.getAndSet(this.#active, true)) {
         return yield* Effect.fail(new AgentBusy({ id: this.id, name: this.name }));
       }
-      yield* Ref.set(this.#active, true);
       yield* this.#transition((s) => ({
         ...s,
         status: "running" as const,
