@@ -6,11 +6,12 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { AgentTool } from "./agent-tool.js";
-import { ChildSession } from "./child-session.js";
-import { type AppRuntime, makeRuntime } from "./runtime.js";
-import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./subagent-result-message.js";
+import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./domain/subagent-result.js";
+import { type AppRuntime, makeRuntime } from "./layers.js";
+import { AgentTool } from "./pi/agent-tool.js";
+import { ChildSession } from "./pi/pi-child-session.js";
 import { AgentWidget } from "./ui/agent-widget.js";
+import { ResultMessageView } from "./ui/result-message-view.js";
 
 /**
  * V2Extension wires the tool, the result renderer and the session lifecycle against one pi
@@ -30,7 +31,8 @@ export class V2Extension {
 
     // Display-only renderer for the background result message.
     this.#pi.registerMessageRenderer(SUBAGENT_RESULT_TYPE, (message, options) => ({
-      render: (width: number) => SubagentResultMessage.fromPi(message).render({ expanded: options.expanded, width }),
+      render: (width: number) =>
+        ResultMessageView.render(SubagentResultMessage.fromPlain(message), { expanded: options.expanded, width }),
       invalidate: () => {},
     }));
 

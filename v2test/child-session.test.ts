@@ -1,8 +1,8 @@
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { ChildSession } from "../v2src/child-session.js";
-import { RunFailed } from "../v2src/errors.js";
+import { RunFailed } from "../v2src/domain/errors.js";
+import { ChildSession } from "../v2src/pi/pi-child-session.js";
 
 type AnyMessage = { role: string; content: Array<{ type: string; text?: string }>; stopReason?: string; errorMessage?: string };
 

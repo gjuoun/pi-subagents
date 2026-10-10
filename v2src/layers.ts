@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { AgentRegistry, type AgentRegistryOptions } from "./agent-registry.js";
-import { PiHost } from "./pi-host.js";
+import { PiHost } from "./pi/pi-result-notifier.js";
+import { AgentRegistry, type AgentRegistryOptions } from "./services/agent-registry.js";
 
 /**
  * runtime.ts — the single composition root: one ManagedRuntime per extension instance.

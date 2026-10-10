@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, FiberMap, Layer, Ref, Scope, Stream, SubscriptionRef } from "effect";
-import { Agent, type AgentSnapshot } from "./agent.js";
+import { Agent, type AgentSnapshot } from "../domain/agent.js";
+import { AgentBusy, AgentNotFound, type SpawnFailed, type V2Error } from "../domain/errors.js";
+import { SubagentResultMessage } from "../domain/subagent-result.js";
+import { ChildSession } from "../pi/pi-child-session.js";
+import { PiHost } from "../pi/pi-result-notifier.js";
 import type { AgentType } from "./agent-type-catalog.js";
-import { ChildSession } from "./child-session.js";
-import { AgentBusy, AgentNotFound, type SpawnFailed, type V2Error } from "./errors.js";
-import { PiHost } from "./pi-host.js";
-import { SubagentResultMessage } from "./subagent-result-message.js";
 
 /**
  * agent-registry.ts — the one place the extension keeps its agents.

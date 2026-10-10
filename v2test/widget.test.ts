@@ -2,10 +2,10 @@ import type { AgentSession, ExtensionAPI, ExtensionUIContext } from "@earendil-w
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { type AgentSnapshot } from "../v2src/agent.js";
-import { AgentRegistry } from "../v2src/agent-registry.js";
-import { ChildSession } from "../v2src/child-session.js";
-import { makeRuntime } from "../v2src/runtime.js";
+import { type AgentSnapshot } from "../v2src/domain/agent.js";
+import { makeRuntime } from "../v2src/layers.js";
+import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
 import { AgentWidget, WIDGET_KEY } from "../v2src/ui/agent-widget.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

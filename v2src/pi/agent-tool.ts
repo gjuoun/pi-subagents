@@ -2,13 +2,13 @@ import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 import { Effect } from "effect";
-import type { Agent } from "./agent.js";
-import { AgentRegistry, type AgentRegistryShape } from "./agent-registry.js";
-import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "./agent-type-catalog.js";
+import type { Agent } from "../domain/agent.js";
+import type { V2Error } from "../domain/errors.js";
+import type { AppRuntime } from "../layers.js";
+import { AgentRegistry, type AgentRegistryShape } from "../services/agent-registry.js";
+import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "../services/agent-type-catalog.js";
 import { runTool } from "./boundary.js";
-import type { V2Error } from "./errors.js";
-import type { PiHost } from "./pi-host.js";
-import type { AppRuntime } from "./runtime.js";
+import type { PiHost } from "./pi-result-notifier.js";
 
 /**
  * agent-tool.ts — the single Agent tool.

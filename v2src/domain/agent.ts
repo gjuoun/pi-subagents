@@ -1,5 +1,5 @@
 import { Effect, Ref } from "effect";
-import type { ChildSession } from "./child-session.js";
+import type { ChildSession } from "../pi/pi-child-session.js";
 import { AgentBusy, RunFailed } from "./errors.js";
 
 /**

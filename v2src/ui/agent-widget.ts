@@ -1,9 +1,9 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Effect, Stream } from "effect";
-import type { AgentSnapshot } from "../agent.js";
-import { AgentRegistry } from "../agent-registry.js";
-import { SubagentResultMessage } from "../subagent-result-message.js";
+import type { AgentSnapshot } from "../domain/agent.js";
+import { SubagentResultMessage } from "../domain/subagent-result.js";
+import { AgentRegistry } from "../services/agent-registry.js";
 
 /**
  * agent-widget.ts — the pure widget renderer plus its thin pi wiring.

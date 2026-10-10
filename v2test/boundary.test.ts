@@ -1,9 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { runTool } from "../v2src/boundary.js";
-import { AgentBusy, AgentNotFound, RunFailed, SpawnFailed, UnknownAgentType } from "../v2src/errors.js";
-import { makeRuntime } from "../v2src/runtime.js";
+import { AgentBusy, AgentNotFound, RunFailed, SpawnFailed, UnknownAgentType } from "../v2src/domain/errors.js";
+import { makeRuntime } from "../v2src/layers.js";
+import { runTool } from "../v2src/pi/boundary.js";
 
 const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
 

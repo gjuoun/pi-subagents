@@ -2,9 +2,9 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { makePi, ctx as mockCtx } from "../test/helpers/boot-extension.js";
-import { AgentRegistry } from "../v2src/agent-registry.js";
-import { ChildSession } from "../v2src/child-session.js";
 import { V2Extension } from "../v2src/index.js";
+import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
 
 type StubSession = AgentSession & { abort: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> };
 

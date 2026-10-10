@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Effect, Option } from "effect";
-import { UnknownAgentType } from "./errors.js";
+import { UnknownAgentType } from "../domain/errors.js";
 
 /**
  * agent-type-catalog.ts — resolve a subagent_type to its prompt/tools/model.

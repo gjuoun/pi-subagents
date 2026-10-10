@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { ManagedRuntime } from "effect";
 import { Cause, Effect, Exit, Option, Result } from "effect";
-import type { V2Error } from "./errors.js";
+import type { V2Error } from "../domain/errors.js";
 
 /**
  * boundary.ts — the ONE place an Effect becomes plain data for pi.

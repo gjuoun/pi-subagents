@@ -1,10 +1,10 @@
 import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { AgentRegistry } from "../v2src/agent-registry.js";
-import { runTool } from "../v2src/boundary.js";
-import { ChildSession } from "../v2src/child-session.js";
-import { makeRuntime } from "../v2src/runtime.js";
+import { makeRuntime } from "../v2src/layers.js";
+import { runTool } from "../v2src/pi/boundary.js";
+import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
 
 const V2_HANDLE_KEY = Symbol.for("pi-subagents:v2");
 const handle = () =>

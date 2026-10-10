@@ -9,8 +9,8 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
-import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "./agent-type-catalog.js";
-import { RunFailed, SpawnFailed } from "./errors.js";
+import { RunFailed, SpawnFailed } from "../domain/errors.js";
+import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "../services/agent-type-catalog.js";
 
 /**
  * child-session.ts — one child pi AgentSession, wrapped.

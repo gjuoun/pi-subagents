@@ -1,18 +1,14 @@
-import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { AgentSnapshot } from "./agent.js";
-import type { PiOutboundMessage } from "./pi-host.js";
 
 /**
- * subagent-result-message.ts — the one value class for a subagent-result message.
+ * subagent-result.ts — the one value class for a subagent-result message.
  *
- * It owns the message both ways: fromAgent builds content + plain details for delivery, fromPi
- * decodes a pi message for the renderer, toOutbound is the pi message, and render is today's
- * collapsed/expanded display logic (display only — the LLM still receives the full content).
+ * It owns the message both ways: fromAgent builds content + plain details for delivery,
+ * fromPlain decodes a pi message for the renderer (see ui/result-message-view.ts), and
+ * toOutbound is the plain pi message. Rendering lives in the ui layer.
  */
 
 export const SUBAGENT_RESULT_TYPE = "subagent-result";
-
-const SHOWN_LINES = 3;
 
 export interface SubagentResultDetails {
   readonly id: string;
@@ -24,14 +20,17 @@ export interface SubagentResultDetails {
   readonly toolUses: number;
 }
 
-export interface RenderResultOptions {
-  readonly expanded: boolean;
-  readonly width: number;
+/** The shape pi hands a message renderer. */
+export interface PlainMessageLike {
+  readonly content?: unknown;
+  readonly details?: unknown;
 }
 
-/** The shape pi hands a message renderer. */
-export interface PiMessageLike {
-  readonly content?: unknown;
+/** A plain message to push into the parent conversation. */
+export interface PiOutboundMessage {
+  readonly customType: string;
+  readonly content: string;
+  readonly display: boolean;
   readonly details?: unknown;
 }
 
@@ -60,7 +59,7 @@ export class SubagentResultMessage {
   }
 
   /** Decode a pi message for the renderer. */
-  static fromPi(message: PiMessageLike): SubagentResultMessage {
+  static fromPlain(message: PlainMessageLike): SubagentResultMessage {
     return new SubagentResultMessage(
       message.details as SubagentResultDetails | undefined,
       typeof message.content === "string" ? message.content : "",
@@ -70,14 +69,6 @@ export class SubagentResultMessage {
   /** The plain pi message this class delivers. */
   toOutbound(): PiOutboundMessage {
     return { customType: SUBAGENT_RESULT_TYPE, content: this.content, display: true, details: this.details };
-  }
-
-  /** Collapsed/expanded display lines, each truncated to the available width. */
-  render(options: RenderResultOptions): string[] {
-    const head = statusLine(this.details);
-    const body = this.content.split("\n");
-    const lines = options.expanded ? [head, ...body] : collapse(head, body);
-    return lines.map((line) => truncateToWidth(line, options.width));
   }
 
   /** The one-glyph status marker shared by the result message and the widget. */
@@ -93,21 +84,4 @@ export class SubagentResultMessage {
         return "·";
     }
   }
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function statusLine(details: SubagentResultDetails | undefined): string {
-  if (details === undefined) return "✓ subagent";
-  return `${SubagentResultMessage.statusGlyph(details.status)} ${details.name} · ${details.description} · ${details.toolUses} tools · ${formatDuration(details.durationMs)}`;
-}
-
-function collapse(head: string, body: readonly string[]): string[] {
-  if (body.length <= SHOWN_LINES + 1) return [head, ...body];
-  // The three shown lines plus the status line occupy four rows; the rest are hidden.
-  const hidden = body.length - SHOWN_LINES - 1;
-  return [head, ...body.slice(0, SHOWN_LINES), `… ${hidden} more lines`];
 }

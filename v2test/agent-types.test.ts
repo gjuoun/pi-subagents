@@ -4,7 +4,7 @@ import type { Context } from "@earendil-works/pi-ai";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { hermeticDir } from "../test/helpers/boot-extension.js";
-import { AgentTypeCatalog } from "../v2src/agent-type-catalog.js";
+import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { agentCall, agentToolResults, routeBySession, runV2, type V2Run } from "./helpers/v2-runner.js";
 
 const SCOUT_TOOLS_READ = "---\nname: scout\ndescription: A scout\ntools: read\n---\nSCOUT-BODY-TEXT";

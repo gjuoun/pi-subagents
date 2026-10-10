@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer } from "effect";
-import type { SubagentResultMessage } from "./subagent-result-message.js";
+import type { PiOutboundMessage, SubagentResultMessage } from "../domain/subagent-result.js";
 
 /**
  * pi-host.ts — the thin, promise-free wrapper over the pi handle.
@@ -8,14 +8,6 @@ import type { SubagentResultMessage } from "./subagent-result-message.js";
  * PiHost is a v4 class service: the rest of v2src never touches ExtensionAPI directly, and
  * deliver() owns the one way a subagent result is pushed into the parent conversation.
  */
-
-/** A plain message to push into the parent conversation. */
-export interface PiOutboundMessage {
-  readonly customType: string;
-  readonly content: string;
-  readonly display: boolean;
-  readonly details?: unknown;
-}
 
 export interface PiSendOptions {
   readonly triggerTurn?: boolean;

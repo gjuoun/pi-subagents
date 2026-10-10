@@ -1,10 +1,10 @@
 import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect, Fiber, Result } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { AgentRegistry } from "../v2src/agent-registry.js";
-import { ChildSession } from "../v2src/child-session.js";
-import { AgentBusy } from "../v2src/errors.js";
-import { makeRuntime } from "../v2src/runtime.js";
+import { AgentBusy } from "../v2src/domain/errors.js";
+import { makeRuntime } from "../v2src/layers.js";
+import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
 
 const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
 
