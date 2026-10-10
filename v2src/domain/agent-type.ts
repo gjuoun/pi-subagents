@@ -39,40 +39,48 @@ function parseTools(value: unknown): ReadonlyArray<string> | undefined {
     .filter(Boolean);
 }
 
-/** One non-scalar value we deliberately refuse to guess at (skip the file instead). */
+/** A non-scalar value we deliberately refuse to guess at (skip the file instead). */
 const UNSUPPORTED_VALUE = /^[[{|>*&!]/;
 
-function parseScalar(value: string): string {
-  if (UNSUPPORTED_VALUE.test(value)) throw new Error(`unsupported frontmatter value: ${value}`);
+/** undefined means the value is not a simple scalar. */
+function parseScalar(value: string): string | undefined {
+  if (UNSUPPORTED_VALUE.test(value)) return undefined;
   if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
     return value.slice(1, -1);
   }
   return value;
 }
 
-function parseScalarMap(yaml: string): Record<string, unknown> {
+/** undefined means a line we cannot understand, so the whole file is skipped. */
+function parseScalarMap(yaml: string): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   for (const rawLine of yaml.split("\n")) {
     const line = rawLine.trim();
     if (line === "" || line.startsWith("#")) continue;
     const sep = line.indexOf(":");
-    if (sep <= 0) throw new Error(`unsupported frontmatter line: ${line}`);
+    if (sep <= 0) return undefined;
+    const key = line.slice(0, sep).trim();
     const value = line.slice(sep + 1).trim();
-    out[line.slice(0, sep).trim()] = value === "" ? undefined : parseScalar(value);
+    if (value === "") {
+      out[key] = undefined;
+      continue;
+    }
+    const scalar = parseScalar(value);
+    if (scalar === undefined) return undefined;
+    out[key] = scalar;
   }
   return out;
 }
 
 /** Split a leading `---` frontmatter block off the body, or leave the whole text as body. */
-function splitFrontmatter(text: string): { readonly frontmatter: Record<string, unknown>; readonly body: string } {
+function splitFrontmatter(text: string): { readonly frontmatter: Record<string, unknown>; readonly body: string } | undefined {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!normalized.startsWith("---")) return { frontmatter: {}, body: normalized };
   const endIndex = normalized.indexOf("\n---", 3);
   if (endIndex === -1) return { frontmatter: {}, body: normalized };
-  return {
-    frontmatter: parseScalarMap(normalized.slice(4, endIndex)),
-    body: normalized.slice(endIndex + 4).trim(),
-  };
+  const frontmatter = parseScalarMap(normalized.slice(4, endIndex));
+  if (frontmatter === undefined) return undefined;
+  return { frontmatter, body: normalized.slice(endIndex + 4).trim() };
 }
 
 /** The name a file contributes when its frontmatter declares none. */
@@ -83,11 +91,9 @@ const nameFromPath = (path: string): string => {
 
 /** Parse one agent .md file; undefined means malformed (the caller warns and skips it). */
 export function parseAgentTypeMarkdown(path: string, text: string): AgentType | undefined {
-  let parsed: { readonly frontmatter: Record<string, unknown>; readonly body: string };
-  try {
-    parsed = splitFrontmatter(text.startsWith("\uFEFF") ? text.slice(1) : text);
-  } catch (error) {
-    console.warn(`[pi-subagents/v2] Skipping ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  const parsed = splitFrontmatter(text.startsWith("\uFEFF") ? text.slice(1) : text);
+  if (parsed === undefined) {
+    console.warn(`[pi-subagents/v2] Skipping ${path}: malformed frontmatter`);
     return undefined;
   }
   const fm = parsed.frontmatter;

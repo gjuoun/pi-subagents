@@ -36,7 +36,7 @@ function stubSession(initial: AnyMessage[] = []) {
     dispose: () => {},
     prompt: async () => {
       const t = turn;
-      if (t.reject !== undefined) throw new Error(t.reject);
+      if (t.reject !== undefined) return Promise.reject(new Error(t.reject));
       if (t.text !== undefined) {
         emit({ type: "message_start", message: { role: "assistant" } });
         emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: t.text } });
