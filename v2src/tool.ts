@@ -1,15 +1,12 @@
-import { randomBytes } from "node:crypto";
-import type { AgentSession, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
-import { Effect, FiberMap } from "effect";
+import { Effect } from "effect";
+import type { Agent } from "./agent.js";
+import { AgentRegistry, type AgentRegistryShape } from "./agent-registry.js";
 import { GENERAL_PURPOSE_NAME, resolveType } from "./agent-types.js";
 import { runTool } from "./boundary.js";
-import { ChildSession } from "./child-session.js";
-import { AgentBusy, AgentNotFound, type V2Error } from "./errors.js";
-import { notifyResult } from "./notify.js";
-import { type AgentRecord, Registry, type RegistryShape } from "./registry.js";
-import { runOnce } from "./run.js";
+import type { V2Error } from "./errors.js";
 import type { AppRuntime, PiHostShape } from "./runtime.js";
 
 /**
@@ -61,75 +58,32 @@ export const createAgentTool = (
     },
   });
 
-/** The allocate -> spawn -> run -> return-text program for one foreground call. */
+/** The resolve -> create/find -> run program for one Agent call. */
 export function agentProgram(
   ctx: ExtensionContext,
   params: AgentArgs,
-): Effect.Effect<string, V2Error, RegistryShape | PiHostShape> {
+): Effect.Effect<string, V2Error, AgentRegistry | PiHostShape> {
   return Effect.gen(function* () {
-    const registry = yield* Registry;
+    const registry = yield* AgentRegistry;
 
     if (params.resume !== undefined) {
-      const record = yield* registry.get(params.resume);
-      if (record.status === "running") {
-        return yield* Effect.fail(new AgentBusy({ id: record.id, name: record.name }));
-      }
-      const entry = yield* registry.getEntry(record.id);
-      if (entry === undefined) {
-        return yield* Effect.fail(new AgentNotFound({ id: record.id }));
-      }
-      return yield* runAgentRun(registry, record.id, entry.session, params);
+      const agent = yield* registry.find(params.resume);
+      return yield* runAgent(registry, agent, params);
     }
 
     const agentType = yield* resolveType(ctx.cwd ?? process.cwd(), params.subagent_type ?? GENERAL_PURPOSE_NAME);
-    const id = randomBytes(4).toString("hex");
-
-    const child = yield* ChildSession.open(ctx, {
-      id,
-      type: agentType.name,
-      systemPrompt: agentType.systemPrompt,
-      tools: agentType.tools,
-      model: agentType.model,
-      thinking: agentType.thinking,
-    });
-    const record: AgentRecord = {
-      id,
-      type: agentType.name,
-      name: agentType.name,
-      description: params.description,
-      status: "running",
-      runs: 0,
-      startedAt: Date.now(),
-      lastText: "",
-      toolUses: 0,
-    };
-    yield* registry.putRecord(record);
-    yield* registry.putEntry(id, { session: child.session });
-
-    return yield* runAgentRun(registry, id, child.session, params);
+    const agent = yield* registry.create(ctx, agentType, params.description);
+    return yield* runAgent(registry, agent, params);
   });
 }
 
-/** Run once on a fresh or resumed session; fork it when run_in_background is set. */
-function runAgentRun(
-  registry: RegistryShape,
-  id: string,
-  session: AgentSession,
+/** Run once on a fresh or resumed agent; fork it when run_in_background is set. */
+function runAgent(
+  registry: AgentRegistryShape,
+  agent: Agent,
   params: AgentArgs,
-): Effect.Effect<string, V2Error, RegistryShape | PiHostShape> {
-  return Effect.gen(function* () {
-    if (params.run_in_background === true) {
-      yield* FiberMap.run(
-        registry.fibers,
-        id,
-        runOnce(id, session, params.prompt).pipe(
-          Effect.tap((answer) => notifyResult(id, "done", answer)),
-          Effect.catchTag("RunFailed", (error) => notifyResult(id, "error", error.plain.message)),
-        ),
-      );
-      const record = yield* registry.get(id);
-      return `Started ${record.type} (id ${id}) in the background — its result will arrive as a message.`;
-    }
-    return yield* runOnce(id, session, params.prompt);
-  });
+): Effect.Effect<string, V2Error, AgentRegistry | PiHostShape> {
+  return params.run_in_background === true
+    ? registry.runInBackground(agent, params.prompt)
+    : agent.run(params.prompt);
 }

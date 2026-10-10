@@ -1,14 +1,16 @@
-import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { type AgentRecord, Registry } from "../v2src/registry.js";
+import { type AgentSnapshot } from "../v2src/agent.js";
+import { AgentRegistry } from "../v2src/agent-registry.js";
+import { ChildSession } from "../v2src/child-session.js";
 import { makeRuntime } from "../v2src/runtime.js";
 import { installWidget, renderWidget, WIDGET_KEY } from "../v2src/ui/widget.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const rec = (over: Partial<AgentRecord>): AgentRecord => ({
+const rec = (over: Partial<AgentSnapshot>): AgentSnapshot => ({
   id: "x",
   type: "general-purpose",
   name: "general-purpose",
@@ -20,6 +22,16 @@ const rec = (over: Partial<AgentRecord>): AgentRecord => ({
   toolUses: 0,
   ...over,
 });
+
+function stubSession(): AgentSession {
+  return {
+    messages: [],
+    subscribe: () => () => {},
+    prompt: async () => {},
+    abort: async () => {},
+    dispose: () => {},
+  } as unknown as AgentSession;
+}
 
 describe("renderWidget", () => {
   it("lists running agents then recently finished ones, in order", () => {
@@ -90,8 +102,8 @@ describe("installWidget wiring", () => {
     installWidget(rt, ui);
     await rt.runPromise(
       Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.putRecord(rec({ id: "a", startedAt: Date.now() }));
+        const registry = yield* AgentRegistry;
+        yield* registry.adopt(new ChildSession(stubSession(), "a", "general-purpose"), "general-purpose", "d");
       }),
     );
     await sleep(1300); // let a 1s tick request a paint

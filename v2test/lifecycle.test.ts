@@ -1,30 +1,24 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import { Effect, FiberMap } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { makePi, ctx as mockCtx } from "../test/helpers/boot-extension.js";
+import { AgentRegistry } from "../v2src/agent-registry.js";
+import { ChildSession } from "../v2src/child-session.js";
 import { createV2Extension } from "../v2src/index.js";
-import { type AgentRecord, Registry } from "../v2src/registry.js";
 
-const record = (id: string, status: AgentRecord["status"] = "running"): AgentRecord => ({
-  id,
-  type: "general-purpose",
-  name: "general-purpose",
-  description: "d",
-  status,
-  runs: 0,
-  startedAt: Date.now(),
-  lastText: "",
-  toolUses: 0,
-});
+type StubSession = AgentSession & { abort: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> };
 
-function stubSession(): AgentSession & { abort: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> } {
+function stubSession(prompt?: () => Promise<void>): StubSession {
   return {
     abort: vi.fn(async () => {}),
     dispose: vi.fn(),
     messages: [],
     subscribe: vi.fn(() => () => {}),
-  } as unknown as AgentSession & { abort: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> };
+    prompt: vi.fn(prompt ?? (async () => {})),
+  } as unknown as StubSession;
 }
+
+const child = (session: AgentSession, id: string) => new ChildSession(session, id, "general-purpose");
 
 describe("v2 lifecycle", () => {
   it("(a) session_shutdown aborts running children and disposes them all", async () => {
@@ -37,11 +31,10 @@ describe("v2 lifecycle", () => {
     const finished = stubSession();
     await rt?.runPromise(
       Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.putRecord(record("aaaaaaaa", "running"));
-        yield* registry.putRecord(record("bbbbbbbb", "done"));
-        yield* registry.putEntry("aaaaaaaa", { session: running });
-        yield* registry.putEntry("bbbbbbbb", { session: finished });
+        const registry = yield* AgentRegistry;
+        yield* registry.adopt(child(running, "aaaaaaaa"), "general-purpose", "d");
+        const done = yield* registry.adopt(child(finished, "bbbbbbbb"), "general-purpose", "d");
+        yield* done.run("x");
       }),
     );
     await lifecycle.get("session_shutdown")();
@@ -57,9 +50,8 @@ describe("v2 lifecycle", () => {
     lifecycle.get("session_start")({}, mockCtx());
     await ext.getRuntime()?.runPromise(
       Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.putRecord(record("cccccccc", "done"));
-        yield* registry.putEntry("cccccccc", { session: stubSession() });
+        const registry = yield* AgentRegistry;
+        yield* registry.adopt(child(stubSession(), "cccccccc"), "general-purpose", "d");
       }),
     );
     await lifecycle.get("session_shutdown")();
@@ -79,12 +71,12 @@ describe("v2 lifecycle", () => {
     const { pi, lifecycle } = makePi();
     const ext = createV2Extension(pi);
     lifecycle.get("session_start")({}, mockCtx());
+    const hanging = stubSession(() => new Promise<void>(() => {}));
     await ext.getRuntime()?.runPromise(
       Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.putRecord(record("dddddddd", "running"));
-        yield* registry.putEntry("dddddddd", { session: stubSession() });
-        yield* FiberMap.run(registry.fibers, "dddddddd", Effect.never);
+        const registry = yield* AgentRegistry;
+        const agent = yield* registry.adopt(child(hanging, "dddddddd"), "general-purpose", "d");
+        yield* registry.runInBackground(agent, "x");
       }),
     );
     await lifecycle.get("session_shutdown")();

@@ -1,11 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, Layer, ManagedRuntime } from "effect";
 import {
-  Registry,
-  type RegistryOptions,
-  type RegistryShape,
-  layer as registryLayer,
-} from "./registry.js";
+  AgentRegistry,
+  type AgentRegistryOptions,
+  layer as agentRegistryLayer,
+} from "./agent-registry.js";
 
 /**
  * runtime.ts — the single composition root: one ManagedRuntime per extension instance.
@@ -41,12 +40,12 @@ const piHostLayer = (pi: ExtensionAPI): Layer.Layer<PiHostShape> =>
     },
   });
 
-export type AppRuntime = ManagedRuntime.ManagedRuntime<RegistryShape | PiHostShape, never>;
+export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | PiHostShape, never>;
 
-export interface RuntimeOptions extends RegistryOptions {}
+export interface RuntimeOptions extends AgentRegistryOptions {}
 
 export const makeRuntime = (pi: ExtensionAPI, options: RuntimeOptions = {}): AppRuntime => {
-  const runtime = ManagedRuntime.make(Layer.mergeAll(registryLayer(options), piHostLayer(pi)));
+  const runtime = ManagedRuntime.make(Layer.mergeAll(agentRegistryLayer(options), piHostLayer(pi)));
   // Effect layers are lazy: nothing is acquired until an effect that needs them runs, so a
   // never-used runtime would dispose without running any finalizer. Touch both services once
   // at load so the graph is constructed now and dispose() always tears it down.
@@ -56,6 +55,7 @@ export const makeRuntime = (pi: ExtensionAPI, options: RuntimeOptions = {}): App
 
 /** Forces the layer graph (and thus both service scopes) to be built. */
 const warmup = Effect.gen(function* () {
-  yield* Registry;
+  yield* AgentRegistry;
   yield* PiHost;
 });
+

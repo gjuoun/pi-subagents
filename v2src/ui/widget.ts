@@ -1,8 +1,8 @@
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { Effect, Stream, SubscriptionRef } from "effect";
-import type { AgentRecord } from "../registry.js";
-import { Registry } from "../registry.js";
+import { Effect, Stream } from "effect";
+import type { AgentSnapshot } from "../agent.js";
+import { AgentRegistry } from "../agent-registry.js";
 import type { AppRuntime } from "../runtime.js";
 import { statusGlyph } from "./result-message.js";
 
@@ -25,7 +25,7 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(ms / 60_000)}m`;
 }
 
-export function renderWidget(records: ReadonlyArray<AgentRecord>, now: number, width: number): string[] {
+export function renderWidget(records: ReadonlyArray<AgentSnapshot>, now: number, width: number): string[] {
   const running = records
     .filter((r) => r.status === "running")
     .sort((a, b) => a.startedAt - b.startedAt);
@@ -55,7 +55,7 @@ type TuiLike = { requestRender?: () => void };
 export function installWidget(runtime: AppRuntime, ui: ExtensionUIContext): void {
   let tui: TuiLike | undefined;
 
-  const repaint = (records: ReadonlyArray<AgentRecord>) =>
+  const repaint = (records: ReadonlyArray<AgentSnapshot>) =>
     Effect.sync(() => {
       if (records.length === 0) {
         ui.setWidget(WIDGET_KEY, undefined);
@@ -73,14 +73,9 @@ export function installWidget(runtime: AppRuntime, ui: ExtensionUIContext): void
 
   runtime.runFork(
     Effect.gen(function* () {
-      const registry = yield* Registry;
-      const changes = SubscriptionRef.changes(registry.agents).pipe(
-        Stream.map(() => SubscriptionRef.getUnsafe(registry.agents)),
-        Stream.map((byId) => Array.from(byId.values())),
-      );
-      const ticks = Stream.tick("1 second").pipe(
-        Stream.map(() => Array.from(SubscriptionRef.getUnsafe(registry.agents).values())),
-      );
+      const registry = yield* AgentRegistry;
+      const changes = registry.changes;
+      const ticks = Stream.tick("1 second").pipe(Stream.mapEffect(() => registry.snapshots));
       yield* Stream.runForEach(Stream.merge(changes, ticks), (records) => repaint(records));
     }),
   );
