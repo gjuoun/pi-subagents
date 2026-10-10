@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, FiberMap, Layer, Ref, Scope, Stream, SubscriptionRef } from "effect";
 import { Agent, type AgentSnapshot } from "../domain/agent.js";
-import { AgentBusy, AgentNotFound, type SpawnFailed, type V2Error } from "../domain/errors.js";
+import { type AgentNotFound, RegistryError, renderSessionError, type SpawnFailed, type V2Error } from "../domain/errors.js";
 import { SubagentResultMessage } from "../domain/subagent-result.js";
 import { ChildSession } from "../pi/pi-child-session.js";
 import { PiHost } from "../pi/pi-result-notifier.js";
@@ -132,20 +132,20 @@ const makeAgentRegistry = (
         Ref.get(agents).pipe(
           Effect.flatMap((byId) => {
             const agent = byId.get(id);
-            return agent === undefined ? Effect.fail(new AgentNotFound({ id })) : Effect.succeed(agent);
+            return agent === undefined ? Effect.fail(RegistryError.AgentNotFound({ id })) : Effect.succeed(agent);
           }),
         ),
       runInBackground: (agent, prompt) =>
         Effect.gen(function* () {
           if (yield* agent.isRunning) {
-            return yield* Effect.fail(new AgentBusy({ id: agent.id, name: agent.name }));
+            return yield* Effect.fail(RegistryError.AgentBusy({ id: agent.id, name: agent.name }));
           }
           yield* FiberMap.run(
             fibers,
             agent.id,
             agent.run(prompt).pipe(
               Effect.tap((answer) => deliver(agent, "done", answer)),
-              Effect.catchTag("RunFailed", (error) => deliver(agent, "error", error.plain.message)),
+              Effect.catchTag("RunFailed", (error) => deliver(agent, "error", renderSessionError(error))),
               Effect.catchTag("AgentBusy", () => Effect.void),
             ),
           );

@@ -1,7 +1,6 @@
 import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect, Fiber, Result } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { AgentBusy } from "../v2src/domain/errors.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { ChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
@@ -53,8 +52,8 @@ describe("Agent busy guard", () => {
 
       const failure = settled.find((r) => Result.isFailure(r));
       const winner = settled.find((r) => Result.isSuccess(r));
-      expect(failure !== undefined && Result.isFailure(failure) ? failure.failure : undefined).toBeInstanceOf(
-        AgentBusy,
+      expect(failure !== undefined && Result.isFailure(failure) ? failure.failure._tag : undefined).toBe(
+        "AgentBusy",
       );
       expect(winner !== undefined && Result.isSuccess(winner) ? winner.success : undefined).toBe("");
       expect(await rt.runPromise(agent.isRunning)).toBe(false);

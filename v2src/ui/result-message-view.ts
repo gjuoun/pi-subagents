@@ -15,15 +15,15 @@ export interface RenderResultOptions {
   readonly width: number;
 }
 
-export class ResultMessageView {
+export const ResultMessageView = {
   /** Collapsed/expanded display lines, each truncated to the available width. */
-  static render(message: SubagentResultMessage, options: RenderResultOptions): string[] {
+  render(message: SubagentResultMessage, options: RenderResultOptions): string[] {
     const head = statusLine(message.details);
     const body = message.content.split("\n");
     const lines = options.expanded ? [head, ...body] : collapse(head, body);
     return lines.map((line) => truncateToWidth(line, options.width));
-  }
-}
+  },
+};
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;

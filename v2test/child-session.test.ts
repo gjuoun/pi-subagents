@@ -1,7 +1,6 @@
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { RunFailed } from "../v2src/domain/errors.js";
 import { ChildSession } from "../v2src/pi/pi-child-session.js";
 
 type AnyMessage = { role: string; content: Array<{ type: string; text?: string }>; stopReason?: string; errorMessage?: string };
@@ -78,7 +77,7 @@ describe("ChildSession.prompt", () => {
     const stub = stubSession();
     stub.setTurn({ stopReason: "error", errorMessage: "PROVIDER-BOOM" });
     const error = await Effect.runPromise(Effect.flip(stub.child.prompt("go")));
-    expect(error).toBeInstanceOf(RunFailed);
+    expect(error._tag).toBe("RunFailed");
     expect(error.reason).toBe("PROVIDER-BOOM");
   });
 
@@ -86,7 +85,7 @@ describe("ChildSession.prompt", () => {
     const stub = stubSession();
     stub.setTurn({ stopReason: "length" });
     const error = await Effect.runPromise(Effect.flip(stub.child.prompt("go")));
-    expect(error).toBeInstanceOf(RunFailed);
+    expect(error._tag).toBe("RunFailed");
     expect(error.reason).toContain("output token limit");
   });
 
@@ -94,7 +93,7 @@ describe("ChildSession.prompt", () => {
     const stub = stubSession();
     stub.setTurn({ reject: "kaboom" });
     const error = await Effect.runPromise(Effect.flip(stub.child.prompt("go")));
-    expect(error).toBeInstanceOf(RunFailed);
+    expect(error._tag).toBe("RunFailed");
     expect(error.reason).toBe("kaboom");
   });
 

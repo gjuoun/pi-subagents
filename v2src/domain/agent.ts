@@ -1,6 +1,6 @@
 import { Effect, Ref } from "effect";
 import type { ChildSession } from "../pi/pi-child-session.js";
-import { AgentBusy, RunFailed } from "./errors.js";
+import { type AgentBusy, RegistryError, type RunFailed } from "./errors.js";
 
 /**
  * agent.ts — one subagent: its own child session and its published state.
@@ -118,7 +118,7 @@ export class Agent {
       // two fibers resuming the same agent cannot both pass the guard. On a loss the latch was
       // already true — leave it for the in-flight run to clear.
       if (yield* Ref.getAndSet(this.#active, true)) {
-        return yield* Effect.fail(new AgentBusy({ id: this.id, name: this.name }));
+        return yield* Effect.fail(RegistryError.AgentBusy({ id: this.id, name: this.name }));
       }
       yield* this.#transition((s) => ({
         ...s,

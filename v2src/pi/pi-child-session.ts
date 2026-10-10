@@ -9,7 +9,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
-import { RunFailed, SpawnFailed } from "../domain/errors.js";
+import { type RunFailed, SessionError, type SpawnFailed } from "../domain/errors.js";
 import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "../services/agent-type-catalog.js";
 
 /**
@@ -64,7 +64,7 @@ export class ChildSession {
   static open(ctx: ExtensionContext, spec: SpawnSpec): Effect.Effect<ChildSession, SpawnFailed> {
     return Effect.tryPromise({
       try: () => childSessionContext.run(true, () => openSession(ctx, spec)),
-      catch: (error) => new SpawnFailed({ reason: error instanceof Error ? error.message : String(error) }),
+      catch: (error) => SessionError.SpawnFailed({ reason: error instanceof Error ? error.message : String(error) }),
     }).pipe(Effect.map((session) => new ChildSession(session, spec.id, spec.type)));
   }
 
@@ -107,13 +107,13 @@ export class ChildSession {
 
       yield* Effect.tryPromise({
         try: () => session.prompt(input),
-        catch: (error) => new RunFailed({ id, reason: error instanceof Error ? error.message : String(error) }),
+        catch: (error) => SessionError.RunFailed({ id, reason: error instanceof Error ? error.message : String(error) }),
       }).pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
 
       const answer = accumulated.trim() || lastAssistantText(session, startIndex);
       const failure = finalTurnError(session, startIndex);
       if (failure !== undefined) {
-        return yield* Effect.fail(new RunFailed({ id, reason: failure }));
+        return yield* Effect.fail(SessionError.RunFailed({ id, reason: failure }));
       }
       return { answer, toolUses, lastTool };
     });

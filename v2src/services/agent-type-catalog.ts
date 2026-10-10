@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Effect, Option } from "effect";
-import { UnknownAgentType } from "../domain/errors.js";
+import { CatalogError, type UnknownAgentType } from "../domain/errors.js";
 
 /**
  * agent-type-catalog.ts — resolve a subagent_type to its prompt/tools/model.
@@ -92,7 +92,7 @@ export class AgentTypeCatalog {
     const found = this.#types.get(name);
     return found !== undefined
       ? Effect.succeed(found)
-      : Effect.fail(new UnknownAgentType({ requested: name, available: this.names() }));
+      : Effect.fail(CatalogError.UnknownAgentType({ requested: name, available: this.names() }));
   }
 
   names(): ReadonlyArray<string> {

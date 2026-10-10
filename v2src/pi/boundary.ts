@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { ManagedRuntime } from "effect";
 import { Cause, Effect, Exit, Option, Result } from "effect";
-import type { V2Error } from "../domain/errors.js";
+import { renderError, type V2Error } from "../domain/errors.js";
 
 /**
  * boundary.ts — the ONE place an Effect becomes plain data for pi.
@@ -37,8 +37,8 @@ export async function runTool<A, E, R>(
 
   const failure = Cause.findErrorOption(exit.cause);
   if (Option.isSome(failure)) {
-    const plain = (failure.value as V2Error).plain;
-    return textResult(`Error [${plain.code}]: ${plain.message}`);
+    const error = failure.value as V2Error;
+    return textResult(`Error [${error._tag}]: ${renderError(error)}`);
   }
 
   // No typed error and no interrupt: a defect (a bug). Re-throw the original value so

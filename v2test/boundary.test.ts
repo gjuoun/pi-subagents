@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { AgentBusy, AgentNotFound, RunFailed, SpawnFailed, UnknownAgentType } from "../v2src/domain/errors.js";
+import { CatalogError, RegistryError, SessionError } from "../v2src/domain/errors.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { runTool } from "../v2src/pi/boundary.js";
 
@@ -27,11 +27,11 @@ describe("boundary.runTool", () => {
 
   it("(b) renders every V2Error as Error [Tag]: message and stays plain JSON", async () => {
     const errors = [
-      new UnknownAgentType({ requested: "z", available: ["general-purpose"] }),
-      new AgentNotFound({ id: "id-1" }),
-      new AgentBusy({ id: "id-1", name: "n" }),
-      new SpawnFailed({ reason: "boom" }),
-      new RunFailed({ id: "id-1", reason: "boom" }),
+      CatalogError.UnknownAgentType({ requested: "z", available: ["general-purpose"] }),
+      RegistryError.AgentNotFound({ id: "id-1" }),
+      RegistryError.AgentBusy({ id: "id-1", name: "n" }),
+      SessionError.SpawnFailed({ reason: "boom" }),
+      SessionError.RunFailed({ id: "id-1", reason: "boom" }),
     ] as const;
     await withRuntime(async (rt) => {
       for (const error of errors) {
