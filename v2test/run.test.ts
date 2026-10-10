@@ -3,8 +3,10 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { makeRuntime } from "../v2src/layers.js";
 import { runTool } from "../v2src/pi/boundary.js";
-import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
+import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
+import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 const V2_HANDLE_KEY = Symbol.for("pi-subagents:v2");
 const handle = () =>
@@ -24,17 +26,16 @@ function rejectingSession(): AgentSession {
 
 describe("Agent.run failure path", () => {
   it("marks a rejected prompt as error, not running forever", async () => {
-    const rt = makeRuntime(fakePi());
+    const child = new PiChildSession(rejectingSession(), "eeeeeeee", "general-purpose");
+    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
     try {
       const agent = await rt.runPromise(
-        Effect.gen(function* () {
-          const registry = yield* AgentRegistry;
-          return yield* registry.adopt(
-            new ChildSession(rejectingSession(), "eeeeeeee", "general-purpose"),
-            "general-purpose",
-            "d",
-          );
-        }),
+        withParentContext(
+          Effect.gen(function* () {
+            const registry = yield* AgentRegistry;
+            return yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+          }),
+        ),
       );
 
       const result = await runTool(rt, agent.run("do it"), undefined);

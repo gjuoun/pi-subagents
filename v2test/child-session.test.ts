@@ -1,7 +1,7 @@
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 
 type AnyMessage = { role: string; content: Array<{ type: string; text?: string }>; stopReason?: string; errorMessage?: string };
 
@@ -50,7 +50,7 @@ function stubSession(initial: AnyMessage[] = []) {
       });
     },
   };
-  const child = new ChildSession(session as unknown as AgentSession, "deadbeef", "general-purpose");
+  const child = new PiChildSession(session as unknown as AgentSession, "deadbeef", "general-purpose");
   return { child, setTurn: (t: Turn) => { turn = t; }, messages };
 }
 
@@ -60,7 +60,7 @@ const earlierMessage: AnyMessage = {
   stopReason: "stop",
 };
 
-describe("ChildSession.prompt", () => {
+describe("PiChildSession.prompt", () => {
   it("(a) returns the answer after the start index, never an earlier turn's", async () => {
     const first = stubSession([earlierMessage]);
     first.setTurn({ text: "NEW-ANSWER-1" });

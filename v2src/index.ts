@@ -6,10 +6,12 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { Layer } from "effect";
 import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./domain/subagent-result.js";
 import { type AppRuntime, makeRuntime } from "./layers.js";
 import { AgentTool } from "./pi/agent-tool.js";
-import { ChildSession } from "./pi/pi-child-session.js";
+import { isChildContext } from "./pi/pi-child-session.js";
+import type { SessionFactory } from "./services/session-factory.js";
 import { AgentWidget } from "./ui/agent-widget.js";
 import { ResultMessageView } from "./ui/result-message-view.js";
 
@@ -20,10 +22,13 @@ import { ResultMessageView } from "./ui/result-message-view.js";
  */
 export class V2Extension {
   readonly #pi: ExtensionAPI;
+  /** Test seam: a stub SessionFactory the runtime is built with instead of the live one. */
+  readonly #sessionFactory: Layer.Layer<SessionFactory> | undefined;
   #runtime: AppRuntime | undefined;
 
-  constructor(pi: ExtensionAPI) {
+  constructor(pi: ExtensionAPI, sessionFactory?: Layer.Layer<SessionFactory>) {
     this.#pi = pi;
+    this.#sessionFactory = sessionFactory;
   }
 
   register(): void {
@@ -54,12 +59,12 @@ export class V2Extension {
   }
 
   #ensure(): AppRuntime {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, {}, this.#sessionFactory);
     return this.#runtime;
   }
 
   #onSessionStart(_event: unknown, ctx: ExtensionContext): void {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, {}, this.#sessionFactory);
     if (ctx.hasUI) this.#runtime.runFork(new AgentWidget(ctx.ui).run);
   }
 
@@ -72,6 +77,6 @@ export class V2Extension {
 
 export default function v2Extension(pi: ExtensionAPI): void {
   // A child session loads the same extensions; re-entering would nest a runtime.
-  if (ChildSession.isChildContext()) return;
+  if (isChildContext()) return;
   new V2Extension(pi).register();
 }

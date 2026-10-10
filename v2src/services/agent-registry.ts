@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Context, Effect, FiberMap, Layer, Ref, Scope, Stream, SubscriptionRef } from "effect";
 import { Agent, type AgentSnapshot } from "../domain/agent.js";
-import { type AgentNotFound, RegistryError, renderSessionError, type SpawnFailed, type V2Error } from "../domain/errors.js";
+import { type AgentNotFound, RegistryError, renderSessionError, type SessionError, type V2Error } from "../domain/errors.js";
 import { SubagentResultMessage } from "../domain/subagent-result.js";
-import { ChildSession } from "../pi/pi-child-session.js";
 import { PiHost } from "../pi/pi-result-notifier.js";
 import type { AgentType } from "./agent-type-catalog.js";
+import type { ParentContext } from "./parent-context.js";
+import { SessionFactory } from "./session-factory.js";
 
 /**
  * agent-registry.ts — the one place the extension keeps its agents.
@@ -19,9 +19,7 @@ import type { AgentType } from "./agent-type-catalog.js";
 
 export interface AgentRegistryShape {
   /** Spawn a child session and register a fresh agent for it. */
-  readonly create: (ctx: ExtensionContext, type: AgentType, description: string) => Effect.Effect<Agent, SpawnFailed>;
-  /** Register an agent around an already-open child session. */
-  readonly adopt: (session: ChildSession, type: string, description: string) => Effect.Effect<Agent>;
+  readonly create: (type: AgentType, description: string) => Effect.Effect<Agent, SessionError, ParentContext>;
   readonly find: (id: string) => Effect.Effect<Agent, AgentNotFound>;
   readonly runInBackground: (agent: Agent, prompt: string) => Effect.Effect<string, V2Error, PiHost>;
   readonly snapshots: Effect.Effect<ReadonlyArray<AgentSnapshot>>;
@@ -32,7 +30,7 @@ export interface AgentRegistryShape {
 export class AgentRegistry extends Context.Service<AgentRegistry, AgentRegistryShape>()(
   "pi-subagents/v2/AgentRegistry",
 ) {
-  static readonly layer = (options: AgentRegistryOptions = {}): Layer.Layer<AgentRegistry> =>
+  static readonly layer = (options: AgentRegistryOptions = {}): Layer.Layer<AgentRegistry, never, SessionFactory> =>
     Layer.effect(AgentRegistry, makeAgentRegistry(options));
 }
 
@@ -58,8 +56,9 @@ const updateMap = <V>(current: ReadonlyMap<string, V>, key: string, value: V): R
 
 const makeAgentRegistry = (
   options: AgentRegistryOptions,
-): Effect.Effect<AgentRegistryShape, never, Scope.Scope> =>
+): Effect.Effect<AgentRegistryShape, never, Scope.Scope | SessionFactory> =>
   Effect.gen(function* () {
+    const factory = yield* SessionFactory;
     const snapshots = yield* SubscriptionRef.make<ReadonlyMap<string, AgentSnapshot>>(new Map());
     const fibers = yield* FiberMap.make<string, void, never>();
     const agents = yield* Ref.make<ReadonlyMap<string, Agent>>(new Map());
@@ -105,19 +104,11 @@ const makeAgentRegistry = (
       }),
     );
 
-    const adopt = (session: ChildSession, type: string, description: string): Effect.Effect<Agent> =>
-      Effect.gen(function* () {
-        const id = randomBytes(4).toString("hex");
-        const agent = yield* Agent.make({ id, type, name: type, description, session, publish });
-        yield* Ref.update(agents, (byId) => updateMap(byId, id, agent));
-        return agent;
-      });
-
     return {
-      create: (ctx, type, description) =>
+      create: (type, description) =>
         Effect.gen(function* () {
           const id = randomBytes(4).toString("hex");
-          const session = yield* ChildSession.open(ctx, {
+          const session = yield* factory.open({
             id,
             type: type.name,
             systemPrompt: type.systemPrompt,
@@ -125,9 +116,10 @@ const makeAgentRegistry = (
             model: type.model,
             thinking: type.thinking,
           });
-          return yield* adopt(session, type.name, description);
+          const agent = yield* Agent.make({ id, type: type.name, name: type.name, description, session, publish });
+          yield* Ref.update(agents, (byId) => updateMap(byId, id, agent));
+          return agent;
         }),
-      adopt,
       find: (id) =>
         Ref.get(agents).pipe(
           Effect.flatMap((byId) => {

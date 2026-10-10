@@ -1,5 +1,5 @@
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 import { Effect } from "effect";
 import type { Agent } from "../domain/agent.js";
@@ -7,6 +7,7 @@ import type { V2Error } from "../domain/errors.js";
 import type { AppRuntime } from "../layers.js";
 import { AgentRegistry, type AgentRegistryShape } from "../services/agent-registry.js";
 import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "../services/agent-type-catalog.js";
+import { ParentContext, type ParentContextShape } from "../services/parent-context.js";
 import { runTool } from "./boundary.js";
 import type { PiHost } from "./pi-result-notifier.js";
 
@@ -87,8 +88,19 @@ export class AgentTool {
 
       const catalog = yield* AgentTypeCatalog.load(ctx.cwd ?? process.cwd());
       const agentType = yield* catalog.resolve(params.subagent_type ?? GENERAL_PURPOSE_NAME);
-      const agent = yield* registry.create(ctx, agentType, params.description);
+      const agent = yield* registry.create(agentType, params.description);
       return yield* runAgent(registry, agent, params);
-    });
+    }).pipe(Effect.provideService(ParentContext, parentContextFromExtension(ctx)));
   }
+}
+
+/** Build the per-call ParentContext from the pi extension context. */
+function parentContextFromExtension(ctx: ExtensionContext): ParentContextShape {
+  return {
+    cwd: ctx.cwd ?? process.cwd(),
+    sessionFile: ctx.sessionManager?.getSessionFile?.(),
+    model: ctx.model,
+    modelRegistry: ctx.modelRegistry,
+    agentDir: getAgentDir(),
+  };
 }

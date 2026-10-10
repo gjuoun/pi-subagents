@@ -2,8 +2,10 @@ import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent
 import { Effect, Fiber, Result } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { makeRuntime } from "../v2src/layers.js";
-import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
+import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
+import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
 
@@ -27,18 +29,17 @@ function gatedSession() {
 
 describe("Agent busy guard", () => {
   it("lets exactly one of two concurrent runs proceed", async () => {
-    const rt = makeRuntime(fakePi());
+    const { session, release } = gatedSession();
+    const child = new PiChildSession(session, "eeeeeeee", "general-purpose");
+    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
     try {
-      const { session, release } = gatedSession();
       const agent = await rt.runPromise(
-        Effect.gen(function* () {
-          const registry = yield* AgentRegistry;
-          return yield* registry.adopt(
-            new ChildSession(session, "eeeeeeee", "general-purpose"),
-            "general-purpose",
-            "d",
-          );
-        }),
+        withParentContext(
+          Effect.gen(function* () {
+            const registry = yield* AgentRegistry;
+            return yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+          }),
+        ),
       );
 
       const settled = await rt.runPromise(

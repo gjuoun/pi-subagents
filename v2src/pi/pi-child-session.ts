@@ -1,50 +1,30 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { dirname } from "node:path";
-import type { AgentSession, AgentSessionEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
-  SessionManager,
-  SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
-import { type RunFailed, SessionError, type SpawnFailed } from "../domain/errors.js";
-import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "../services/agent-type-catalog.js";
+import type { ActivityListener, ChildSession, RunOutcome } from "../domain/child-session.js";
+import { type RunFailed, SessionError } from "../domain/errors.js";
 
 /**
- * child-session.ts — one child pi AgentSession, wrapped.
+ * pi-child-session.ts — the pi implementation of the ChildSession port.
  *
- * The pi boundary: every SDK call is a plain promise wrapped in tryPromise, and the whole
- * construction runs inside an AsyncLocalStorage marker so pi loading extensions FOR THE CHILD
- * makes v2's factory return early instead of nesting a runtime. `prompt` reads one turn and
- * answers with the child's own text; it never touches the registry.
+ * The pi boundary: `prompt` reads one turn and answers with the child's own text; it never
+ * touches the registry. The whole construction runs inside an AsyncLocalStorage marker so pi
+ * loading extensions FOR THE CHILD makes v2's factory return early instead of nesting a runtime.
  */
 
 const childSessionContext = new AsyncLocalStorage<boolean>();
 
-export interface SpawnSpec {
-  readonly id: string;
-  readonly type: string;
-  readonly systemPrompt?: string;
-  /** Built-in tool allowlist; undefined means "all built-ins minus Agent". */
-  readonly tools?: ReadonlyArray<string>;
-  /** "provider/id" for the child model; falls back to the parent's model. */
-  readonly model?: string;
-  readonly thinking?: string;
+/** True while pi is loading extensions for a child — v2 must not nest a runtime. */
+export function isChildContext(): boolean {
+  return childSessionContext.getStore() === true;
 }
 
-/** What one child turn produced: its answer text and the tools it called. */
-export interface RunOutcome {
-  readonly answer: string;
-  readonly toolUses: number;
-  readonly lastTool?: string;
+/** Run `fn` inside the child-context marker (pi's extension loader observes it). */
+export function runInChildContext<T>(fn: () => Promise<T>): Promise<T> {
+  return childSessionContext.run(true, fn);
 }
 
-/** Fired once per `tool_execution_start` while a turn runs. */
-export type ActivityListener = (toolName: string) => void;
-
-export class ChildSession {
+export class PiChildSession implements ChildSession {
   readonly #session: AgentSession;
   readonly #id: string;
   readonly #type: string;
@@ -53,24 +33,6 @@ export class ChildSession {
     this.#session = session;
     this.#id = id;
     this.#type = type;
-  }
-
-  /** True while pi is loading extensions for a child — v2 must not nest a runtime. */
-  static isChildContext(): boolean {
-    return childSessionContext.getStore() === true;
-  }
-
-  /** Spawn a child session beside the parent (file-backed iff the parent is). */
-  static open(ctx: ExtensionContext, spec: SpawnSpec): Effect.Effect<ChildSession, SpawnFailed> {
-    return Effect.tryPromise({
-      try: () => childSessionContext.run(true, () => openSession(ctx, spec)),
-      catch: (error) => SessionError.SpawnFailed({ reason: error instanceof Error ? error.message : String(error) }),
-    }).pipe(Effect.map((session) => new ChildSession(session, spec.id, spec.type)));
-  }
-
-  /** The underlying pi session (for the registry's abort/dispose finalizer). */
-  get session(): AgentSession {
-    return this.#session;
   }
 
   /** The child session name: "<type>#<id8>". */
@@ -126,60 +88,6 @@ export class ChildSession {
   dispose(): void {
     this.#session.dispose();
   }
-}
-
-/** Resolve a "provider/id" spec against the parent registry, else the parent model. */
-function resolveChildModel(ctx: ExtensionContext, spec: string | undefined) {
-  if (spec === undefined) return ctx.model;
-  const slash = spec.indexOf("/");
-  if (slash <= 0) return ctx.model;
-  const provider = spec.slice(0, slash);
-  const id = spec.slice(slash + 1);
-  return ctx.modelRegistry?.find?.(provider, id) ?? ctx.model;
-}
-
-async function openSession(ctx: ExtensionContext, spec: SpawnSpec): Promise<AgentSession> {
-  const cwd = ctx.cwd ?? process.cwd();
-  const agentDir = getAgentDir();
-  const parentSessionFile = ctx.sessionManager?.getSessionFile?.();
-
-  // The child is file-backed (with the parent link in its header) exactly when the parent
-  // is; an in-memory parent spawns an in-memory child.
-  const sessionManager = parentSessionFile
-    ? SessionManager.create(cwd, dirname(parentSessionFile), { parentSession: parentSessionFile })
-    : SessionManager.inMemory(cwd);
-
-  const loader = new DefaultResourceLoader({
-    cwd,
-    agentDir,
-    systemPromptOverride: () => spec.systemPrompt ?? GENERAL_PURPOSE_SYSTEM_PROMPT,
-    appendSystemPromptOverride: () => [],
-    noPromptTemplates: true,
-    noThemes: true,
-    noContextFiles: true,
-  });
-  await loader.reload();
-
-  // 0.80.8+ createAgentSession wants modelRuntime, but ExtensionContext only exposes the
-  // registry facade — read the runtime off it (mirrors v1's agent-runner facade read).
-  const parentModelRuntime = (ctx.modelRegistry as unknown as { runtime?: unknown }).runtime;
-
-  const { session } = await createAgentSession({
-    cwd,
-    agentDir,
-    model: resolveChildModel(ctx, spec.model),
-    ...(parentModelRuntime !== undefined && { modelRuntime: parentModelRuntime as never }),
-    sessionManager,
-    settingsManager: SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }),
-    resourceLoader: loader,
-    ...(spec.tools !== undefined && { tools: [...spec.tools] }),
-    ...(spec.thinking !== undefined && { thinkingLevel: spec.thinking as never }),
-    excludeTools: ["Agent"],
-  });
-
-  session.setSessionName(`${spec.type}#${spec.id.slice(0, 8)}`);
-  await session.bindExtensions({});
-  return session;
 }
 
 function extractText(content: ReadonlyArray<{ type?: string; text?: string }>): string {

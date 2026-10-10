@@ -4,9 +4,11 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { type AgentSnapshot } from "../v2src/domain/agent.js";
 import { makeRuntime } from "../v2src/layers.js";
-import { ChildSession } from "../v2src/pi/pi-child-session.js";
+import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
+import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { AgentWidget, WIDGET_KEY } from "../v2src/ui/agent-widget.js";
+import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -93,7 +95,8 @@ describe("AgentWidget wiring", () => {
   });
 
   it("stops repainting once the runtime is disposed", async () => {
-    const rt = makeRuntime(fakePi());
+    const child = new PiChildSession(stubSession(), "a", "general-purpose");
+    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
     const tui = { requestRender: vi.fn() };
     const setWidget = vi.fn((_key: string, content: unknown) => {
       if (typeof content === "function") (content as (t: unknown, th: unknown) => void)(tui, {});
@@ -101,10 +104,12 @@ describe("AgentWidget wiring", () => {
     const ui = { setWidget } as unknown as ExtensionUIContext;
     rt.runFork(new AgentWidget(ui).run);
     await rt.runPromise(
-      Effect.gen(function* () {
-        const registry = yield* AgentRegistry;
-        yield* registry.adopt(new ChildSession(stubSession(), "a", "general-purpose"), "general-purpose", "d");
-      }),
+      withParentContext(
+        Effect.gen(function* () {
+          const registry = yield* AgentRegistry;
+          yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+        }),
+      ),
     );
     await sleep(1300); // let a 1s tick request a paint
     const before = tui.requestRender.mock.calls.length;
