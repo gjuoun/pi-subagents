@@ -1,8 +1,8 @@
 import { Context, Effect, FiberMap, Ref, Scope, Stream, SubscriptionRef } from "effect";
 import { Agent, type AgentSnapshot } from "../domain/agent.js";
+import type { AgentType } from "../domain/agent-type.js";
 import { type AgentNotFound, RegistryError, renderSessionError, type SessionError, type V2Error } from "../domain/errors.js";
 import { SubagentResultMessage } from "../domain/subagent-result.js";
-import type { AgentType } from "./agent-type-catalog.js";
 import { IdGenerator } from "./id-generator.js";
 import type { ParentContext } from "./parent-context.js";
 import { ResultNotifier } from "./result-notifier.js";

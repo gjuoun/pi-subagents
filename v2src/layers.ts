@@ -3,6 +3,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { ResultNotifierLive } from "./pi/pi-result-notifier.js";
 import { SessionFactoryLive } from "./pi/pi-session-factory.js";
 import { AgentRegistry } from "./services/agent-registry.js";
+import { AgentTypeCatalog } from "./services/agent-type-catalog.js";
 import { E2EHandle } from "./services/e2e-handle.js";
 import { IdGenerator } from "./services/id-generator.js";
 import type { SessionFactory } from "./services/session-factory.js";
@@ -16,7 +17,7 @@ import type { SessionFactory } from "./services/session-factory.js";
  * disposes it on session_shutdown.
  */
 
-export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | E2EHandle, never>;
+export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | AgentTypeCatalog | E2EHandle, never>;
 
 export const makeRuntime = (
   pi: ExtensionAPI,
@@ -24,7 +25,10 @@ export const makeRuntime = (
 ): AppRuntime => {
   const deps = Layer.mergeAll(ResultNotifierLive(pi), sessionFactory, IdGenerator.random);
   const registry = Layer.effect(AgentRegistry, AgentRegistry.make).pipe(Layer.provide(deps));
-  const runtime = ManagedRuntime.make(Layer.merge(registry, E2EHandle.layer.pipe(Layer.provide(registry))));
+  const catalog = Layer.effect(AgentTypeCatalog, AgentTypeCatalog.make);
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(registry, E2EHandle.layer.pipe(Layer.provide(registry)), catalog),
+  );
   // Effect layers are lazy: nothing is acquired until an effect that needs them runs, so a
   // never-used runtime would dispose without running any finalizer. Touch the graph once at
   // load so it is constructed now and dispose() always tears it down.
@@ -35,5 +39,6 @@ export const makeRuntime = (
 /** Forces the layer graph (and thus every service scope) to be built. */
 const warmup = Effect.gen(function* () {
   yield* AgentRegistry;
+  yield* AgentTypeCatalog;
   yield* E2EHandle;
 });

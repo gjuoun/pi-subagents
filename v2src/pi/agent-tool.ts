@@ -3,10 +3,11 @@ import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 import { Effect } from "effect";
 import type { Agent } from "../domain/agent.js";
+import { GENERAL_PURPOSE_NAME } from "../domain/agent-type.js";
 import type { V2Error } from "../domain/errors.js";
 import type { AppRuntime } from "../layers.js";
 import { AgentRegistry, type AgentRegistryShape } from "../services/agent-registry.js";
-import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "../services/agent-type-catalog.js";
+import { AgentTypeCatalog } from "../services/agent-type-catalog.js";
 import { ParentContext, type ParentContextShape } from "../services/parent-context.js";
 import { runTool } from "./boundary.js";
 
@@ -76,7 +77,10 @@ export class AgentTool {
   }
 
   /** The resolve -> create/find -> run program for one Agent call. */
-  private program(ctx: ExtensionContext, params: AgentArgs): Effect.Effect<string, V2Error, AgentRegistry> {
+  private program(
+    ctx: ExtensionContext,
+    params: AgentArgs,
+  ): Effect.Effect<string, V2Error, AgentRegistry | AgentTypeCatalog> {
     return Effect.gen(function* () {
       const registry = yield* AgentRegistry;
 
@@ -85,7 +89,7 @@ export class AgentTool {
         return yield* runAgent(registry, agent, params);
       }
 
-      const catalog = yield* AgentTypeCatalog.load(ctx.cwd ?? process.cwd());
+      const catalog = yield* AgentTypeCatalog;
       const agentType = yield* catalog.resolve(params.subagent_type ?? GENERAL_PURPOSE_NAME);
       const agent = yield* registry.create(agentType, params.description);
       return yield* runAgent(registry, agent, params);

@@ -1,10 +1,10 @@
 import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect, Fiber, Result } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { GENERAL_PURPOSE } from "../v2src/domain/agent-type.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
-import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
@@ -37,7 +37,7 @@ describe("Agent busy guard", () => {
         withParentContext(
           Effect.gen(function* () {
             const registry = yield* AgentRegistry;
-            return yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+            return yield* registry.create(GENERAL_PURPOSE, "d");
           }),
         ),
       );

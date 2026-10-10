@@ -1,11 +1,11 @@
 import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { GENERAL_PURPOSE } from "../v2src/domain/agent-type.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { runTool } from "../v2src/pi/boundary.js";
 import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
-import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 const V2_HANDLE_KEY = Symbol.for("pi-subagents:v2");
@@ -33,7 +33,7 @@ describe("Agent.run failure path", () => {
         withParentContext(
           Effect.gen(function* () {
             const registry = yield* AgentRegistry;
-            return yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+            return yield* registry.create(GENERAL_PURPOSE, "d");
           }),
         ),
       );

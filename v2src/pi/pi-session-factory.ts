@@ -7,9 +7,9 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Effect, Layer } from "effect";
+import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "../domain/agent-type.js";
 import type { ChildSession, SpawnSpec } from "../domain/child-session.js";
 import { SessionError } from "../domain/errors.js";
-import { GENERAL_PURPOSE_SYSTEM_PROMPT } from "../services/agent-type-catalog.js";
 import { ParentContext, type ParentContextShape } from "../services/parent-context.js";
 import { SessionFactory, type SessionFactoryShape } from "../services/session-factory.js";
 import { PiChildSession, runInChildContext } from "./pi-child-session.js";

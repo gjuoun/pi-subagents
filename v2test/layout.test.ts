@@ -14,9 +14,7 @@ import { describe, expect, it } from "vitest";
 const V2SRC = resolve(__dirname, "..", "v2src");
 
 /** Edges the current tree still has that a later step removes. Keep sorted. */
-const KNOWN_VIOLATIONS: string[] = [
-  "services/agent-type-catalog.ts -> @earendil-works/pi-coding-agent",
-];
+const KNOWN_VIOLATIONS: string[] = [];
 
 type Target =
   | { readonly kind: "effect" }

@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { hermeticDir } from "../test/helpers/boot-extension.js";
 import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
+import { ParentContext, type ParentContextShape } from "../v2src/services/parent-context.js";
 import { agentCall, agentToolResults, routeBySession, runV2, type V2Run } from "./helpers/v2-runner.js";
 
 const SCOUT_TOOLS_READ = "---\nname: scout\ndescription: A scout\ntools: read\n---\nSCOUT-BODY-TEXT";
@@ -89,8 +90,15 @@ describe("v2 agent types from .md", () => {
         broken: "---\nname: [unclosed\n---\nbroken body",
       },
     });
-    const catalog = await Effect.runPromise(AgentTypeCatalog.load(hermetic.dir));
-    const names = [...catalog.names()];
+    const parentContext: ParentContextShape = {
+      cwd: hermetic.dir,
+      sessionFile: undefined,
+      model: undefined,
+      modelRegistry: {} as ParentContextShape["modelRegistry"],
+      agentDir: process.env.PI_CODING_AGENT_DIR as string,
+    };
+    const catalog = await Effect.runPromise(AgentTypeCatalog.make);
+    const names = await Effect.runPromise(catalog.names().pipe(Effect.provideService(ParentContext, parentContext)));
     expect(names).toContain("general-purpose");
     expect(names).toContain("scout");
     expect(names).not.toContain("broken");

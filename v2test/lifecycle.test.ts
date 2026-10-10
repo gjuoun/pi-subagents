@@ -2,10 +2,10 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { makePi, ctx as mockCtx } from "../test/helpers/boot-extension.js";
+import { GENERAL_PURPOSE } from "../v2src/domain/agent-type.js";
 import { V2Extension } from "../v2src/index.js";
 import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
-import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
 type StubSession = AgentSession & { abort: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> };
@@ -36,8 +36,8 @@ describe("v2 lifecycle", () => {
       withParentContext(
         Effect.gen(function* () {
           const registry = yield* AgentRegistry;
-          yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
-          const done = yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+          yield* registry.create(GENERAL_PURPOSE, "d");
+          const done = yield* registry.create(GENERAL_PURPOSE, "d");
           yield* done.run("x");
         }),
       ),
@@ -59,7 +59,7 @@ describe("v2 lifecycle", () => {
         withParentContext(
           Effect.gen(function* () {
             const registry = yield* AgentRegistry;
-            const agent = yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+            const agent = yield* registry.create(GENERAL_PURPOSE, "d");
             return agent.id;
           }),
         ),
@@ -87,7 +87,7 @@ describe("v2 lifecycle", () => {
       withParentContext(
         Effect.gen(function* () {
           const registry = yield* AgentRegistry;
-          const agent = yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+          const agent = yield* registry.create(GENERAL_PURPOSE, "d");
           yield* registry.runInBackground(agent, "x");
         }),
       ),

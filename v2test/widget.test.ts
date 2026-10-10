@@ -3,10 +3,10 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { type AgentSnapshot } from "../v2src/domain/agent.js";
+import { GENERAL_PURPOSE } from "../v2src/domain/agent-type.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { PiChildSession } from "../v2src/pi/pi-child-session.js";
 import { AgentRegistry } from "../v2src/services/agent-registry.js";
-import { AgentTypeCatalog } from "../v2src/services/agent-type-catalog.js";
 import { AgentWidget, WIDGET_KEY } from "../v2src/ui/agent-widget.js";
 import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
 
@@ -107,7 +107,7 @@ describe("AgentWidget wiring", () => {
       withParentContext(
         Effect.gen(function* () {
           const registry = yield* AgentRegistry;
-          yield* registry.create(AgentTypeCatalog.GENERAL_PURPOSE, "d");
+          yield* registry.create(GENERAL_PURPOSE, "d");
         }),
       ),
     );
