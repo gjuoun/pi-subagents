@@ -5,33 +5,9 @@ import { Data } from "effect";
  *
  * Everything inside v2src fails with one of these tagged errors; nothing else
  * crosses the pi boundary. The `_tag` is the stable, plain-string code the boundary
- * prints and the e2e harness matches on.
+ * prints and the e2e harness matches on, and each error owns its own human message
+ * via `plain`.
  */
-
-export class UnknownAgentType extends Data.TaggedError("UnknownAgentType")<{
-  readonly requested: string;
-  readonly available: ReadonlyArray<string>;
-}> {}
-
-export class AgentNotFound extends Data.TaggedError("AgentNotFound")<{
-  readonly id: string;
-}> {}
-
-export class AgentBusy extends Data.TaggedError("AgentBusy")<{
-  readonly id: string;
-  readonly name: string;
-}> {}
-
-export class SpawnFailed extends Data.TaggedError("SpawnFailed")<{
-  readonly reason: string;
-}> {}
-
-export class RunFailed extends Data.TaggedError("RunFailed")<{
-  readonly id: string;
-  readonly reason: string;
-}> {}
-
-export type V2Error = UnknownAgentType | AgentNotFound | AgentBusy | SpawnFailed | RunFailed;
 
 /** The plain, JSON-serializable shape that may cross into pi. */
 export interface PlainError {
@@ -39,21 +15,50 @@ export interface PlainError {
   readonly message: string;
 }
 
-export function toPlain(error: V2Error): PlainError {
-  return { code: error._tag, message: errorMessage(error) };
-}
-
-function errorMessage(error: V2Error): string {
-  switch (error._tag) {
-    case "UnknownAgentType":
-      return `Unknown agent type "${error.requested}". Available: ${error.available.join(", ")}`;
-    case "AgentNotFound":
-      return `Agent "${error.id}" not found`;
-    case "AgentBusy":
-      return `Agent "${error.name}" (${error.id}) is busy`;
-    case "SpawnFailed":
-      return `Failed to spawn agent: ${error.reason}`;
-    case "RunFailed":
-      return `Agent "${error.id}" failed: ${error.reason}`;
+export class UnknownAgentType extends Data.TaggedError("UnknownAgentType")<{
+  readonly requested: string;
+  readonly available: ReadonlyArray<string>;
+}> {
+  get plain(): PlainError {
+    return {
+      code: this._tag,
+      message: `Unknown agent type "${this.requested}". Available: ${this.available.join(", ")}`,
+    };
   }
 }
+
+export class AgentNotFound extends Data.TaggedError("AgentNotFound")<{
+  readonly id: string;
+}> {
+  get plain(): PlainError {
+    return { code: this._tag, message: `Agent "${this.id}" not found` };
+  }
+}
+
+export class AgentBusy extends Data.TaggedError("AgentBusy")<{
+  readonly id: string;
+  readonly name: string;
+}> {
+  get plain(): PlainError {
+    return { code: this._tag, message: `Agent "${this.name}" (${this.id}) is busy` };
+  }
+}
+
+export class SpawnFailed extends Data.TaggedError("SpawnFailed")<{
+  readonly reason: string;
+}> {
+  get plain(): PlainError {
+    return { code: this._tag, message: `Failed to spawn agent: ${this.reason}` };
+  }
+}
+
+export class RunFailed extends Data.TaggedError("RunFailed")<{
+  readonly id: string;
+  readonly reason: string;
+}> {
+  get plain(): PlainError {
+    return { code: this._tag, message: `Agent "${this.id}" failed: ${this.reason}` };
+  }
+}
+
+export type V2Error = UnknownAgentType | AgentNotFound | AgentBusy | SpawnFailed | RunFailed;

@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { ManagedRuntime } from "effect";
 import { Cause, Effect, Exit, Option, Result } from "effect";
-import { toPlain, type V2Error } from "./errors.js";
+import type { V2Error } from "./errors.js";
 
 /**
  * boundary.ts — the ONE place an Effect becomes plain data for pi.
@@ -37,7 +37,7 @@ export async function runTool<A, E, R>(
 
   const failure = Cause.findErrorOption(exit.cause);
   if (Option.isSome(failure)) {
-    const plain = toPlain(failure.value as V2Error);
+    const plain = (failure.value as V2Error).plain;
     return textResult(`Error [${plain.code}]: ${plain.message}`);
   }
 

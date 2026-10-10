@@ -5,7 +5,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { Effect, FiberMap } from "effect";
 import { GENERAL_PURPOSE_NAME, resolveType } from "./agent-types.js";
 import { runTool } from "./boundary.js";
-import { AgentBusy, AgentNotFound, toPlain, type V2Error } from "./errors.js";
+import { AgentBusy, AgentNotFound, type V2Error } from "./errors.js";
 import { notifyResult } from "./notify.js";
 import { type AgentRecord, Registry, type RegistryShape } from "./registry.js";
 import { runOnce } from "./run.js";
@@ -124,7 +124,7 @@ function runAgentRun(
         id,
         runOnce(id, session, params.prompt).pipe(
           Effect.tap((answer) => notifyResult(id, "done", answer)),
-          Effect.catchTag("RunFailed", (error) => notifyResult(id, "error", toPlain(error).message)),
+          Effect.catchTag("RunFailed", (error) => notifyResult(id, "error", error.plain.message)),
         ),
       );
       const record = yield* registry.get(id);
