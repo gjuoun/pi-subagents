@@ -1,4 +1,4 @@
-import { Effect, Ref } from "effect";
+import { Clock, Effect, Ref } from "effect";
 import type { ChildSession } from "./child-session.js";
 import { type AgentBusy, RegistryError, type RunFailed } from "./errors.js";
 
@@ -62,6 +62,7 @@ export class Agent {
   /** Build an agent and publish its initial (running) snapshot. */
   static make(init: AgentInit): Effect.Effect<Agent> {
     return Effect.gen(function* () {
+      const startedAt = yield* Clock.currentTimeMillis;
       const initial: AgentSnapshot = {
         id: init.id,
         type: init.type,
@@ -69,7 +70,7 @@ export class Agent {
         description: init.description,
         status: "running",
         runs: 0,
-        startedAt: Date.now(),
+        startedAt,
         lastText: "",
         toolUses: 0,
       };
@@ -120,10 +121,11 @@ export class Agent {
       if (yield* Ref.getAndSet(this.#active, true)) {
         return yield* Effect.fail(RegistryError.AgentBusy({ id: this.id, name: this.name }));
       }
+      const startedAt = yield* Clock.currentTimeMillis;
       yield* this.#transition((s) => ({
         ...s,
         status: "running" as const,
-        startedAt: Date.now(),
+        startedAt,
         finishedAt: undefined,
         lastTool: undefined,
       }));
@@ -139,28 +141,33 @@ export class Agent {
           // A rejected prompt or a failed final turn must not leave the record running forever
           // — that would keep hasRunning() true (waitForAll hangs, resume returns AgentBusy).
           Effect.tapErrorTag("RunFailed", () =>
-            this.#transition((s) => ({
-              ...s,
-              status: "error" as const,
-              finishedAt: Date.now(),
-              runs: s.runs + 1,
-              toolUses,
-              lastTool,
-            })),
+            Effect.gen({ self: this }, function* () {
+              const finishedAt = yield* Clock.currentTimeMillis;
+              yield* this.#transition((s) => ({
+                ...s,
+                status: "error" as const,
+                finishedAt,
+                runs: s.runs + 1,
+                toolUses,
+                lastTool,
+              }));
+            }),
           ),
           Effect.onInterrupt(() =>
             Effect.gen({ self: this }, function* () {
-              yield* this.#transition((s) => ({ ...s, status: "aborted" as const, finishedAt: Date.now() }));
+              const finishedAt = yield* Clock.currentTimeMillis;
+              yield* this.#transition((s) => ({ ...s, status: "aborted" as const, finishedAt }));
               yield* Effect.sync(() => this.#session.abort());
             }),
           ),
           Effect.ensuring(Ref.set(this.#active, false)),
         );
 
+      const finishedAt = yield* Clock.currentTimeMillis;
       yield* this.#transition((s) => ({
         ...s,
         status: "done" as const,
-        finishedAt: Date.now(),
+        finishedAt,
         runs: s.runs + 1,
         lastText: outcome.answer,
         toolUses: outcome.toolUses,

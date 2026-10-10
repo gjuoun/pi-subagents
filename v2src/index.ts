@@ -59,12 +59,12 @@ export class V2Extension {
   }
 
   #ensure(): AppRuntime {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, {}, this.#sessionFactory);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#sessionFactory);
     return this.#runtime;
   }
 
   #onSessionStart(_event: unknown, ctx: ExtensionContext): void {
-    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, {}, this.#sessionFactory);
+    if (this.#runtime === undefined) this.#runtime = makeRuntime(this.#pi, this.#sessionFactory);
     if (ctx.hasUI) this.#runtime.runFork(new AgentWidget(ctx.ui).run);
   }
 

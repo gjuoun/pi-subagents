@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { CatalogError, RegistryError, SessionError } from "../v2src/domain/errors.js";
 import { makeRuntime } from "../v2src/layers.js";
 import { runTool } from "../v2src/pi/boundary.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
+import { E2EHandle, V2_HANDLE_KEY } from "../v2src/services/e2e-handle.js";
 
 const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
 
@@ -70,9 +72,16 @@ describe("boundary.runTool", () => {
   });
 
   it("(e) runtime.dispose() runs the Registry finalizer exactly once", async () => {
-    const onDispose = vi.fn();
-    const rt = makeRuntime(fakePi(), { onDispose });
+    const published = () => (globalThis as Record<symbol, unknown>)[V2_HANDLE_KEY];
+    const rt = makeRuntime(fakePi());
+    await rt.runPromise(
+      Effect.gen(function* () {
+        yield* AgentRegistry;
+        yield* E2EHandle;
+      }),
+    );
+    expect(published()).toBeDefined();
     await rt.dispose();
-    expect(onDispose).toHaveBeenCalledTimes(1);
+    expect(published()).toBeUndefined();
   });
 });

@@ -31,7 +31,7 @@ describe("Agent busy guard", () => {
   it("lets exactly one of two concurrent runs proceed", async () => {
     const { session, release } = gatedSession();
     const child = new PiChildSession(session, "eeeeeeee", "general-purpose");
-    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
+    const rt = makeRuntime(fakePi(), stubSessionFactory(child));
     try {
       const agent = await rt.runPromise(
         withParentContext(

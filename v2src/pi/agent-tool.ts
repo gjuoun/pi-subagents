@@ -9,7 +9,6 @@ import { AgentRegistry, type AgentRegistryShape } from "../services/agent-regist
 import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "../services/agent-type-catalog.js";
 import { ParentContext, type ParentContextShape } from "../services/parent-context.js";
 import { runTool } from "./boundary.js";
-import type { PiHost } from "./pi-result-notifier.js";
 
 /**
  * agent-tool.ts — the single Agent tool.
@@ -45,7 +44,7 @@ function runAgent(
   registry: AgentRegistryShape,
   agent: Agent,
   params: AgentArgs,
-): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
+): Effect.Effect<string, V2Error, AgentRegistry> {
   return params.run_in_background === true
     ? registry.runInBackground(agent, params.prompt)
     : agent.run(params.prompt);
@@ -77,7 +76,7 @@ export class AgentTool {
   }
 
   /** The resolve -> create/find -> run program for one Agent call. */
-  private program(ctx: ExtensionContext, params: AgentArgs): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
+  private program(ctx: ExtensionContext, params: AgentArgs): Effect.Effect<string, V2Error, AgentRegistry> {
     return Effect.gen(function* () {
       const registry = yield* AgentRegistry;
 

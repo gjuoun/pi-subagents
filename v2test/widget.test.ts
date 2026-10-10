@@ -96,7 +96,7 @@ describe("AgentWidget wiring", () => {
 
   it("stops repainting once the runtime is disposed", async () => {
     const child = new PiChildSession(stubSession(), "a", "general-purpose");
-    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
+    const rt = makeRuntime(fakePi(), stubSessionFactory(child));
     const tui = { requestRender: vi.fn() };
     const setWidget = vi.fn((_key: string, content: unknown) => {
       if (typeof content === "function") (content as (t: unknown, th: unknown) => void)(tui, {});

@@ -51,7 +51,7 @@ export class SubagentResultMessage {
       type: snapshot.type,
       status,
       description: snapshot.description,
-      durationMs: Date.now() - snapshot.startedAt,
+      durationMs: (snapshot.finishedAt ?? snapshot.startedAt) - snapshot.startedAt,
       toolUses: snapshot.toolUses,
     };
     const content = `${snapshot.name} · ${status} · ${snapshot.description}\n\n${body}`;

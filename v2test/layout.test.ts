@@ -15,7 +15,6 @@ const V2SRC = resolve(__dirname, "..", "v2src");
 
 /** Edges the current tree still has that a later step removes. Keep sorted. */
 const KNOWN_VIOLATIONS: string[] = [
-  "services/agent-registry.ts -> pi/pi-result-notifier.ts",
   "services/agent-type-catalog.ts -> @earendil-works/pi-coding-agent",
 ];
 

@@ -27,7 +27,7 @@ function rejectingSession(): AgentSession {
 describe("Agent.run failure path", () => {
   it("marks a rejected prompt as error, not running forever", async () => {
     const child = new PiChildSession(rejectingSession(), "eeeeeeee", "general-purpose");
-    const rt = makeRuntime(fakePi(), {}, stubSessionFactory(child));
+    const rt = makeRuntime(fakePi(), stubSessionFactory(child));
     try {
       const agent = await rt.runPromise(
         withParentContext(
