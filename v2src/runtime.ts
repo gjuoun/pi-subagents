@@ -1,11 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import {
-  AgentRegistry,
-  type AgentRegistryOptions,
-  layer as agentRegistryLayer,
-} from "./agent-registry.js";
-import { PiHost, layer as piHostLayer } from "./pi-host.js";
+import { AgentRegistry, type AgentRegistryOptions } from "./agent-registry.js";
+import { PiHost } from "./pi-host.js";
 
 /**
  * runtime.ts — the single composition root: one ManagedRuntime per extension instance.
@@ -20,7 +16,7 @@ export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | PiHost, n
 export interface RuntimeOptions extends AgentRegistryOptions {}
 
 export const makeRuntime = (pi: ExtensionAPI, options: RuntimeOptions = {}): AppRuntime => {
-  const runtime = ManagedRuntime.make(Layer.mergeAll(agentRegistryLayer(options), piHostLayer(pi)));
+  const runtime = ManagedRuntime.make(Layer.mergeAll(AgentRegistry.layer(options), PiHost.layer(pi)));
   // Effect layers are lazy: nothing is acquired until an effect that needs them runs, so a
   // never-used runtime would dispose without running any finalizer. Touch both services once
   // at load so the graph is constructed now and dispose() always tears it down.

@@ -1,6 +1,6 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
-import { type SubagentResultDetails, SubagentResultMessage, statusGlyph } from "../v2src/subagent-result-message.js";
+import { type SubagentResultDetails, SubagentResultMessage } from "../v2src/subagent-result-message.js";
 
 const details = (over: Partial<SubagentResultDetails> = {}): SubagentResultDetails => ({
   id: "id",
@@ -39,7 +39,7 @@ describe("SubagentResultMessage.render", () => {
   });
 
   it("uses a ✗ for an error status", () => {
-    expect(statusGlyph("error")).toBe("✗");
+    expect(SubagentResultMessage.statusGlyph("error")).toBe("✗");
     expect(message(details({ status: "error" }), "boom").render({ expanded: false, width: 60 })[0]).toContain("✗");
   });
 });

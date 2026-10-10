@@ -79,18 +79,19 @@ export class SubagentResultMessage {
     const lines = options.expanded ? [head, ...body] : collapse(head, body);
     return lines.map((line) => truncateToWidth(line, options.width));
   }
-}
 
-export function statusGlyph(status: string): string {
-  switch (status) {
-    case "done":
-      return "✓";
-    case "error":
-      return "✗";
-    case "aborted":
-      return "■";
-    default:
-      return "·";
+  /** The one-glyph status marker shared by the result message and the widget. */
+  static statusGlyph(status: string): string {
+    switch (status) {
+      case "done":
+        return "✓";
+      case "error":
+        return "✗";
+      case "aborted":
+        return "■";
+      default:
+        return "·";
+    }
   }
 }
 
@@ -101,7 +102,7 @@ function formatDuration(ms: number): string {
 
 function statusLine(details: SubagentResultDetails | undefined): string {
   if (details === undefined) return "✓ subagent";
-  return `${statusGlyph(details.status)} ${details.name} · ${details.description} · ${details.toolUses} tools · ${formatDuration(details.durationMs)}`;
+  return `${SubagentResultMessage.statusGlyph(details.status)} ${details.name} · ${details.description} · ${details.toolUses} tools · ${formatDuration(details.durationMs)}`;
 }
 
 function collapse(head: string, body: readonly string[]): string[] {

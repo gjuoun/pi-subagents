@@ -28,15 +28,16 @@ export interface PiHostShape {
   readonly deliver: (message: SubagentResultMessage) => Effect.Effect<void>;
 }
 
-export class PiHost extends Context.Service<PiHost, PiHostShape>()("pi-subagents/v2/PiHost") {}
+export class PiHost extends Context.Service<PiHost, PiHostShape>()("pi-subagents/v2/PiHost") {
+  static readonly layer = (pi: ExtensionAPI): Layer.Layer<PiHost> =>
+    Layer.succeed(PiHost, {
+      sendMessage: (message, options) => {
+        pi.sendMessage(message, options);
+      },
+      deliver: (message) =>
+        Effect.sync(() => {
+          pi.sendMessage(message.toOutbound(), { deliverAs: "followUp", triggerTurn: true });
+        }),
+    });
+}
 
-export const layer = (pi: ExtensionAPI): Layer.Layer<PiHost> =>
-  Layer.succeed(PiHost, {
-    sendMessage: (message, options) => {
-      pi.sendMessage(message, options);
-    },
-    deliver: (message) =>
-      Effect.sync(() => {
-        pi.sendMessage(message.toOutbound(), { deliverAs: "followUp", triggerTurn: true });
-      }),
-  });

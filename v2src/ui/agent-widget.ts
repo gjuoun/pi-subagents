@@ -3,7 +3,7 @@ import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Effect, Stream } from "effect";
 import type { AgentSnapshot } from "../agent.js";
 import { AgentRegistry } from "../agent-registry.js";
-import { statusGlyph } from "../subagent-result-message.js";
+import { SubagentResultMessage } from "../subagent-result-message.js";
 
 /**
  * agent-widget.ts — the pure widget renderer plus its thin pi wiring.
@@ -50,7 +50,7 @@ export class AgentWidget {
         const tool = r.lastTool !== undefined ? ` · ${r.lastTool}` : "";
         return `● ${label}  ${formatElapsed(now - r.startedAt)}  ${r.description}${tool}`;
       }
-      return `${statusGlyph(r.status)} ${label}  ${r.description}`;
+      return `${SubagentResultMessage.statusGlyph(r.status)} ${label}  ${r.description}`;
     });
     const extra = ordered.length - shown.length;
     if (extra > 0) lines.push(`+${extra} more`);

@@ -31,7 +31,10 @@ export interface AgentRegistryShape {
 
 export class AgentRegistry extends Context.Service<AgentRegistry, AgentRegistryShape>()(
   "pi-subagents/v2/AgentRegistry",
-) {}
+) {
+  static readonly layer = (options: AgentRegistryOptions = {}): Layer.Layer<AgentRegistry> =>
+    Layer.effect(AgentRegistry, makeAgentRegistry(options));
+}
 
 /** The cross-package handle the e2e harness reads (Symbol.for("pi-subagents:v2")). */
 export const V2_HANDLE_KEY = Symbol.for("pi-subagents:v2");
@@ -52,9 +55,6 @@ const updateMap = <V>(current: ReadonlyMap<string, V>, key: string, value: V): R
   next.set(key, value);
   return next;
 };
-
-export const layer = (options: AgentRegistryOptions = {}): Layer.Layer<AgentRegistry> =>
-  Layer.effect(AgentRegistry, makeAgentRegistry(options));
 
 const makeAgentRegistry = (
   options: AgentRegistryOptions,
