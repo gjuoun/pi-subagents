@@ -7,10 +7,9 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { ChildSession } from "./child-session.js";
-import { SUBAGENT_RESULT_TYPE, type SubagentResultDetails } from "./notify.js";
 import { type AppRuntime, makeRuntime } from "./runtime.js";
+import { SUBAGENT_RESULT_TYPE, SubagentResultMessage } from "./subagent-result-message.js";
 import { createAgentTool } from "./tool.js";
-import { renderResultMessage } from "./ui/result-message.js";
 import { installWidget } from "./ui/widget.js";
 
 export interface V2ExtensionHandle {
@@ -31,12 +30,7 @@ export function createV2Extension(pi: ExtensionAPI): V2ExtensionHandle {
 
   // Display-only renderer for the background result message.
   pi.registerMessageRenderer(SUBAGENT_RESULT_TYPE, (message, options) => ({
-    render: (width: number) =>
-      renderResultMessage(
-        message.details as SubagentResultDetails | undefined,
-        typeof message.content === "string" ? message.content : "",
-        { expanded: options.expanded, width },
-      ),
+    render: (width: number) => SubagentResultMessage.fromPi(message).render({ expanded: options.expanded, width }),
     invalidate: () => {},
   }));
 

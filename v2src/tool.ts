@@ -7,7 +7,8 @@ import { AgentRegistry, type AgentRegistryShape } from "./agent-registry.js";
 import { AgentTypeCatalog, GENERAL_PURPOSE_NAME } from "./agent-type-catalog.js";
 import { runTool } from "./boundary.js";
 import type { V2Error } from "./errors.js";
-import type { AppRuntime, PiHostShape } from "./runtime.js";
+import type { PiHost } from "./pi-host.js";
+import type { AppRuntime } from "./runtime.js";
 
 /**
  * tool.ts — the single Agent tool.
@@ -62,7 +63,7 @@ export const createAgentTool = (
 export function agentProgram(
   ctx: ExtensionContext,
   params: AgentArgs,
-): Effect.Effect<string, V2Error, AgentRegistry | PiHostShape> {
+): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
   return Effect.gen(function* () {
     const registry = yield* AgentRegistry;
 
@@ -83,7 +84,7 @@ function runAgent(
   registry: AgentRegistryShape,
   agent: Agent,
   params: AgentArgs,
-): Effect.Effect<string, V2Error, AgentRegistry | PiHostShape> {
+): Effect.Effect<string, V2Error, AgentRegistry | PiHost> {
   return params.run_in_background === true
     ? registry.runInBackground(agent, params.prompt)
     : agent.run(params.prompt);

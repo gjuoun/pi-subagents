@@ -1,46 +1,21 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   AgentRegistry,
   type AgentRegistryOptions,
   layer as agentRegistryLayer,
 } from "./agent-registry.js";
+import { PiHost, layer as piHostLayer } from "./pi-host.js";
 
 /**
  * runtime.ts — the single composition root: one ManagedRuntime per extension instance.
  *
- * Inside v2src everything is an Effect; PiHost is the thin, promise-free wrapper over the
- * pi handle so the rest of the code never touches ExtensionAPI directly. makeRuntime()
+ * Inside v2src everything is an Effect; PiHost (pi-host.ts) is the thin, promise-free wrapper
+ * over the pi handle so the rest of the code never touches ExtensionAPI directly. makeRuntime()
  * builds the layer graph; index.ts disposes it on session_shutdown.
  */
 
-/** A plain message to push into the parent conversation. */
-export interface PiOutboundMessage {
-  readonly customType: string;
-  readonly content: string;
-  readonly display: boolean;
-  readonly details?: unknown;
-}
-
-export interface PiSendOptions {
-  readonly triggerTurn?: boolean;
-  readonly deliverAs?: "steer" | "followUp" | "nextTurn";
-}
-
-export interface PiHostShape {
-  readonly sendMessage: (message: PiOutboundMessage, options?: PiSendOptions) => void;
-}
-
-export const PiHost = Context.Service<PiHostShape>("pi-subagents/v2/PiHost");
-
-const piHostLayer = (pi: ExtensionAPI): Layer.Layer<PiHostShape> =>
-  Layer.succeed(PiHost, {
-    sendMessage: (message, options) => {
-      pi.sendMessage(message, options);
-    },
-  });
-
-export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | PiHostShape, never>;
+export type AppRuntime = ManagedRuntime.ManagedRuntime<AgentRegistry | PiHost, never>;
 
 export interface RuntimeOptions extends AgentRegistryOptions {}
 
@@ -58,4 +33,3 @@ const warmup = Effect.gen(function* () {
   yield* AgentRegistry;
   yield* PiHost;
 });
-

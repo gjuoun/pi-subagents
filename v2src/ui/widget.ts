@@ -4,7 +4,7 @@ import { Effect, Stream } from "effect";
 import type { AgentSnapshot } from "../agent.js";
 import { AgentRegistry } from "../agent-registry.js";
 import type { AppRuntime } from "../runtime.js";
-import { statusGlyph } from "./result-message.js";
+import { statusGlyph } from "../subagent-result-message.js";
 
 /**
  * widget.ts — the pure widget renderer plus its thin pi wiring.

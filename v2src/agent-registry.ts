@@ -5,8 +5,8 @@ import { Agent, type AgentSnapshot } from "./agent.js";
 import type { AgentType } from "./agent-type-catalog.js";
 import { ChildSession } from "./child-session.js";
 import { AgentBusy, AgentNotFound, type SpawnFailed, type V2Error } from "./errors.js";
-import { notifyResult } from "./notify.js";
-import type { PiHostShape } from "./runtime.js";
+import { PiHost } from "./pi-host.js";
+import { SubagentResultMessage } from "./subagent-result-message.js";
 
 /**
  * agent-registry.ts — the one place the extension keeps its agents.
@@ -23,7 +23,7 @@ export interface AgentRegistryShape {
   /** Register an agent around an already-open child session. */
   readonly adopt: (session: ChildSession, type: string, description: string) => Effect.Effect<Agent>;
   readonly find: (id: string) => Effect.Effect<Agent, AgentNotFound>;
-  readonly runInBackground: (agent: Agent, prompt: string) => Effect.Effect<string, V2Error, PiHostShape>;
+  readonly runInBackground: (agent: Agent, prompt: string) => Effect.Effect<string, V2Error, PiHost>;
   readonly snapshots: Effect.Effect<ReadonlyArray<AgentSnapshot>>;
   readonly changes: Stream.Stream<ReadonlyArray<AgentSnapshot>>;
   readonly hasRunning: () => boolean;
@@ -66,6 +66,13 @@ const makeAgentRegistry = (
 
     const publish = (snapshot: AgentSnapshot): Effect.Effect<void> =>
       SubscriptionRef.update(snapshots, (byId) => updateMap(byId, snapshot.id, snapshot));
+
+    const deliver = (agent: Agent, status: "done" | "error", body: string): Effect.Effect<void, never, PiHost> =>
+      Effect.gen(function* () {
+        const snapshot = yield* agent.snapshot;
+        const host = yield* PiHost;
+        yield* host.deliver(SubagentResultMessage.fromAgent(snapshot, status, body));
+      });
 
     const handle: V2Handle = {
       hasRunning: () =>
@@ -137,14 +144,8 @@ const makeAgentRegistry = (
             fibers,
             agent.id,
             agent.run(prompt).pipe(
-              Effect.tap((answer) =>
-                agent.snapshot.pipe(Effect.flatMap((snapshot) => notifyResult(snapshot, "done", answer))),
-              ),
-              Effect.catchTag("RunFailed", (error) =>
-                agent.snapshot.pipe(
-                  Effect.flatMap((snapshot) => notifyResult(snapshot, "error", error.plain.message)),
-                ),
-              ),
+              Effect.tap((answer) => deliver(agent, "done", answer)),
+              Effect.catchTag("RunFailed", (error) => deliver(agent, "error", error.plain.message)),
               Effect.catchTag("AgentBusy", () => Effect.void),
             ),
           );
