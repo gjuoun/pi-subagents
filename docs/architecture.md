@@ -16,6 +16,8 @@ examples/
   workflows/          # Runnable examples, executed by test/workflow-examples.test.ts
   agent-tool-description.md
 test/                 # vitest suite; e2e/, perf/, helpers/ and fixtures/ subdirectories
+v2src/                # A second, parallel core (Effect v4). NOT wired in — see "The v2 tree" below
+v2test/               # v2src's suite: same `npm run test`, and it holds v2's own layer fence
 
 src/                  # Layered by domain. A file may import only from the layers below it:
                       # `lib` < `config`, `model` < `agent` < `schedule`, `workflow` < `ui`,
@@ -161,3 +163,61 @@ src/                  # Layered by domain. A file may import only from the layer
                       # takes a structural slice of it, which is what keeps this directory
                       # inward-facing.
 ```
+
+## The v2 tree (not wired in)
+
+`v2src/` is an Effect v4 rewrite of the same core — the `Agent` tool, background and foreground runs,
+resume, result delivery and the above-editor widget — built **beside** `src/`, not on top of it.
+`package.json`'s `pi.extensions` still points at `./src/index.ts`, so no session loads any of it:
+the only ways in are an explicit `pi -ne -e ./v2src/index.ts` (that entry answers to the canonical
+token `v2src`) and `v2test/`. Every user-facing behaviour, setting, event and RPC channel still comes
+from `src/`.
+
+```
+v2src/                # Four layers plus a root, and its own fence — v2test/layout.test.ts, which
+                      # reads every .ts here and fails on any edge the rules forbid, no exceptions:
+                      #   root      — anything
+                      #   domain    — `effect` and domain/ only
+                      #   services  — adds `node:*`, and may name `@earendil-works/*` in
+                      #               `import type` only
+                      #   pi        — anything except ui/
+                      #   ui        — `effect`, `@earendil-works/pi-tui`, domain/ and services/,
+                      #               with pi-coding-agent in `import type` only
+                      # A .ts file outside those four layers (other than index.ts, layers.ts) fails.
+  index.ts            # V2Extension: the Agent tool, the result-message renderer, session_start and
+                      # session_shutdown. Its default export is the pi entry, guarded by
+                      # isChildContext() so a subagent session never builds a second runtime.
+  layers.ts           # The composition root: AppLayer plus makeRuntime(pi), one per session
+  domain/             # Pure — the state machine and the vocabulary it speaks
+    agent.ts              # Agent: id, type, snapshot Ref, run / abort / dispose
+    agent-type.ts         # AgentType — what a spawn resolves a name against
+    child-session.ts      # The ChildSession port, SpawnSpec, RunOutcome
+    errors.ts             # Scoped tagged enums (SessionError, RegistryError, CatalogError)
+    subagent-result.ts    # SubagentResultMessage — the value the notifier hands to pi
+  services/           # Effect class services; each declares its dependencies in its own `make`
+    agent-registry.ts     # Agents by id, the snapshot subscription, the fiber map, dispose-on-exit
+    agent-type-catalog.ts # name -> AgentType
+    session-factory.ts    # The port that opens a child session (pi implements it, tests stub it)
+    result-notifier.ts    # The port that delivers a settled result
+    id-generator.ts       # IdGenerator — ids are a service, not a bare random call
+    parent-context.service.ts # The per-call ParentContext the tool boundary provides
+    e2e-handle.ts         # The Symbol.for("pi-subagents:v2") handle the e2e suite reaches
+  pi/                 # The only runtime users of the pi SDK
+    boundary.ts           # The one Exit -> AgentToolResult fold
+    agent-tool.ts         # The Agent tool definition and its program (spawn vs resume)
+    pi-session-factory.ts # SessionFactory over pi's session API
+    pi-child-session.ts   # ChildSession over a pi AgentSession; isChildContext()
+    pi-result-notifier.ts # ResultNotifier -> sendMessage(followUp)
+  ui/
+    agent-widget.ts       # The above-editor list (widget key `pi-subagents-v2`): one line per
+                          # running agent, capped with a "+N more" tail, repainted on every
+                          # change and on a 1s clock. `src/` ships no equivalent.
+    result-message-view.ts # The result message's renderer
+v2test/               # lifecycle, run, background, foreground, resume, widget, boundary,
+                      # result-message, agent-types, boot, plus helpers/ — a stub SessionFactory
+                      # layer and the v2 runner
+```
+
+Two things worth knowing: the v2 fence is its own file rather than a mode of
+`test/layout-fence.test.ts`, because that one's rules are `src/`-shaped; and `effect@^4.0.2` is a
+dependency of the package even though only `v2src/` imports it.
