@@ -32,6 +32,8 @@ Read the file that covers a surface before changing its behavior; update it in t
 | `README.md` | User-facing reference: features, install, tool parameter tables, commands, settings and defaults, the event table, and the RPC channel list. Source of truth for defaults and setting names. |
 | `docs/architecture.md` | The `src/` tree: the layering rule, what each directory is for, and the file-by-file map. Contributor-facing. `test/layout-fence.test.ts` is the enforcement of the rule it states; a structural change updates both. |
 | `docs/workflows.md` | `SubagentWorkflow` in depth — how the model writes a script, editing and re-running it, saving a named workflow, `agent()` options, recipes, troubleshooting. Examples in `examples/workflows/`. |
+| `docs/decisions.md` | The issue-numbered guards in `src/` (#38, #118, #142, #183, #210, #231, #242, #253): one entry per issue holding the reasoning a trimmed comment would otherwise lose, and where the decision is frozen in the source. Add an entry when a bug report produces a guard, a default or a type shape. |
+| `docs/jev.md` | The `jev` agent-selector tool: what it decides, how to read the answer, and how the state it is sent is composed. |
 | `docs/rpc.md` | Calling this extension from another pi extension — `pi.events` lifecycle events (`subagents:completed`, `subagents:ready`, …), the `subagents:rpc:*` channels (`ping`, `spawn`, `stop`, `consume`), spawn options, error strings, and the `Symbol.for("pi-subagents:manager")` registry. Source: `src/cross-extension-rpc.ts`. |
 | `CONTRIBUTING.md` | Contributor guidelines and quality bar. |
 | `SECURITY.md` | Vulnerability reporting. |
@@ -51,11 +53,18 @@ Read the file that covers a surface before changing its behavior; update it in t
   npm run test        # vitest run
   ```
 - `npm run lint:fix` auto-fixes most style issues.
-- `npm run test` runs the whole suite, including `*-e2e.test.ts` files. To iterate on a single file, run it directly: `npx vitest run test/<file>.test.ts`.
+- `npm run test` runs the whole suite, including `*-e2e.test.ts` files and `v2test/`. To iterate on a single file, run it directly: `npx vitest run test/<file>.test.ts` or `npx vitest run v2test/<file>.test.ts`.
 - If you create or modify a test file, run it and iterate on the test or implementation until it passes.
 - `npm run build` compiles with `tsc`; run it only when verifying the build output or when requested.
 - `npm run bench` runs the benchmarks in `test/perf/*.bench.ts` (absolute timings, ~1 min). Opt-in: it is not part of the check suite, and `npm run test` never picks bench files up. `npm run bench:ab -- <ref>` benchmarks the working tree against another commit and prints the delta — use it for a PR's `## Performance` section. The `*.perf.test.ts` guards beside them assert operation counts, not time, and DO run in the normal suite.
 - For ad-hoc scripts, write them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
+
+## The v2 line
+
+`v2src/` plus `v2test/` are a second, parallel core — Effect v4, split into `domain/`, `services/`, `pi/` and `ui/` and composed in `layers.ts`, with `v2test/layout.test.ts` as its own layer fence. `npm run lint`, `npm run typecheck` and `npm run test` already cover both trees (biome and `tsconfig.test.json` name each one).
+
+- **Not wired in.** `package.json`'s `pi.extensions` still points at `./src/index.ts`, so nothing in `v2src/` reaches a session yet. Every user-facing behaviour, setting, event and RPC channel comes from `src/` — don't describe v2 as shipped, and change `src/` first.
+- **`docs/architecture.md` maps `src/` only.** A structural change under `v2src/` updates `v2test/layout.test.ts` instead; the Documentation rule above applies to both trees.
 
 ## Git
 
