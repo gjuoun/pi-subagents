@@ -1,0 +1,65 @@
+import type { AgentSession, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Effect, Fiber, Result } from "effect";
+import { describe, expect, it, vi } from "vitest";
+import { GENERAL_PURPOSE } from "../v2src/domain/agent-type.js";
+import { makeRuntime } from "../v2src/layers.js";
+import { PiChildSession } from "../v2src/pi/pi-child-session.js";
+import { AgentRegistry } from "../v2src/services/agent-registry.js";
+import { stubSessionFactory, withParentContext } from "./helpers/stub-session-factory.js";
+
+const fakePi = () => ({ sendMessage: vi.fn() }) as unknown as ExtensionAPI;
+
+/** A stub session whose prompt blocks until release() is called. */
+function gatedSession() {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const session = {
+    messages: [],
+    subscribe: () => () => {},
+    prompt: async () => {
+      await gate;
+    },
+    abort: async () => {},
+    dispose: () => {},
+  } as unknown as AgentSession;
+  return { session, release };
+}
+
+describe("Agent busy guard", () => {
+  it("lets exactly one of two concurrent runs proceed", async () => {
+    const { session, release } = gatedSession();
+    const child = new PiChildSession(session, "eeeeeeee", "general-purpose");
+    const rt = makeRuntime(fakePi(), stubSessionFactory(child));
+    try {
+      const agent = await rt.runPromise(
+        withParentContext(
+          Effect.gen(function* () {
+            const registry = yield* AgentRegistry;
+            return yield* registry.create(GENERAL_PURPOSE, "d");
+          }),
+        ),
+      );
+
+      const settled = await rt.runPromise(
+        Effect.gen(function* () {
+          const a = yield* Effect.forkChild(Effect.result(agent.run("one")));
+          const b = yield* Effect.forkChild(Effect.result(agent.run("two")));
+          yield* Effect.sync(() => release());
+          return [yield* Fiber.join(a), yield* Fiber.join(b)] as const;
+        }),
+      );
+
+      const failure = settled.find((r) => Result.isFailure(r));
+      const winner = settled.find((r) => Result.isSuccess(r));
+      expect(failure !== undefined && Result.isFailure(failure) ? failure.failure._tag : undefined).toBe(
+        "AgentBusy",
+      );
+      expect(winner !== undefined && Result.isSuccess(winner) ? winner.success : undefined).toBe("");
+      expect(await rt.runPromise(agent.isRunning)).toBe(false);
+    } finally {
+      await rt.dispose();
+    }
+  });
+});

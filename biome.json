@@ -20,7 +20,9 @@
 	"files": {
 		"includes": [
 			"src/**/*.ts",
-			"test/**/*.ts"
+			"test/**/*.ts",
+			"v2src/**/*.ts",
+			"v2test/**/*.ts"
 		]
 	}
 }
