@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { ParentContext } from "./parent-context.service.js";
@@ -6,12 +7,18 @@ import { ParentContext } from "./parent-context.service.js";
 /**
  * settings.ts — the one setting the extension reads: `maxConcurrent` (JW-166).
  *
- * `<agentDir>/subagents.json` then `<cwd>/.pi/subagents.json`, the project file winning;
+ * `~/.pi/eyu/subagents.json` then `<cwd>/.pi/subagents.json`, the project file winning;
  * default 10. Every other key in those files belongs to the retired v1 core and is ignored.
  * Read on every admission (no cache), so an edit applies to the next background spawn.
  */
 
 export const DEFAULT_MAX_CONCURRENT = 10;
+
+/**
+ * The global config file: `~/.pi/eyu/subagents.json`. Deliberately not under the pi agent
+ * dir — it is this extension's own file, keyed off `$HOME` so a relocated HOME still moves it.
+ */
+const globalConfigPath = (): string => join(homedir(), ".pi", "eyu", "subagents.json");
 
 export interface SettingsShape {
   /** How many background agents may run at once. */
@@ -35,7 +42,7 @@ export class Settings extends Context.Service<Settings, SettingsShape>()("pi-sub
     maxConcurrent: Effect.gen(function* () {
       const parent = yield* ParentContext;
       const project = readMax(yield* readJson(join(parent.cwd, ".pi", "subagents.json")));
-      const global = readMax(yield* readJson(join(parent.agentDir, "subagents.json")));
+      const global = readMax(yield* readJson(globalConfigPath()));
       return project ?? global ?? DEFAULT_MAX_CONCURRENT;
     }),
   });

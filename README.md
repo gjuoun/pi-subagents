@@ -113,7 +113,7 @@ Reading a finished result marks it read: its completion message is not sent.
 
 ## Settings
 
-One setting, read from `~/.pi/agent/subagents.json` and `<project>/.pi/subagents.json` (project wins):
+One setting, read from `~/.pi/eyu/subagents.json` and `<project>/.pi/subagents.json` (project wins):
 
 ```json
 { "maxConcurrent": 10 }
