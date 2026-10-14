@@ -64,6 +64,7 @@ export function makePi(flags: Record<string, boolean | string> = {}): BootedPi {
     // for a freshly loaded extension tool. `setActiveTools` writes it back so a
     // test can assert on a withdrawal.
     getActiveTools: vi.fn(() => [...activeTools]),
+    getThinkingLevel: vi.fn(() => "medium"),
     setActiveTools: vi.fn((names: string[]) => {
       activeTools.length = 0;
       activeTools.push(...names);

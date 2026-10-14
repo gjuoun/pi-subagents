@@ -23,9 +23,13 @@ export function fauxModelBackend(model: Model<string>): {
   modelRegistry: any;
   modelRuntime: any;
 } {
+  // Exact lookup only: an unknown provider/id must come back undefined, or a test of the
+  // extension's exact-model rule (JW-166) would pass against a registry that matches anything.
+  const exact = (provider?: string, id?: string) =>
+    provider === undefined || (provider === model.provider && id === model.id) ? model : undefined;
   return {
     modelRegistry: {
-      find: () => model,
+      find: exact,
       getAll: () => [model],
       getAvailable: () => [model],
       hasConfiguredAuth: () => true,
@@ -38,7 +42,7 @@ export function fauxModelBackend(model: Model<string>): {
       unregisterProvider: () => {},
     },
     modelRuntime: {
-      getModel: () => model,
+      getModel: exact,
       getModels: () => [model],
       getProvider: () => undefined,
       getProviders: () => [],
