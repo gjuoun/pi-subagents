@@ -41,7 +41,7 @@ Read the file that covers a surface before changing its behavior; update it in t
 
 - After code changes (not docs), run the full check suite and fix all errors and warnings:
   ```bash
-  npm run check       # lint + typecheck + test (what CI runs)
+  npm run check       # lint + typecheck + test
   ```
   The steps individually, when you need to isolate a failure:
   ```bash
