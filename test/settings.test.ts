@@ -10,15 +10,24 @@ import { DEFAULT_MAX_CONCURRENT, Settings } from "../src/services/settings.js";
 
 describe("v2 settings", () => {
   const dirs: string[] = [];
+  const prevHome = process.env.HOME;
   afterEach(() => {
     for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
   });
 
   function parentWith(global?: unknown, project?: unknown): ParentContextShape {
     const agentDir = mkdtempSync(join(tmpdir(), "v2-settings-agent-"));
     const cwd = mkdtempSync(join(tmpdir(), "v2-settings-cwd-"));
-    dirs.push(agentDir, cwd);
-    if (global !== undefined) writeFileSync(join(agentDir, "subagents.json"), JSON.stringify(global));
+    const home = mkdtempSync(join(tmpdir(), "v2-settings-home-"));
+    dirs.push(agentDir, cwd, home);
+    // The global file is `~/.pi/eyu/subagents.json`, so a global case needs its own HOME.
+    process.env.HOME = home;
+    if (global !== undefined) {
+      mkdirSync(join(home, ".pi", "eyu"), { recursive: true });
+      writeFileSync(join(home, ".pi", "eyu", "subagents.json"), JSON.stringify(global));
+    }
     if (project !== undefined) {
       mkdirSync(join(cwd, ".pi"), { recursive: true });
       writeFileSync(join(cwd, ".pi", "subagents.json"), JSON.stringify(project));

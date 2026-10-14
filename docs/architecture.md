@@ -43,7 +43,7 @@ there.
 - `agent-registry.ts` — the agents, their snapshots (a `SubscriptionRef`), the background pool and queue, handles, `awaitSettled`.
 - `agent-type-catalog.ts` — agent files from `<agentDir>/agents` then `<cwd>/.pi/agents` (project wins), `enabled` filter.
 - `group-join.ts` — the smart join: batching by parent turn, group timeouts, solo hold, consumed results.
-- `settings.ts` — `maxConcurrent` from `subagents.json` (project wins, default 10).
+- `settings.ts` — `maxConcurrent` from `~/.pi/eyu/subagents.json` then `<cwd>/.pi/subagents.json` (project wins, default 10).
 - `parent-context.service.ts` — the per-call view of the parent session.
 - `session-factory.ts`, `result-notifier.ts`, `id-generator.ts` — ports the live layers fill.
 - `e2e-handle.ts` — the `Symbol.for("pi-subagents:v2")` handle the faux-model tests wait on.
