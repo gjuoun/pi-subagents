@@ -29,22 +29,19 @@ Read the file that covers a surface before changing its behavior; update it in t
 
 | File | Covers |
 |---|---|
-| `README.md` | User-facing reference: features, install, tool parameter tables, commands, settings and defaults, the event table, and the RPC channel list. Source of truth for defaults and setting names. |
-| `docs/architecture.md` | The `src/` tree: the layering rule, what each directory is for, and the file-by-file map. Contributor-facing. `test/layout-fence.test.ts` is the enforcement of the rule it states; a structural change updates both. |
-| `docs/workflows.md` | `SubagentWorkflow` in depth — how the model writes a script, editing and re-running it, saving a named workflow, `agent()` options, recipes, troubleshooting. Examples in `examples/workflows/`. |
-| `docs/decisions.md` | The issue-numbered guards in `src/` (#38, #118, #142, #183, #210, #231, #242, #253): one entry per issue holding the reasoning a trimmed comment would otherwise lose, and where the decision is frozen in the source. Add an entry when a bug report produces a guard, a default or a type shape. |
-| `docs/jev.md` | The `jev` agent-selector tool: what it decides, how to read the answer, and how the state it is sent is composed. |
-| `docs/rpc.md` | Calling this extension from another pi extension — `pi.events` lifecycle events (`subagents:completed`, `subagents:ready`, …), the `subagents:rpc:*` channels (`ping`, `spawn`, `stop`, `consume`), spawn options, error strings, and the `Symbol.for("pi-subagents:manager")` registry. Source: `src/cross-extension-rpc.ts`. |
+| `README.md` | User-facing reference: features, install, tool parameter tables, agent-file fields, commands, the one setting and its default. Source of truth for defaults and names. |
+| `docs/architecture.md` | The `src/` tree: the four layers plus the composition root, what each file is for, and the layer rules. Contributor-facing. `test/layout.test.ts` is the enforcement of the rules it states; a structural change updates both. |
+| `docs/decisions.md` | The issue-numbered guards in `src/` that survived the JW-166 slim core (#183, #210): one entry per issue holding the reasoning a trimmed comment would otherwise lose, and where the decision is frozen in the source. Add an entry when a bug report produces a guard, a default or a type shape. |
 | `CONTRIBUTING.md` | Contributor guidelines and quality bar. |
 | `SECURITY.md` | Vulnerability reporting. |
 
-`README.md` holds the reference tables and links out; `docs/` holds the long-form guides. Each guide states its audience in its first three lines — read that before deciding it is the wrong file. Renaming an event, an RPC channel, a reply-envelope field, or a workflow global is a docs change too.
+`README.md` holds the reference tables and links out; `docs/` holds the long-form guides. Each guide states its audience in its first three lines — read that before deciding it is the wrong file. Renaming a tool, a tool parameter or an agent-file field is a docs change too.
 
 ## Commands
 
 - After code changes (not docs), run the full check suite and fix all errors and warnings:
   ```bash
-  npm run check       # lint + typecheck + test (what CI runs)
+  npm run check       # lint + typecheck + test
   ```
   The steps individually, when you need to isolate a failure:
   ```bash
@@ -53,24 +50,20 @@ Read the file that covers a surface before changing its behavior; update it in t
   npm run test        # vitest run
   ```
 - `npm run lint:fix` auto-fixes most style issues.
-- `npm run test` runs the whole suite, including `*-e2e.test.ts` files and `v2test/`. To iterate on a single file, run it directly: `npx vitest run test/<file>.test.ts` or `npx vitest run v2test/<file>.test.ts`.
+- `npm run test` runs the whole suite (`test/`, including the faux-model end-to-end files). To iterate on a single file, run it directly: `npx vitest run test/<file>.test.ts`.
 - If you create or modify a test file, run it and iterate on the test or implementation until it passes.
 - `npm run build` compiles with `tsc`; run it only when verifying the build output or when requested.
-- `npm run bench` runs the benchmarks in `test/perf/*.bench.ts` (absolute timings, ~1 min). Opt-in: it is not part of the check suite, and `npm run test` never picks bench files up. `npm run bench:ab -- <ref>` benchmarks the working tree against another commit and prints the delta — use it for a PR's `## Performance` section. The `*.perf.test.ts` guards beside them assert operation counts, not time, and DO run in the normal suite.
 - For ad-hoc scripts, write them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
 
-## The v2 line
+## Layers
 
-`v2src/` plus `v2test/` are a second, parallel core — Effect v4, split into `domain/`, `services/`, `pi/` and `ui/` and composed in `layers.ts`, with `v2test/layout.test.ts` as its own layer fence. `npm run lint`, `npm run typecheck` and `npm run test` already cover both trees (biome and `tsconfig.test.json` name each one).
-
-- **Not wired in.** `package.json`'s `pi.extensions` still points at `./src/index.ts`, so nothing in `v2src/` reaches a session yet. Every user-facing behaviour, setting, event and RPC channel comes from `src/` — don't describe v2 as shipped, and change `src/` first.
-- **`docs/architecture.md` maps `src/` only.** A structural change under `v2src/` updates `v2test/layout.test.ts` instead; the Documentation rule above applies to both trees.
+`src/` is Effect v4, split into `domain/` (pure values), `services/` (Effect class services), `pi/` (the only pi-SDK users) and `ui/` (renderers), composed in `layers.ts` and wired to pi in `index.ts`. `test/layout.test.ts` is the layer fence; read `docs/architecture.md` before adding a file.
 
 ## Git
 
 - **Never commit.** The user commits manually. At most, suggest a concise commit message as text.
 - **Never push**, tag, or create branches unless the user explicitly asks.
-- Never run history- or worktree-destroying commands: `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`, `git add -A`, `git add .`, `git commit --no-verify`, or any force push.
+- Never run history- or working-tree-destroying commands: `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`, `git add -A`, `git add .`, `git commit --no-verify`, or any force push.
 - Leave the working tree as the user left it — don't stage, stash, or revert files you didn't change.
 
 ## Issues and PRs
@@ -112,7 +105,7 @@ Testing section: paste real results (`npm run lint`, `npm run typecheck`, `npm r
 
 ### Reviewing PRs
 
-- Do not run `gh pr checkout`, `git switch`, or otherwise move the worktree to the PR branch unless the user explicitly asks.
+- Do not run `gh pr checkout`, `git switch`, or otherwise move the checkout to the PR branch unless the user explicitly asks.
 - Use `gh pr view`, `gh pr diff`, `gh api`, and local `git show`/`git diff` against fetched refs to inspect PR metadata, commits, and patches without changing branches.
 - If you need PR file contents, fetch/read them into temporary files or use `git show <ref>:<path>` without switching branches.
 
@@ -143,19 +136,14 @@ Location: `CHANGELOG.md` (single file, [Keep a Changelog](https://keepachangelog
 Before a release:
 
 - Update `CHANGELOG.md` — move the `## [Unreleased]` entries under a new `## [X.Y.Z]` version section, and add a fresh empty `## [Unreleased]` for the next cycle.
-- Update `README.md` if user-facing behavior changed (features list, settings, usage), and the matching guide in `docs/` if the change touches workflows or the event/RPC surface.
-- Run the full check suite plus the e2e tests, and fix anything that fails:
+- Update `README.md` if user-facing behavior changed (features list, settings, usage), and `docs/architecture.md` if the change touches the tree.
+- Run the full check suite and the build, and fix anything that fails:
   ```bash
-  npm run check                    # lint + typecheck + test
-  npm run test:e2e                 # faux/scripted e2e — no network, no keys
+  npm run check                    # lint + typecheck + test (faux-model e2e included)
   npm run build
   ```
-- For a real pre-publish smoke test, run the **live** e2e against an actual model:
-  ```bash
-  PI_E2E_LIVE=1 npm run test:e2e   # uses your local `pi` login; optional PI_PROVIDER / PI_MODEL
-  ```
-  `PI_E2E_LIVE=1` swaps the scripted faux suite for the live one (the faux suite is `skipIf(LIVE)`).
-  (`prepublishOnly` runs lint + typecheck + test + build; the live e2e is the smoke test to run by hand before publishing.)
+- For a real pre-publish smoke test, drive a live pi with the plan helper `v2-live.sh` (see the notebook runbook): a subagent reads a random secret and the row must show it.
+  (`prepublishOnly` runs lint + typecheck + test + build.)
 
 **Never publish.** The user runs `npm version` / `npm publish` and any tagging manually. Do not run those commands unless the user explicitly asks.
 

@@ -1,154 +1,165 @@
+import type { Context } from "@earendil-works/pi-ai";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import { Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
+import { afterEach, describe, expect, it } from "vitest";
+import { SubagentResultMessage } from "../src/domain/subagent-result.js";
+import {
+  BATCH_WINDOW_MS,
+  GROUP_TIMEOUT_MS,
+  GroupJoin,
+  SOLO_HOLD_MS,
+  STRAGGLER_TIMEOUT_MS,
+} from "../src/services/group-join.js";
+import { ResultNotifier } from "../src/services/result-notifier.js";
+import { agentCall, isParentCall, runV2, type V2Run } from "./helpers/v2-runner.js";
+
 /**
- * group-join.test.ts — Behavior of GroupJoinManager's state machine and timers.
- *
- * Uses fake timers to assert deterministic timeout behavior without flakiness.
- * The class itself is exercised directly with real records — no mocks beyond
- * a spy on the delivery callback.
+ * group-join.test.ts — the smart join (JW-166 Step 9): background agents from one parent turn
+ * are announced together; timeouts deliver partial groups and regroup stragglers.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GroupJoinManager } from "../src/agent/group-join.js";
-import type { AgentRecord } from "../src/lib/types.js";
+const textOf = (m: { content?: unknown }): string =>
+  typeof m.content === "string"
+    ? m.content
+    : Array.isArray(m.content)
+      ? (m.content as Array<{ text?: string }>).map((b) => b.text ?? "").join("")
+      : "";
 
-function makeRecord(id: string, overrides: Partial<AgentRecord> = {}): AgentRecord {
-  return {
-    id,
-    type: "general-purpose",
-    description: "test",
-    status: "completed",
-    toolUses: 0,
-    startedAt: 0,
-    compactionCount: 0,
-    lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
-    ...overrides,
+const results = (session: AgentSession): string[] =>
+  session.messages
+    .filter((m) => (m as { customType?: string }).customType === "subagent-result")
+    .map((m) => textOf(m as { content?: unknown }));
+
+describe("v2 smart join (e2e)", () => {
+  let run: V2Run | undefined;
+  afterEach(async () => {
+    await run?.dispose();
+    run = undefined;
+  });
+
+  it("announces two background agents from one turn as one message", async () => {
+    run = await runV2({
+      prompt: "delegate",
+      respond: (ctx: Context) => {
+        if (!isParentCall(ctx)) return ctx.messages.map(textOf).join("").includes("TASK-A") ? "ANSWER-A" : "ANSWER-B";
+        const spawned = ctx.messages.some((m) => m.role === "toolResult");
+        return spawned
+          ? "PARENT-FINAL"
+          : [
+              agentCall({ prompt: "TASK-A", description: "a", run_in_background: true }),
+              agentCall({ prompt: "TASK-B", description: "b", run_in_background: true }),
+            ];
+      },
+    });
+    const all = results(run.parentSession);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toContain("ANSWER-A");
+    expect(all[0]).toContain("ANSWER-B");
+  });
+
+  it("announces a lone background agent on its own", async () => {
+    run = await runV2({
+      prompt: "delegate",
+      respond: (ctx: Context) => {
+        if (!isParentCall(ctx)) return "SOLO-ANSWER";
+        return ctx.messages.some((m) => m.role === "toolResult")
+          ? "PARENT-FINAL"
+          : agentCall({ prompt: "TASK", description: "solo", run_in_background: true });
+      },
+    });
+    const all = results(run.parentSession);
+    expect(all).toHaveLength(1);
+    expect(all[0]).not.toContain("Background agent group completed");
+    expect(all[0]).toContain("SOLO-ANSWER");
+  });
+});
+
+/** A message as the registry would build it for one settled agent. */
+const msg = (id: string, text: string): SubagentResultMessage =>
+  SubagentResultMessage.fromAgent(
+    {
+      id,
+      type: "worker",
+      name: "worker",
+      handle: "worker",
+      description: id,
+      status: "done",
+      runs: 1,
+      startedAt: 0,
+      finishedAt: 1,
+      lastText: text,
+      toolUses: 0,
+      turns: 1,
+      wrappedUp: false,
+      tokens: 0,
+    },
+    "done",
+    text,
+  );
+
+describe("v2 smart join timings (TestClock)", () => {
+  const program = (body: (sent: SubagentResultMessage[]) => Effect.Effect<void, never, GroupJoin>) => {
+    const sent: SubagentResultMessage[] = [];
+    const notifier = Layer.succeed(ResultNotifier, { deliver: (m) => Effect.sync(() => void sent.push(m)) });
+    const join = Layer.effect(GroupJoin, GroupJoin.make).pipe(Layer.provide(notifier));
+    return Effect.runPromise(body(sent).pipe(Effect.provide(Layer.merge(join, TestClock.layer())), Effect.scoped)).then(
+      () => sent,
+    );
   };
-}
 
-describe("GroupJoinManager", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it("returns 'pass' for unregistered agents and never invokes the callback", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver);
-    expect(mgr.onAgentComplete(makeRecord("a"))).toBe("pass");
-    expect(deliver).not.toHaveBeenCalled();
-    expect(mgr.isGrouped("a")).toBe(false);
+  it("delivers a partial group at 30s and the straggler 15s after it settles", async () => {
+    const log: string[][] = [];
+    await program((sent) =>
+      Effect.gen(function* () {
+        const join = yield* GroupJoin;
+        yield* join.register("a", "turn-1");
+        yield* join.register("b", "turn-1");
+        yield* TestClock.adjust(BATCH_WINDOW_MS);
+        yield* join.settle("a", msg("a", "A-TEXT"));
+        yield* TestClock.adjust(GROUP_TIMEOUT_MS - 1);
+        log.push(sent.map((m) => m.content));
+        yield* TestClock.adjust(1);
+        log.push(sent.map((m) => m.content));
+        yield* join.settle("b", msg("b", "B-TEXT"));
+        yield* TestClock.adjust(STRAGGLER_TIMEOUT_MS);
+        log.push(sent.map((m) => m.content));
+      }),
+    );
+    expect(log[0]).toHaveLength(0);
+    expect(log[1]).toHaveLength(1);
+    expect(log[1][0]).toContain("partial — others still running");
+    expect(log[1][0]).toContain("A-TEXT");
+    expect(log[2]).toHaveLength(2);
+    expect(log[2][1]).toContain("B-TEXT");
   });
 
-  it("holds the first completion and arms the join timeout", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver, 30_000);
-    mgr.registerGroup("g", ["a", "b"]);
-
-    expect(mgr.isGrouped("a")).toBe(true);
-    expect(mgr.onAgentComplete(makeRecord("a"))).toBe("held");
-
-    vi.advanceTimersByTime(29_999);
-    expect(deliver).not.toHaveBeenCalled();
+  it("drops a consumed result from a pending solo delivery", async () => {
+    const sent = await program(() =>
+      Effect.gen(function* () {
+        const join = yield* GroupJoin;
+        yield* join.register("a", "turn-1");
+        yield* TestClock.adjust(BATCH_WINDOW_MS);
+        yield* join.settle("a", msg("a", "A-TEXT"));
+        yield* join.consume("a");
+        yield* TestClock.adjust(SOLO_HOLD_MS);
+      }),
+    );
+    expect(sent).toHaveLength(0);
   });
 
-  it("delivers all records (partial=false) when the final completion arrives in time", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver);
-    mgr.registerGroup("g", ["a", "b"]);
-
-    mgr.onAgentComplete(makeRecord("a", { result: "A" }));
-    expect(mgr.onAgentComplete(makeRecord("b", { result: "B" }))).toBe("delivered");
-
-    expect(deliver).toHaveBeenCalledTimes(1);
-    const [records, partial] = deliver.mock.calls[0];
-    expect(records.map((r: AgentRecord) => r.id).sort()).toEqual(["a", "b"]);
-    expect(partial).toBe(false);
-
-    // Group is cleaned up — no future deliveries can fire from these ids
-    expect(mgr.isGrouped("a")).toBe(false);
-    expect(mgr.isGrouped("b")).toBe(false);
-  });
-
-  it("delivers partial=true on timeout and re-arms the group for stragglers", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver, 30_000);
-    mgr.registerGroup("g", ["a", "b", "c"]);
-
-    mgr.onAgentComplete(makeRecord("a"));
-    vi.advanceTimersByTime(30_000);
-
-    expect(deliver).toHaveBeenCalledTimes(1);
-    const [records, partial] = deliver.mock.calls[0];
-    expect(records.map((r: AgentRecord) => r.id)).toEqual(["a"]);
-    expect(partial).toBe(true);
-
-    // 'a' was delivered and is dropped from the group; 'b' and 'c' remain as stragglers
-    expect(mgr.isGrouped("a")).toBe(false);
-    expect(mgr.isGrouped("b")).toBe(true);
-    expect(mgr.isGrouped("c")).toBe(true);
-  });
-
-  it("uses the shorter straggler timeout (15s) regardless of the configured group timeout", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver, 30_000);
-    mgr.registerGroup("g", ["a", "b", "c"]);
-
-    // First batch: 'a' alone, partial-delivered after 30s
-    mgr.onAgentComplete(makeRecord("a"));
-    vi.advanceTimersByTime(30_000);
-    expect(deliver).toHaveBeenCalledTimes(1);
-
-    // Straggler 'b' arrives — fires at 15s, not 30s
-    mgr.onAgentComplete(makeRecord("b"));
-    vi.advanceTimersByTime(14_999);
-    expect(deliver).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(1);
-    expect(deliver).toHaveBeenCalledTimes(2);
-
-    expect(deliver.mock.calls[1][0].map((r: AgentRecord) => r.id)).toEqual(["b"]);
-    expect(deliver.mock.calls[1][1]).toBe(true);
-    expect(mgr.isGrouped("c")).toBe(true); // 'c' is the remaining straggler now
-  });
-
-  it("delivers stragglers as a complete batch (partial=false) when all complete before their timeout", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver, 30_000);
-    mgr.registerGroup("g", ["a", "b", "c"]);
-
-    mgr.onAgentComplete(makeRecord("a"));
-    vi.advanceTimersByTime(30_000); // partial: 'a'
-    expect(deliver).toHaveBeenCalledTimes(1);
-
-    mgr.onAgentComplete(makeRecord("b"));
-    expect(mgr.onAgentComplete(makeRecord("c"))).toBe("delivered");
-
-    expect(deliver).toHaveBeenCalledTimes(2);
-    expect(deliver.mock.calls[1][0].map((r: AgentRecord) => r.id).sort()).toEqual(["b", "c"]);
-    expect(deliver.mock.calls[1][1]).toBe(false);
-  });
-
-  it("returns 'pass' for late completions arriving after a group is already delivered", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver);
-    mgr.registerGroup("g", ["a", "b"]);
-
-    mgr.onAgentComplete(makeRecord("a"));
-    mgr.onAgentComplete(makeRecord("b")); // full delivery
-    expect(deliver).toHaveBeenCalledTimes(1);
-
-    // A duplicate/late completion must not trigger a second delivery
-    expect(mgr.onAgentComplete(makeRecord("a"))).toBe("pass");
-    expect(deliver).toHaveBeenCalledTimes(1);
-  });
-
-  it("dispose() clears pending timers so a partial delivery never fires post-dispose", () => {
-    const deliver = vi.fn();
-    const mgr = new GroupJoinManager(deliver, 30_000);
-    mgr.registerGroup("g", ["a", "b"]);
-
-    mgr.onAgentComplete(makeRecord("a")); // arms 30s timeout
-    mgr.dispose();
-
-    vi.advanceTimersByTime(60_000);
-    expect(deliver).not.toHaveBeenCalled();
-    expect(mgr.isGrouped("a")).toBe(false);
-    expect(mgr.isGrouped("b")).toBe(false);
+  it("closes a batch when a call from another turn arrives", async () => {
+    const sent = await program(() =>
+      Effect.gen(function* () {
+        const join = yield* GroupJoin;
+        yield* join.register("a", "turn-1");
+        yield* join.register("b", "turn-2");
+        yield* TestClock.adjust(BATCH_WINDOW_MS);
+        yield* join.settle("a", msg("a", "A-TEXT"));
+        yield* join.settle("b", msg("b", "B-TEXT"));
+        yield* TestClock.adjust(SOLO_HOLD_MS);
+      }),
+    );
+    expect(sent.map((m) => m.content.includes("group completed"))).toEqual([false, false]);
   });
 });
