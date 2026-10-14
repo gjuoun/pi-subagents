@@ -1,223 +1,68 @@
-# Architecture — the src/ tree
+# Architecture — the `src/` tree
 
-**Audience:** contributors. The file map and the layering rule: what lives where, and what a
-directory is allowed to import. Kept out of README, which is the user-facing reference — this
-map is contributor-facing and had already rotted twice in place. For how the pieces behave see
-workflows.md, rpc.md and jev.md; for why particular guards exist see decisions.md.
+Contributor-facing: where each piece of the extension lives, the layer rules that keep it that way, and
+what each file is for. `test/layout.test.ts` enforces the rules; a structural change updates both.
 
+`src/` is about 3.9k lines of Effect v4 (JW-166 replaced a 22.9k-line core with it).
 
-```
-docs/                 # Long-form guides (shipped to npm; README links out to them)
-  workflows.md        # SubagentWorkflow: writing, editing, saving and re-running scripts
-  rpc.md              # Cross-extension integration: pi.events, subagents:rpc:*, manager registry
-  decisions.md        # The issue-numbered decisions: what they are, why, and where they live
-  jev.md              # The jev agent selector: what it decides, how to read it, how to tune it
-examples/
-  workflows/          # Runnable examples, executed by test/workflow-examples.test.ts
-  agent-tool-description.md
-test/                 # vitest suite; e2e/, perf/, helpers/ and fixtures/ subdirectories
-v2src/                # A second, parallel core (Effect v4). NOT wired in — see "The v2 tree" below
-v2test/               # v2src's suite: same `npm run test`, and it holds v2's own layer fence
+## Layers
 
-src/                  # Layered by domain. A file may import only from the layers below it:
-                      # `lib` < `config`, `model` < `agent` < `schedule`, `workflow` < `ui`,
-                      # with `index`, `app`, `bootstrap`, `extension` and `tools` the wiring
-                      # layer above them. `lib/` imports nothing from another layer, and only
-                      # `index.ts` and `app.ts` may import `tools/` or `extension/`. Enforced
-                      # by test/layout-fence.test.ts — a new top-level dir is structural.
-                      #
-                      # Why `lib/ui/` stays in `lib/` rather than moving under `ui/`: it holds the
-                      # UI *contract* (`theme.ts` — the shape every renderer names), not presentation,
-                      # and `agent/` imports it DOWNWARD (`activity.ts` creates the activity state,
-                      # `group-join.ts` names the delivery callback). Moving it up would make those
-                      # imports illegal; the contract stays innermost so every domain can name it.
-                      # The rendering that consumes it lives in `ui/`.
-  index.ts            # Extension entry: the child-session guard, one call, two re-exports.
-                      # Its PATH is load-bearing — `index.ts` directly inside `src/`
-                      # canonicalises to the allowlist token `src`, which agent frontmatter
-                      # writes as `extensions: [src]`, `exclude_extensions: [src]` and
-                      # `tools: ext:src`. Do not move it; `test/entry-manifest.test.ts`
-                      # guards that.
-  app.ts              # The composition root: the activation's state, every tool, command,
-                      # event and renderer registration, and the wiring between domains —
-                      # the file to read to see what this extension exposes.
-  bootstrap.ts        # The shared handles — manager, fleet list, scheduler and
-                      # the collections they share — built in one ordered place and frozen
+| Layer | Holds | May import |
+|---|---|---|
+| `domain/` | Pure values and rules: agent state, agent types, errors, the mention grammar, the tools rule, the fork recipe | `effect`, `domain/` |
+| `services/` | Effect class services built by their own `make`, each declaring its dependencies | `effect`, `node:*`, `domain/`, `services/`; pi packages type-only |
+| `pi/` | The only users of the pi SDK at runtime: tools, the child-session factory, the input hook, `/agents` | anything except `ui/` |
+| `ui/` | Renderers and the FleetView / viewer components; pi's UI is reached through structural ports | `effect`, `pi-tui`, `domain/`, `services/`, `ui/`; pi-coding-agent type-only |
+| root | `layers.ts` (the one composition root) and `index.ts` (registration and session wiring) | anything |
 
-  lib/                # Shared code and types. Imports nothing from another layer.
-    types.ts              # AgentConfig, AgentRecord, AgentInvocation, ViewerMarkdownMode, ...
-    result.ts             # autoTag/FactoryUnion — how this extension's failure catalogs are built
-    usage.ts              # Token usage shapes, accumulators, session-stats readers
-    json-schema.ts        # The compiled-schema type and compiler, shared across domains
-    tool-names.ts         # SUBAGENT_TOOL_NAMES / EXCLUDED_TOOL_NAMES — the pi-facing freeze list
-    agent-meta.ts         # THINKING_LEVELS and the tool-list suffix the descriptions share
-    fs-safe.ts            # isUnsafeName / isSymlink / safeReadFile path guards
-    xml.ts                # escapeXml, shared by the notification builders
-    abortable.ts          # Race a wait against Esc without cancelling the background child
-    child-context.ts      # AsyncLocalStorage flag marking work done for a child session
-    ui/theme.ts           # The widgets' shared UI contract (Theme, AgentActivity, ...)
-    ui/format.ts          # Pure formatters: tokens, cost, duration, turns
+The one Effect-to-pi crossing for tools is `pi/boundary.ts` (`runTool`): an Exit becomes a tool result,
+a typed error becomes `Error [<Tag>]: <message>`, a defect is re-thrown. Expected failures live in
+`domain/errors.ts` as tagged enums; nothing throws for them.
 
-  config/             # Declared and persisted agent configuration
-    settings.ts       # Persistent settings (~/.pi/agent/subagents.json + .pi/subagents.json)
-    registry/
-      agent-types.ts      # Unified agent registry (defaults + user), tool name resolution
-      custom-agents.ts    # Load user-defined agents from .pi/agents/, .agents/agents/, global
-      default-agents.ts   # Embedded default agent configs (general-purpose, Explore, Plan)
-      agent-file-toggle.ts # Locate/edit an agent's .md: enabled: toggle, eject to frontmatter
+## Runtime shape
 
-  model/              # Which model a spawn runs on, and whether it is allowed
-    model-resolver.ts # Exact provider/modelId with fuzzy fallback, as a Result
-    errors.ts         # The model-resolution failure catalog (autoTag)
-    enabled-models.ts # Read pi's enabledModels settings (project over global)
-    model-scope.ts    # ModelScope — the scopeModels policy, shared by every spawn path
+One `ManagedRuntime` per pi session (`layers.ts`), disposed on `session_shutdown`, which aborts and
+disposes every child. Child sessions are created inside an `AsyncLocalStorage` marker
+(`pi/pi-child-session.ts`) so the extension, loaded again for each child, does not register itself
+there.
 
-  agent/              # The subagent lifecycle
-    agent-manager.ts      # Lifecycle, concurrency queue, completion notifications
-    agent-runner.ts       # Session creation, execution, graceful max_turns, steer/resume
-    concurrency-pools.ts  # Pools + queue + running counters — the one seam in agent-manager
-    run-limits.ts         # Max-turns / grace-turns / remember-agents configuration
-    description.ts        # The Agent tool's model-facing description and parameter shape
-    nested-tools.ts       # Delegation tools handed to subagents (nested spawn/collect/steer)
-    invocation.ts         # Shared tool-parameter schemas (isolation, join, thinking, ...)
-    group-join.ts         # Batched completion notifications with timeout
-    rpc.ts                # RPC handlers for cross-extension spawn/ping via pi.events
-    session/
-      extension-scope.ts  # Extension identity, ext: selectors, live tool-scope enforcement
-      output-file.ts      # Streaming output file transcripts for agent sessions
-      worktree.ts         # Git worktree isolation (create, cleanup, prune)
-      status-note.ts      # Honest status note + salvaged output for non-normal outcomes
-      structured-output.ts # The child's StructuredOutput tool and capture box
-    prompt/
-      prompts.ts          # The assembler: buildAgentPrompt + PromptExtras
-      context.ts          # Parent conversation context for inherit_context
-      env.ts              # Environment detection (git, platform)
-      memory.ts           # Persistent agent memory (resolve, read, build prompt blocks)
-      skill-loader.ts     # Preload skills (Pi-standard + Agent Skills spec layouts)
-    mention/
-      mention.ts          # `@handle message` grammar: suggestion triggers and send parsing
-      handle-registry.ts  # What a `@handle` is called: base slug, allocation, type lookup
-      mention-clone.ts    # Run a mention's turn in a cloned conversation, off the main chat
+## Files
 
-  schedule/           # Timers plus their store
-    schedule.ts       # SubagentScheduler: cron / +10m / interval / ISO dispatch
-    schedule-store.ts # PID-locked, session-scoped, atomic schedule persistence
+### domain/
+- `agent.ts` — one subagent: its child session, its published `AgentSnapshot`, `run` (busy guard, settle as done / error / aborted), `steer`, `markQueued`.
+- `agent-type.ts` — the agent-file value (9 fields) and its frontmatter parser.
+- `child-session.ts` — the `ChildSession` port, `SpawnSpec`, the wrap-up message and `graceTurns`.
+- `errors.ts` — Session / Registry / Catalog tagged errors and their renderers.
+- `fork.ts` — the fork pseudo type, placeholder, refusal and directive text, `ForkSource`.
+- `handle.ts` — handle slugs and collision numbering.
+- `mention.ts` — the `@handle` grammar, the reminder text, completion rows.
+- `subagent-result.ts` — the completion message value, single or grouped.
+- `tool-selection.ts` — the tools rule (omitted = everything; `ext:` selectors; subagent tools withheld).
 
-  workflow/           # Scripted orchestration
-    run/              # What happens while a script runs
-      runtime.ts      # Worker lifecycle, RPC bridge, semaphore, caps, gate/resume
-      task.ts         # local_workflow task record and batched progress updates
-      progress.ts     # Progress event log and every derived view of it (pure)
-      journal.ts      # Per-call journal entries, key hashing, read/append
-      entry.ts        # The persisted session-entry snapshot
-      host.ts         # WorkflowHost adapter over AgentManager — the one outward seam
-    script/           # What runs
-      meta.ts         # Extract and validate a script's pure-literal `meta` block
-      saved.ts        # Resolve saved workflows by name / script path
-      worker-source.ts # The sandbox: vm context, determinism prelude, script globals
-    collisions.ts     # Foreign-workflow-tool policy (pure function of the tool list)
-    tool-description.ts # Model-facing description carrying the orchestration patterns
+### services/
+- `agent-registry.ts` — the agents, their snapshots (a `SubscriptionRef`), the background pool and queue, handles, `awaitSettled`.
+- `agent-type-catalog.ts` — agent files from `<agentDir>/agents` then `<cwd>/.pi/agents` (project wins), `enabled` filter.
+- `group-join.ts` — the smart join: batching by parent turn, group timeouts, solo hold, consumed results.
+- `settings.ts` — `maxConcurrent` from `subagents.json` (project wins, default 10).
+- `parent-context.service.ts` — the per-call view of the parent session.
+- `session-factory.ts`, `result-notifier.ts`, `id-generator.ts` — ports the live layers fill.
+- `e2e-handle.ts` — the `Symbol.for("pi-subagents:v2")` handle the faux-model tests wait on.
 
-  ui/                 # TUI surfaces. Only the wiring layer may import these.
-    agent-display.ts  # Agent-identity adapters: display name, prompt mode, invocation tags
-    agent-result-status.ts   # The Agent tool's transcript row: result container and activity tracker
-    notifications.ts  # Task-notification text, details payloads, tool-result envelopes
-    agent-color.ts    # Claude Code/Agency Agents name color parsing and badge rendering
-    fleet-list.ts     # FleetView: navigable agent list below the editor
-    agent-mention.ts  # `@` roster (running, resumable, and startable agents) + popup rows
-    schedule-menu.ts  # /agents → Scheduled jobs submenu
-    select-item.ts    # Collision-safe ctx.ui.select wrapper (numbered rows)
-    viewer/
-      conversation-viewer.ts # Live conversation overlay for viewing agent sessions
-      viewer-blocks.ts       # Tool blocks: one shape per tool, folded by default (pure)
-      viewer-keys.ts         # Viewer scroll keys resolved through user keybindings
-    workflow/
-      workflow-card.ts   # Inline workflow card (tool result and session entry)
-      workflow-dialog.ts # /agents → Workflows two-pane inspector
-      workflow-menu.ts   # /agents → Workflows entry point from the FleetView
-    agents/           # The /agents wizard and settings overlay
-      deps.ts             # The slice of the activation context this family needs
-      menu.ts             # The /agents menu root
-      type-list.ts        # Agent-type list overlay
-      running.ts          # Running-agents picker
-      detail.ts           # Per-agent detail menu
-      create-wizard.ts    # Generate / manual agent-creation wizards
-      settings-overlay.ts # Settings snapshot, completeness guard and editor
+### pi/
+- `agent-tool.ts` — the `Agent` tool and the per-call `ParentContext` (including the fork's view of the parent).
+- `get-result-tool.ts`, `steer-tool.ts` — the other two tools.
+- `pi-session-factory.ts` — child sessions: the pil-style prompt, exact model, tools rule, and the fork branch.
+- `pi-child-session.ts` — one child turn: answer, usage, turn cap and wrap-up, conversation for the viewer.
+- `pi-result-notifier.ts` — completion messages as follow-ups that trigger a parent turn.
+- `mention-hook.ts` — the `input` hook that appends the mention reminder.
+- `agents-command.ts` — `/agents`.
+- `boundary.ts` — `runTool`.
 
-  tools/              # The registered tools. Nothing but index.ts or app.ts may import these.
-    deps.ts             # What the tools need: the live handles (structural slice) and the state
-    usage-reporting.ts  # Wraps a tool so its result reports token usage
-    agent.ts            # The Agent tool: description, renderer, execute
-    workflow.ts         # The SubagentWorkflow tool plus its task plumbing
-    get-subagent-result.ts # get_subagent_result
-    steer-subagent.ts   # steer_subagent
-    jev.ts              # The toggleable jev agent-selector tool
-    jev/client.ts       # jev's HTTP client: request, parse, fail-open (injectable fetch)
-    jev/state.ts        # jev roster criteria and routing-rules state
-
-  extension/
-    context.ts        # The activation's state — settings, session cells, batch grouping — plus
-                      # the one handle reference it needs (the surfaces a settings write
-                      # repaints). The live handles themselves are built by bootstrap.ts, not
-                      # held here. Readable only by index.ts and app.ts; every other module
-                      # takes a structural slice of it, which is what keeps this directory
-                      # inward-facing.
-```
-
-## The v2 tree (not wired in)
-
-`v2src/` is an Effect v4 rewrite of the same core — the `Agent` tool, background and foreground runs,
-resume, result delivery and the above-editor widget — built **beside** `src/`, not on top of it.
-`package.json`'s `pi.extensions` still points at `./src/index.ts`, so no session loads any of it:
-the only ways in are an explicit `pi -ne -e ./v2src/index.ts` (that entry answers to the canonical
-token `v2src`) and `v2test/`. Every user-facing behaviour, setting, event and RPC channel still comes
-from `src/`.
-
-```
-v2src/                # Four layers plus a root, and its own fence — v2test/layout.test.ts, which
-                      # reads every .ts here and fails on any edge the rules forbid, no exceptions:
-                      #   root      — anything
-                      #   domain    — `effect` and domain/ only
-                      #   services  — adds `node:*`, and may name `@earendil-works/*` in
-                      #               `import type` only
-                      #   pi        — anything except ui/
-                      #   ui        — `effect`, `@earendil-works/pi-tui`, domain/ and services/,
-                      #               with pi-coding-agent in `import type` only
-                      # A .ts file outside those four layers (other than index.ts, layers.ts) fails.
-  index.ts            # V2Extension: the Agent tool, the result-message renderer, session_start and
-                      # session_shutdown. Its default export is the pi entry, guarded by
-                      # isChildContext() so a subagent session never builds a second runtime.
-  layers.ts           # The composition root: AppLayer plus makeRuntime(pi), one per session
-  domain/             # Pure — the state machine and the vocabulary it speaks
-    agent.ts              # Agent: id, type, snapshot Ref, run / abort / dispose
-    agent-type.ts         # AgentType — what a spawn resolves a name against
-    child-session.ts      # The ChildSession port, SpawnSpec, RunOutcome
-    errors.ts             # Scoped tagged enums (SessionError, RegistryError, CatalogError)
-    subagent-result.ts    # SubagentResultMessage — the value the notifier hands to pi
-  services/           # Effect class services; each declares its dependencies in its own `make`
-    agent-registry.ts     # Agents by id, the snapshot subscription, the fiber map, dispose-on-exit
-    agent-type-catalog.ts # name -> AgentType
-    session-factory.ts    # The port that opens a child session (pi implements it, tests stub it)
-    result-notifier.ts    # The port that delivers a settled result
-    id-generator.ts       # IdGenerator — ids are a service, not a bare random call
-    parent-context.service.ts # The per-call ParentContext the tool boundary provides
-    e2e-handle.ts         # The Symbol.for("pi-subagents:v2") handle the e2e suite reaches
-  pi/                 # The only runtime users of the pi SDK
-    boundary.ts           # The one Exit -> AgentToolResult fold
-    agent-tool.ts         # The Agent tool definition and its program (spawn vs resume)
-    pi-session-factory.ts # SessionFactory over pi's session API
-    pi-child-session.ts   # ChildSession over a pi AgentSession; isChildContext()
-    pi-result-notifier.ts # ResultNotifier -> sendMessage(followUp)
-  ui/
-    agent-widget.ts       # The above-editor list (widget key `pi-subagents-v2`): one line per
-                          # running agent, capped with a "+N more" tail, repainted on every
-                          # change and on a 1s clock. `src/` ships no equivalent.
-    result-message-view.ts # The result message's renderer
-v2test/               # lifecycle, run, background, foreground, resume, widget, boundary,
-                      # result-message, agent-types, boot, plus helpers/ — a stub SessionFactory
-                      # layer and the v2 runner
-```
-
-Two things worth knowing: the v2 fence is its own file rather than a mode of
-`test/layout-fence.test.ts`, because that one's rules are `src/`-shaped; and `effect@^4.0.2` is a
-dependency of the package even though only `v2src/` imports it.
+### ui/
+- `agent-row.ts` — the shared identity line `<agent> <model - thinking> <tokens ctx%>`.
+- `agent-tool-view.ts` — the Agent tool's call and result rendering.
+- `result-message-view.ts` — the completion message rendering.
+- `fleet-view.ts` — the list below the editor and its keys.
+- `viewer/conversation-viewer.ts` — the live conversation overlay.
+- `agent-color.ts` — name badges.
+- `mention-completion.ts` — `@` rows stacked on pi's autocomplete.
