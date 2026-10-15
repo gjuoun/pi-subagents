@@ -2,6 +2,8 @@ import type { Context } from "@earendil-works/pi-ai";
 import { fauxToolCall } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
+import type { AgentSnapshot } from "../src/domain/agent.js";
+import { formatResult } from "../src/pi/get-result-tool.js";
 import { agentCall, isParentCall, runV2, toolResultsNamed, type V2Run } from "./helpers/v2-runner.js";
 
 /** get-result.test.ts — handles and get_subagent_result (JW-166 Step 10). */
@@ -98,5 +100,30 @@ describe("v2 get_subagent_result", () => {
       },
     });
     expect(results(run.parentSession)[0]).toMatch(/^Error \[AgentNotFound\]/);
+  });
+});
+
+describe("formatResult", () => {
+  const snap: AgentSnapshot = {
+    id: "abcd1234",
+    type: "scout",
+    name: "scout",
+    handle: "scout",
+    description: "slow scan",
+    status: "done",
+    runs: 1,
+    startedAt: 1_000,
+    finishedAt: 101_000,
+    lastText: "ANSWER",
+    toolUses: 2,
+    turns: 3,
+    wrappedUp: false,
+    tokens: 42_000,
+    contextPercent: 9,
+  };
+
+  it("writes the duration the way the agent row does", () => {
+    expect(formatResult(snap)).toContain("Duration: 1m40s");
+    expect(formatResult({ ...snap, status: "running", finishedAt: undefined })).toContain("Duration: running");
   });
 });

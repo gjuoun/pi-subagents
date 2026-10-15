@@ -9,8 +9,9 @@ import { type AgentRowPart, agentRowParts, clockColor, usageColor } from "./agen
  * One row per live agent (plus the one being viewed, plus agents finished in the last few
  * seconds), earliest-launched first. `↓`/`←` at an empty prompt focuses the list; `↑`/`↓`
  * move the ● marker; Enter opens the agent (the conversation viewer); Esc — or `↑` above the
- * first row — returns to the prompt. Row: marker, status emoji, clock, name, description;
- * flush right `<model - thinking>  <tokens ctx%>`, ctx amber from 60% and red from 85%.
+ * first row — returns to the prompt. The row itself is agent-row.ts's (`formatAgentRow` +
+ * `agentRowParts`); this file only fits it to the width, keeping `<tokens ctx%>` flush right —
+ * ctx amber from 60% and red from 85%.
  *
  * Mechanics: a `belowEditor` widget (render only); keys arrive through `onTerminalInput`,
  * which fires before the editor and can consume them, gated on an empty prompt so typing is
