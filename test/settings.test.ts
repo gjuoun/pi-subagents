@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ParentContext, type ParentContextShape } from "../src/services/parent-context.service.js";
 import { DEFAULT_MAX_CONCURRENT, Settings } from "../src/services/settings.js";
 
-/** settings.test.ts — maxConcurrent precedence and default (JW-166 Step 8). */
+/** settings.test.ts — maxConcurrent precedence, config.json read and legacy absorb (JW-166). */
 
 describe("v2 settings", () => {
   const dirs: string[] = [];
@@ -22,17 +22,25 @@ describe("v2 settings", () => {
     const cwd = mkdtempSync(join(tmpdir(), "v2-settings-cwd-"));
     const home = mkdtempSync(join(tmpdir(), "v2-settings-home-"));
     dirs.push(agentDir, cwd, home);
-    // The global file is `~/.pi/eyu/subagents.json`, so a global case needs its own HOME.
+    // The global file is `~/.pi/eyu/config.json`, so a global case needs its own HOME.
     process.env.HOME = home;
     if (global !== undefined) {
-      mkdirSync(join(home, ".pi", "eyu"), { recursive: true });
-      writeFileSync(join(home, ".pi", "eyu", "subagents.json"), JSON.stringify(global));
+      writeConfig(home, { subagents: global });
     }
     if (project !== undefined) {
       mkdirSync(join(cwd, ".pi"), { recursive: true });
       writeFileSync(join(cwd, ".pi", "subagents.json"), JSON.stringify(project));
     }
     return { cwd, agentDir, sessionFile: undefined, model: undefined, modelRegistry: {} };
+  }
+
+  function writeConfig(home: string, config: unknown): void {
+    mkdirSync(join(home, ".pi", "eyu"), { recursive: true });
+    writeFileSync(join(home, ".pi", "eyu", "config.json"), JSON.stringify(config));
+  }
+
+  function homeDir(): string {
+    return process.env.HOME as string;
   }
 
   const read = (parent: ParentContextShape) =>
@@ -48,8 +56,34 @@ describe("v2 settings", () => {
     expect(await read(parentWith())).toBe(10);
   });
 
-  it("reads the global file", async () => {
+  it("reads the global config.json under the subagents key", async () => {
     expect(await read(parentWith({ maxConcurrent: 3, schedulingEnabled: true }))).toBe(3);
+  });
+
+  it("absorbs a legacy subagents.json once into config.json", async () => {
+    const parent = parentWith();
+    mkdirSync(join(homeDir(), ".pi", "eyu"), { recursive: true });
+    writeFileSync(join(homeDir(), ".pi", "eyu", "subagents.json"), JSON.stringify({ maxConcurrent: 4 }));
+
+    expect(await read(parent)).toBe(4);
+
+    const config = JSON.parse(readFileSync(join(homeDir(), ".pi", "eyu", "config.json"), "utf8"));
+    expect(config).toEqual({ subagents: { maxConcurrent: 4 } });
+    const files = readdirSync(join(homeDir(), ".pi", "eyu"));
+    expect(files.filter((file) => file.startsWith("subagents.json.bak-"))).toHaveLength(1);
+    expect(files).not.toContain("subagents.json");
+  });
+
+  it("absorbs without clobbering a sibling key", async () => {
+    const parent = parentWith();
+    writeConfig(homeDir(), { display: { thinking: "fold" } });
+    writeFileSync(join(homeDir(), ".pi", "eyu", "subagents.json"), JSON.stringify({ maxConcurrent: 5 }));
+
+    expect(await read(parent)).toBe(5);
+    expect(JSON.parse(readFileSync(join(homeDir(), ".pi", "eyu", "config.json"), "utf8"))).toEqual({
+      display: { thinking: "fold" },
+      subagents: { maxConcurrent: 5 },
+    });
   });
 
   it("lets the project file win", async () => {
