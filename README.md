@@ -113,13 +113,15 @@ Reading a finished result marks it read: its completion message is not sent.
 
 ## Settings
 
-One setting, read from `~/.pi/eyu/subagents.json` and `<project>/.pi/subagents.json` (project wins):
+One setting, read from `~/.pi/eyu/config.json` (under the `subagents` key) and
+`<project>/.pi/subagents.json` (project wins):
 
 ```json
-{ "maxConcurrent": 10 }
+{ "subagents": { "maxConcurrent": 10 } }
 ```
 
-Every other key in those files is ignored.
+Every other key is ignored. A legacy `~/.pi/eyu/subagents.json` is absorbed into
+`config.json` once, on the first read, and renamed to `subagents.json.bak-<timestamp>`.
 
 ## Architecture
 
