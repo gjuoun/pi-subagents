@@ -1,6 +1,7 @@
 import { Input, Markdown, type MarkdownTheme, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { AgentSnapshot } from "../../domain/agent.js";
 import type { ViewerMessage } from "../../domain/child-session.js";
+import { agentFrame, resolveAgentColor } from "../agent-color.js";
 import { formatAgentRow } from "../agent-row.js";
 
 /**
@@ -16,12 +17,8 @@ export const VIEWER_OVERLAY = {
   overlayOptions: { anchor: "top-center", width: "100%", maxHeight: "100%" },
 } as const;
 
-/** Rows left uncovered at the bottom of the screen (pi's editor and status rows). */
-export const VIEWER_BOTTOM_RESERVED_ROWS = 3;
-/** Cap on one tool result before the viewer elides it. */
-export const RESULT_MAX_CHARS = 4_000;
-/** Top border + header + rule + footer + bottom border. */
-const CHROME_LINES = 5;
+/** Both borders, the rule, the footer line, the description and the identity row. */
+const CHROME_LINES = 6;
 const MIN_VIEWPORT = 3;
 
 /** What the viewer reads and drives, supplied by the host. */
@@ -96,7 +93,8 @@ export class ConversationViewer {
   render(width: number): string[] {
     const th = this.#theme;
     const inner = Math.max(10, width - 4);
-    const height = Math.max(CHROME_LINES + MIN_VIEWPORT, (this.#tui.terminal?.rows ?? 30) - VIEWER_BOTTOM_RESERVED_ROWS);
+    // One full-screen frame: nothing sits under it, and the agent's identity sits IN it.
+    const height = Math.max(CHROME_LINES + MIN_VIEWPORT, this.#tui.terminal?.rows ?? 30);
     const composerLines = this.#input ? this.#input.render(inner) : [];
     const viewport = Math.max(MIN_VIEWPORT, height - CHROME_LINES - composerLines.length);
     const content = this.contentLines(inner);
@@ -105,21 +103,27 @@ export class ConversationViewer {
     const end = content.length - this.#fromBottom;
     const start = Math.max(0, end - viewport);
     const shown = content.slice(start, end);
-    while (shown.length < viewport) shown.push("");
+    // The conversation rests on the identity block and grows upward: the slack is above it.
+    const rows = [...Array.from({ length: Math.max(0, viewport - shown.length) }, () => ""), ...shown];
 
     const snap = this.#source.snapshot();
-    const header = snap ? `${formatAgentRow(snap, Date.now())} · ${snap.description}` : "agent";
     const keys = this.#input ? "Enter send · Esc cancel" : "↑↓ scroll · Enter steer · x stop · Esc close";
     const footer = `${content.length === 0 ? 0 : start + 1}-${end} of ${content.length} lines · ${this.#status ? `${this.#status} · ` : ""}${keys}`;
-    const box = (line: string) => th.fg("border", "│ ") + pad(truncateToWidth(line, inner), inner) + th.fg("border", " │");
+    // The frame reads as that agent's overlay before a word of it is read; an agent with no
+    // (or an unusable) colour keeps exactly the theme tokens it always used.
+    const color = resolveAgentColor(snap?.color);
+    const frame = (text: string, kind: "border" | "accent" = "border") =>
+      color === undefined ? th.fg(kind, text) : agentFrame(text, color);
+    const box = (line: string) => frame("│ ") + pad(truncateToWidth(line, inner), inner) + frame(" │");
     return [
-      th.fg("border", `╭${"─".repeat(width - 2)}╮`),
-      box(th.fg("accent", header)),
-      th.fg("border", `├${"─".repeat(width - 2)}┤`),
-      ...shown.map(box),
+      frame(`╭${"─".repeat(width - 2)}╮`),
+      ...rows.map(box),
       ...composerLines.map(box),
+      frame(`├${"—".repeat(width - 2)}┤`),
       box(th.fg("dim", footer)),
-      th.fg("border", `╰${"─".repeat(width - 2)}╯`),
+      box(th.fg("dim", snap?.description ?? "")),
+      box(snap === undefined ? "agent" : formatAgentRow(snap, Date.now(), { model: true, description: false })),
+      frame(`╰${"─".repeat(width - 2)}╯`),
     ];
   }
 
@@ -127,24 +131,37 @@ export class ConversationViewer {
   contentLines(width: number): string[] {
     const th = this.#theme;
     const out: string[] = [];
+    // A call waiting for its result. `ViewerMessage` carries no call id, so a result answers
+    // the oldest unanswered call — the order the model made them in.
+    const pending: { line: number; name: string; args: unknown }[] = [];
     for (const message of this.#source.messages()) {
       if (message.role === "user") {
         out.push(th.fg("accent", "▍You"));
-        for (const b of message.blocks) if (b.type === "text" && b.text) out.push(...wrapTextWithAnsi(b.text, width));
+        for (const b of message.blocks) if (b.type === "text" && b.text) out.push(...wrapTextWithAnsi(th.fg("text", b.text), width));
       } else if (message.role === "assistant") {
         for (const b of message.blocks) {
           if (b.type === "text" && b.text?.trim()) out.push(...this.#markdownLines(b.text, width));
-          if (b.type === "toolCall") out.push(th.fg("muted", truncateToWidth(`⚙ ${b.name ?? "tool"} ${JSON.stringify(b.arguments ?? {})}`, width)));
+          if (b.type === "toolCall") {
+            pending.push({ line: out.length, name: b.name ?? "tool", args: b.arguments });
+            out.push(this.#toolLine("⏳", b.name ?? "tool", b.arguments, width));
+          }
         }
       } else if (message.role === "toolResult") {
-        const text = message.blocks.map((b) => (b.type === "text" ? (b.text ?? "") : "")).join("");
-        const clipped = text.length > RESULT_MAX_CHARS ? `${text.slice(0, RESULT_MAX_CHARS)}… (truncated)` : text;
-        out.push(th.fg("dim", `⎿ ${message.toolName ?? "result"}`));
-        for (const line of clipped.split("\n").slice(0, 12)) out.push(...wrapTextWithAnsi(th.fg("dim", `  ${line}`), width));
+        // The result body is not drawn: the line becomes the call's ✅ summary in place.
+        const call = pending.shift();
+        if (call !== undefined) out[call.line] = this.#toolLine("✅", call.name, call.args, width);
       }
       out.push("");
     }
     return out;
+  }
+
+  /** One tool use — `<mark><tool>: <one-line args>`, bright, cut to the width. */
+  #toolLine(mark: string, name: string, args: unknown, width: number): string {
+    const args_ = args === undefined ? "" : (JSON.stringify(args) ?? "");
+    const one = args_.replace(/\s+/g, " ").trim();
+    const text = one === "" || one === "{}" ? `${mark}${name}` : `${mark}${name}: ${one}`;
+    return this.#theme.fg("text", truncateToWidth(text, width));
   }
 
   invalidate(): void {}
@@ -154,8 +171,10 @@ export class ConversationViewer {
   }
 
   #markdownLines(text: string, width: number): string[] {
-    if (!this.#markdown) return wrapTextWithAnsi(text, width);
-    return new Markdown(text, 0, 0, this.#markdown, undefined, {
+    // Prose reads bright — the theme's plain text colour — while keeping its own formatting.
+    const style = { color: (t: string) => this.#theme.fg("text", t) };
+    if (!this.#markdown) return wrapTextWithAnsi(this.#theme.fg("text", text), width);
+    return new Markdown(text, 0, 0, this.#markdown, style, {
       preserveOrderedListMarkers: true,
       preserveBackslashEscapes: true,
     }).render(width);

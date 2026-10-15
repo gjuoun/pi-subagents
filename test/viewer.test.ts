@@ -58,17 +58,23 @@ function setup(messages: ViewerMessage[] = conversation, status = snap.status) {
 describe("v2 conversation viewer", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("frames the agent row, the conversation and a 'lines · ' footer", () => {
+  it("frames the conversation on a bottom identity block, full screen", () => {
     const { viewer } = setup();
     const lines = viewer.render(100);
+    expect(lines).toHaveLength(30);
     expect(lines[0].startsWith("╭")).toBe(true);
-    expect(lines[1]).toContain("scout  glm-5.3-flash - high  1.5k 3%");
-    expect(lines.join("\n")).toContain("▍You");
-    expect(lines.join("\n")).toContain("⚙ read");
-    expect(lines.join("\n")).toContain("LIVE-SECRET-1");
-    expect(lines.at(-2)).toMatch(/\d+-\d+ of \d+ lines · /);
     expect(lines.at(-1)?.startsWith("╰")).toBe(true);
-    expect(lines).toHaveLength(27);
+    expect(lines.join("\n")).toContain("▍You");
+    // One line per tool use — the tool and its arguments, never the result body.
+    expect(lines.join("\n")).toContain('✅read: {"path":"secret.txt"}');
+    expect(lines.join("\n")).not.toContain("LIVE-SECRET-1");
+    expect(lines.join("\n")).not.toContain("⚙ ");
+    // Bottom-up: the rule, the position-and-keys footer, the description, the identity row.
+    expect(lines.at(-5)?.startsWith("├")).toBe(true);
+    expect(lines.at(-4)).toMatch(/\d+-\d+ of \d+ lines · /);
+    expect(lines.at(-3)).toContain("slow read");
+    expect(lines.at(-2)).toContain("scout  glm-5.3-flash - high  1.5k 3%");
+    expect(lines.at(-2)).not.toContain("slow read");
   });
 
   it("repaints on every session change", () => {
@@ -87,7 +93,7 @@ describe("v2 conversation viewer", () => {
     expect(source.steer).toHaveBeenCalledWith("go deeper");
     await Promise.resolve();
     await Promise.resolve();
-    expect(viewer.render(100).at(-2)).toContain("sent: go deeper");
+    expect(viewer.render(100).at(-4)).toContain("sent: go deeper");
   });
 
   it("closes on Esc and stops listening", () => {
@@ -99,7 +105,7 @@ describe("v2 conversation viewer", () => {
 
   it("stays open when the agent has finished", () => {
     const { viewer, done } = setup(conversation, "done");
-    expect(viewer.render(100)[1]).toContain("✓ scout");
+    expect(viewer.render(100).at(-2)).toContain("✅");
     expect(done).not.toHaveBeenCalled();
   });
 

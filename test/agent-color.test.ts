@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentBadge, badgeTextColor, resolveAgentColor } from "../src/ui/agent-color.js";
+import { agentBadge, agentFrame, badgeTextColor, resolveAgentColor } from "../src/ui/agent-color.js";
 
 /** agent-color.test.ts — badge colours (JW-166 Step 16). */
 
@@ -28,5 +28,9 @@ describe("v2 agent color", () => {
   it("renders a truecolor badge, or nothing for an invalid colour", () => {
     expect(agentBadge("finder", "#FEFD99")).toBe("\x1b[48;2;254;253;153;30m finder \x1b[0m");
     expect(agentBadge("finder", "nope")).toBeUndefined();
+  });
+
+  it("frames in the agent colour as a foreground, resetting only the foreground", () => {
+    expect(agentFrame("╭─╮", "#FEFD99")).toBe("\x1b[38;2;254;253;153m╭─╮\x1b[39m");
   });
 });
