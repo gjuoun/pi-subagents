@@ -43,11 +43,9 @@ describe("SubagentResultMessage.render", () => {
     }
   });
 
-  it("renders the agent identity row without cost", () => {
+  it("renders the unified row without cost", () => {
     const d = details({ name: "scout", model: "zai/glm-5.3-flash", thinking: "high", tokens: 42_000, contextPercent: 9, turns: 3, toolUses: 2, durationMs: 1200 });
-    expect(render(message(d, "ok"), { expanded: false, width: 200 })[0]).toBe(
-      "✓ scout  glm-5.3-flash - high  42k 9% · the task · 3 turns · 2 tool uses · 1.2s",
-    );
+    expect(render(message(d, "ok"), { expanded: false, width: 200 })[0]).toBe("✅1s scout  the task  42k 9%");
   });
 
   it("lists one row per agent of a grouped message", () => {
@@ -58,8 +56,7 @@ describe("SubagentResultMessage.render", () => {
     expect(lines[1]).toContain("b-agent");
   });
 
-  it("uses a ✗ for an error status", () => {
-    expect(SubagentResultMessage.statusGlyph("error")).toBe("✗");
-    expect(render(message(details({ status: "error" }), "boom"), { expanded: false, width: 60 })[0]).toContain("✗");
+  it("marks an error status with ❌", () => {
+    expect(render(message(details({ status: "error" }), "boom"), { expanded: false, width: 60 })[0]).toContain("❌");
   });
 });

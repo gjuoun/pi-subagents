@@ -1,6 +1,6 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { type SubagentResultDetails, SubagentResultMessage } from "../domain/subagent-result.js";
-import { formatDuration, formatIdentity } from "./agent-row.js";
+import type { SubagentResultDetails, SubagentResultMessage } from "../domain/subagent-result.js";
+import { formatAgentRow } from "./agent-row.js";
 
 /**
  * result-message-view.ts — the collapsed/expanded display of a subagent-result message.
@@ -27,21 +27,9 @@ export const ResultMessageView = {
   },
 };
 
-/** `<glyph> <agent>  <model - thinking>  <tokens ctx%> · <description> · <stats>`. */
+/** The unified row over a delivered result — `<icon><clock> <agent>  <description>  <tokens ctx%>`. */
 export function statusLine(d: SubagentResultDetails): string {
-  const identity = formatIdentity({
-    name: d.name,
-    model: d.model,
-    thinking: d.thinking,
-    tokens: d.tokens ?? 0,
-    contextPercent: d.contextPercent,
-  });
-  const stats = [
-    ...(d.turns ? [`${d.turns} turn${d.turns === 1 ? "" : "s"}`] : []),
-    `${d.toolUses} tool use${d.toolUses === 1 ? "" : "s"}`,
-    formatDuration(d.durationMs),
-  ].join(" · ");
-  return `${SubagentResultMessage.statusGlyph(d.status)} ${identity} · ${d.description} · ${stats}`;
+  return formatAgentRow(d, Date.now());
 }
 
 function collapse(heads: readonly string[], body: readonly string[]): string[] {

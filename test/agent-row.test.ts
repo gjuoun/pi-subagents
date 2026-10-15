@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSnapshot } from "../src/domain/agent.js";
-import { formatAgentRow, formatIdentity, formatModel, formatTokens, formatUsage } from "../src/ui/agent-row.js";
+import { formatAgentRow, formatElapsed, formatModel, formatTokens, statusIcon } from "../src/ui/agent-row.js";
 import { agentCallLine, agentResultLines } from "../src/ui/agent-tool-view.js";
 
 /** agent-row.test.ts — the shared agent identity line and the Agent tool row (JW-166 Step 13). */
@@ -27,6 +27,11 @@ const snap = (over: Partial<AgentSnapshot> = {}): AgentSnapshot => ({
 });
 
 describe("agent row formatting", () => {
+  it("draws one icon table for every surface", () => {
+    expect(["running", "done", "error", "aborted", "queued"].map(statusIcon)).toEqual(["⏳", "✅", "❌", "🛑", "🕒"]);
+    expect(statusIcon("something-else")).toBe("⏳");
+  });
+
   it("formats tokens", () => {
     expect([formatTokens(980), formatTokens(1_500), formatTokens(42_000), formatTokens(2_100_000)]).toEqual([
       "980",
@@ -42,26 +47,35 @@ describe("agent row formatting", () => {
     expect(formatModel(undefined, undefined)).toBe("");
   });
 
-  it("formats usage without cost", () => {
-    expect(formatUsage(42_000, 9.4)).toBe("42k 9%");
-    expect(formatUsage(0, undefined)).toBe("");
+  it("renders the one row, with the model only on request", () => {
+    expect(formatAgentRow(snap(), 5_000)).toBe("✅1s scout  slow scan  42k 9%");
+    expect(formatAgentRow(snap(), 5_000, { model: true })).toBe("✅1s scout  slow scan  glm-5.3-flash - high  42k 9%");
+    expect(formatAgentRow(snap(), 5_000, { model: true, description: false })).toBe("✅1s scout  glm-5.3-flash - high  42k 9%");
+    expect(formatAgentRow(snap({ status: "running", finishedAt: undefined, tokens: 0, contextPercent: undefined }), 3_500)).toBe("⏳3s scout  slow scan");
   });
 
-  it("renders <agent> <model - thinking> <tokens ctx%>", () => {
-    expect(formatIdentity(snap())).toBe("scout  glm-5.3-flash - high  42k 9%");
+  it("writes the clock as a duration", () => {
+    expect([formatElapsed(11_000), formatElapsed(100_000), formatElapsed(3_720_000)]).toEqual(["11s", "1m40s", "1h2m"]);
   });
 
-  it("renders the Agent tool row", () => {
-    expect(formatAgentRow(snap(), 5_000)).toBe("✓ scout  glm-5.3-flash - high  42k 9% · 3 turns · 2 tool uses · 1.2s");
-    expect(formatAgentRow(snap({ status: "running", finishedAt: undefined, turns: 1, toolUses: 0, tokens: 0, contextPercent: undefined }), 3_500)).toBe(
-      "⠋ scout  glm-5.3-flash - high · 1 turn · 2.5s",
-    );
+  it("hands every piece to the painter, in order", () => {
+    const parts: string[] = [];
+    const line = formatAgentRow(snap(), 5_000, {
+      marker: "●",
+      model: true,
+      paint: (part, text) => {
+        parts.push(part);
+        return text;
+      },
+    });
+    expect(line).toBe("●✅1s scout  slow scan  glm-5.3-flash - high  42k 9%");
+    expect(parts).toEqual(["marker", "icon", "clock", "name", "description", "model", "tokens", "ctx"]);
   });
 
   it("renders the call line and the collapsed result", () => {
     expect(agentCallLine({ subagent_type: "scout", description: "slow scan" })).toBe("▸ scout  slow scan");
     expect(agentResultLines("first\nsecond", snap(), false, 5_000)).toEqual([
-      "✓ scout  glm-5.3-flash - high  42k 9% · 3 turns · 2 tool uses · 1.2s",
+      "✅1s scout  slow scan  42k 9%",
       "⎿  first",
     ]);
     expect(agentResultLines("first\nsecond", undefined, true, 0)).toEqual(["first", "second"]);

@@ -102,18 +102,4 @@ export class SubagentResultMessage {
   toOutbound(): PiOutboundMessage {
     return { customType: SUBAGENT_RESULT_TYPE, content: this.content, display: true, details: this.details };
   }
-
-  /** The one-glyph status marker shared by the result message and the widget. */
-  static statusGlyph(status: string): string {
-    switch (status) {
-      case "done":
-        return "✓";
-      case "error":
-        return "✗";
-      case "aborted":
-        return "■";
-      default:
-        return "·";
-    }
-  }
 }

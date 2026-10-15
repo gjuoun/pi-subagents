@@ -80,7 +80,7 @@ describe("v2 FleetView", () => {
   it("draws the PR #24 left side and <model - thinking>  <tokens ctx%> flush right", () => {
     h = harness([snap({})]);
     const [line] = h.lines(100);
-    expect(line).toMatch(/^ {2}○ ⏳ {2}11s {2}scout {2}slow scan +glm-5\.3-flash - high {2}42k 9%$/);
+    expect(line).toMatch(/^○⏳11s scout {2}slow scan +42k 9%$/);
     expect(visibleWidth(line)).toBe(100);
   });
 

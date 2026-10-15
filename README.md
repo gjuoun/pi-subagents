@@ -105,9 +105,9 @@ Reading a finished result marks it read: its completion message is not sent.
 
 ## TUI
 
-- **Agent row** — every surface names an agent as `<agent>  <model - thinking>  <tokens ctx%>`; there is no cost display.
-- **FleetView** — running agents (and ones that just finished) under the editor: status, clock, name, description, model and context use. At an empty prompt `↓` or `←` focuses it, `↑`/`↓` select, `Enter` opens the agent, `Esc` returns.
-- **Viewer** — a live, auto-updating overlay of one agent's conversation. `↑`/`↓` scroll, `Enter` steers, `x` stops the agent, `Esc` closes. It stays open after the agent finishes.
+- **Agent row** — one line, on every surface: `<icon><clock> <name>  <description>  <tokens ctx%>`. The icons are ⏳ running, ✅ done, ❌ failed, 🛑 stopped, 🕒 queued; the clock is a duration (`11s`, `1m40s`, `1h2m`); a blank field is dropped, so a just-launched agent is just `⏳0s finder  map the ui wiring`. The model appears in one place only — the viewer's identity block — and the context figure keeps its right-hand column as the terminal narrows. There is no cost display.
+- **FleetView** — running agents (and ones that just finished) under the editor, one row each above the usage, with `●` on the selection and `○` on the rest. At an empty prompt `↓` or `←` focuses it, `↑`/`↓` select, `Enter` opens the agent, `Esc` returns.
+- **Viewer** — a live, auto-updating overlay of one agent's conversation, drawn full screen: the conversation rests on an identity block at the bottom (a rule, the position and keys, the agent's description, then `<icon><clock> <name>  <model - thinking>  <tokens ctx%>`), and the frame takes the agent's own colour. Prose, user text and tool lines are bright. A tool use is one line — `✅read: {"path":"src/ui/fleet-view.ts"}`, the tool and its arguments, with the result body not drawn at all. `↑`/`↓` scroll, `Enter` steers, `x` stops the agent, `Esc` closes. It stays open after the agent finishes.
 - **`@mention`** — `@<agent> message` sends your message to the main model with a reminder to delegate to that agent (or to steer/resume an agent that already has that handle); `@main` strips the prefix. Typing `@` suggests agents alongside files.
 - **`/agents`** — Running agents (opens the viewer) and Agent types (read-only detail).
 

@@ -1,6 +1,6 @@
 import { Editor, isKeyRelease, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { AgentSnapshot, AgentStatus } from "../domain/agent.js";
-import { formatModel, formatTokens } from "./agent-row.js";
+import type { AgentSnapshot } from "../domain/agent.js";
+import { type AgentRowPart, agentRowParts, clockColor, usageColor } from "./agent-row.js";
 
 /**
  * fleet-view.ts — the Claude Code-style FleetView list below the editor (JW-166 port of the v1
@@ -21,8 +21,6 @@ export const FLEET_KEY = "pi-subagents-fleet";
 const MAX_ROWS = 5;
 const TICK_MS = 200;
 export const FINISHED_LINGER_MS = 4000;
-const CONTEXT_WARN = 60;
-const CONTEXT_CRITICAL = 85;
 
 /** The colour slice of pi's Theme the list uses. */
 export interface FleetTheme {
@@ -43,17 +41,16 @@ export interface FleetUi {
 /** Badge-aware name renderer, supplied by the caller (agent colour, Step 16). */
 export type NameRenderer = (snapshot: AgentSnapshot, theme: FleetTheme, selected: boolean) => string;
 
-const STATUS: Record<AgentStatus, { readonly icon: string; readonly color: string }> = {
-  queued: { icon: "🕒", color: "dim" },
-  running: { icon: "⏳", color: "warning" },
-  done: { icon: "✅", color: "success" },
-  error: { icon: "❌", color: "error" },
-  aborted: { icon: "🛑", color: "error" },
-};
-
-/** `11s` — integer seconds, padded so the name column does not shift as the clock grows. */
-export function elapsedCell(ms: number): string {
-  return `${Math.max(0, Math.round(ms / 1000))}s`.padStart(4);
+/**
+ * Fit a row to the terminal. The usage keeps its right-hand column at every width: the
+ * description is cut first, then dropped, and only then is the lead itself truncated.
+ */
+function fitRow(lead: string, middle: string, usage: string, width: number): string {
+  if (usage === "") return truncateToWidth(middle === "" ? lead : `${lead}  ${middle}`, width);
+  const available = width - visibleWidth(usage) - 1;
+  if (available <= visibleWidth(lead)) return `${truncateToWidth(lead, Math.max(0, available))} ${usage}`;
+  const room = available - visibleWidth(lead) - 2;
+  return rightAlign(middle !== "" && room >= 2 ? `${lead}  ${truncateToWidth(middle, room)}` : lead, usage, width);
 }
 
 /** Place `right` flush to `width`, truncating `left` first; never exceeds `width`. */
@@ -242,26 +239,29 @@ export class FleetView {
 
   #row(s: AgentSnapshot, selected: boolean, width: number, theme: FleetTheme): string {
     const base = selected ? "text" : "dim";
-    const look = STATUS[s.status];
-    const marker = selected ? theme.fg("accent", "●") : theme.fg("dim", "○");
-    const clock = theme.fg(look.color, elapsedCell((s.finishedAt ?? this.#now()) - s.startedAt));
-    const lead = `  ${marker} ${look.icon} ${clock}  ${this.#renderName(s, theme, selected)}`;
-    const description = selected ? theme.fg("text", s.description) : s.description;
-    const parts: string[] = [];
-    const model = formatModel(s.model, s.thinking);
-    if (model) parts.push(theme.fg(base, model));
-    const usage: string[] = [];
-    if (s.tokens > 0) usage.push(theme.fg(base, formatTokens(s.tokens)));
-    if (s.contextPercent !== undefined) {
-      const color = s.contextPercent >= CONTEXT_CRITICAL ? "error" : s.contextPercent >= CONTEXT_WARN ? "warning" : base;
-      usage.push(theme.fg(color, `${Math.round(s.contextPercent)}%`));
-    }
-    if (usage.length > 0) parts.push(usage.join(" "));
-    // Narrow terminal: the description goes first, then usage, then the model.
-    while (parts.length > 0 && width - visibleWidth(parts.join("  ")) - 1 < visibleWidth(lead)) parts.pop();
-    const right = parts.join("  ");
-    const room = width - visibleWidth(right) - 1 - visibleWidth(lead) - 2;
-    return rightAlign(room >= 2 ? `${lead}  ${description}` : lead, right, width);
+    // The one row assembles and orders the fields; the list only fits it to the terminal.
+    const { lead, middle, usage } = agentRowParts(s, this.#now(), {
+      marker: selected ? "●" : "○",
+      paint: (part: AgentRowPart, text: string) => {
+        switch (part) {
+          case "marker":
+            return theme.fg(selected ? "accent" : "dim", text);
+          case "icon":
+            return text;
+          case "clock":
+            return theme.fg(clockColor(s.status), text);
+          case "name":
+            return this.#renderName(s, theme, selected);
+          case "description":
+            return selected ? theme.fg("text", text) : text;
+          case "ctx":
+            return theme.fg(usageColor(s.contextPercent, base), text);
+          default:
+            return theme.fg(base, text);
+        }
+      },
+    });
+    return fitRow(lead, middle, usage, width);
   }
 
   #editorHasFocus(): boolean {

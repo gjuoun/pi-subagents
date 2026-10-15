@@ -6,8 +6,8 @@ import { formatAgentRow } from "./agent-row.js";
 /**
  * agent-tool-view.ts — how an Agent tool call and its result render in the transcript.
  *
- * Call: `▸ <type>  <description>`. Result: the agent row (`<glyph> <agent>  <model - thinking>
- * <tokens ctx%> · <stats>`) and the first line of the answer (all of it when expanded).
+ * Call: `▸ <type>  <description>`. Result: the unified agent row and the first line of the
+ * answer (all of it when expanded).
  */
 
 interface CallArgs {

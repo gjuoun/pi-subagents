@@ -52,6 +52,16 @@ export function badgeTextColor(hex: string): "black" | "white" {
   return contrast(l, 0) >= contrast(l, 1) ? "black" : "white";
 }
 
+/**
+ * Paint `text` in the agent's colour as a truecolor FOREGROUND — the conversation viewer's
+ * frame. `hex` is one `resolveAgentColor` already accepted; the reset is the foreground-only
+ * one, so an enclosing background survives it.
+ */
+export function agentFrame(text: string, hex: string): string {
+  const { r, g, b } = parse(hex);
+  return `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`;
+}
+
 /** ` name ` on the agent colour (truecolor SGR), or undefined when the colour is invalid. */
 export function agentBadge(name: string, color: string | undefined, bold = false): string | undefined {
   const hex = resolveAgentColor(color);
