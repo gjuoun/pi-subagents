@@ -2,7 +2,7 @@ import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 import { Effect } from "effect";
-import type { AgentSnapshot } from "../domain/agent.js";
+import { type AgentSnapshot, formatElapsed } from "../domain/agent.js";
 import type { V2Error } from "../domain/errors.js";
 import type { AppRuntime } from "../layers.js";
 import { AgentRegistry } from "../services/agent-registry.js";
@@ -33,7 +33,7 @@ const Params = GET_RESULT_PARAMS;
 
 /** The plain-text report for one snapshot. */
 export function formatResult(s: AgentSnapshot): string {
-  const duration = s.finishedAt !== undefined ? `${((s.finishedAt - s.startedAt) / 1000).toFixed(1)}s` : "running";
+  const duration = s.finishedAt !== undefined ? formatElapsed(s.finishedAt - s.startedAt) : "running";
   const header =
     `Agent: ${s.id} (${s.handle})\n` +
     `Type: ${s.type} | Status: ${s.status} | Turns: ${s.turns} | Tool uses: ${s.toolUses} | Duration: ${duration}\n` +

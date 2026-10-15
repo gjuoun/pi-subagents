@@ -46,6 +46,20 @@ export interface AgentSnapshot {
 /** The note a run stopped at its turn limit carries after its partial answer. */
 export const TURN_LIMIT_NOTE = "Stopped: the agent reached its turn limit before finishing.";
 
+/**
+ * `11s`, `1m40s`, `1h2m` — at most two units, never padded. Domain-level because two layers
+ * quote it: the row in `ui/` and the `get_subagent_result` report in `pi/`, which may not
+ * import `ui/`. One run reads the same either way.
+ */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h${minutes % 60}m`;
+}
+
 /** Everything needed to build an Agent; the registry supplies `publish`. */
 export interface AgentInit {
   readonly id: string;

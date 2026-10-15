@@ -1,4 +1,4 @@
-import type { AgentStatus } from "../domain/agent.js";
+import { type AgentStatus, formatElapsed } from "../domain/agent.js";
 
 /**
  * agent-row.ts — the one row every surface draws (JW-166): the FleetView's line under the
@@ -26,19 +26,9 @@ export function formatModel(model: string | undefined, thinking: string | undefi
   return id ?? thinking ?? "";
 }
 
-/** `11s`, `1m40s`, `1h2m` — at most two units, never padded. */
-export function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m${seconds % 60}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h${minutes % 60}m`;
-}
-
 /** Context pressure at which the figure turns amber, then red. */
-export const CONTEXT_WARN = 60;
-export const CONTEXT_CRITICAL = 85;
+const CONTEXT_WARN = 60;
+const CONTEXT_CRITICAL = 85;
 
 /** The clock's theme colour for a status. */
 export function clockColor(status: string): string {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSnapshot } from "../src/domain/agent.js";
-import { formatAgentRow, formatElapsed, formatModel, formatTokens, statusIcon } from "../src/ui/agent-row.js";
+import { formatElapsed } from "../src/domain/agent.js";
+import { formatAgentRow, formatModel, formatTokens, statusIcon } from "../src/ui/agent-row.js";
 import { agentCallLine, agentResultLines } from "../src/ui/agent-tool-view.js";
 
 /** agent-row.test.ts — the shared agent identity line and the Agent tool row (JW-166 Step 13). */
